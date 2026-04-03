@@ -1,0 +1,21 @@
+[tools]
+bun = "1.3.11"
+"npm:oxfmt" = "0.43.0"
+"npm:oxlint" = "1.58.0"
+"npm:typescript" = "6.0.2"
+
+[tasks.format]
+description = "Format TypeScript files with oxfmt"
+run = "oxfmt --write \"extensions/**/*.ts\" \"shared/**/*.ts\" \".pi/extensions/**/*.ts\""
+
+[tasks.lint]
+description = "Lint TypeScript files with oxlint"
+run = "oxlint extensions shared .pi/extensions"
+
+[tasks.typecheck]
+description = "Typecheck TypeScript files"
+run = "tsc --noEmit"
+
+[tasks.check]
+description = "Check formatting and lint TypeScript files"
+depends = ["format", "lint", "typecheck"]

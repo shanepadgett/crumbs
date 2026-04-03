@@ -1,0 +1,19 @@
+{
+  "name": "crumbs-pi-extensions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal Pi extensions packaged for local install/uninstall.",
+  "keywords": ["pi-package"],
+  "dependencies": {
+    "@mariozechner/pi-tui": "0.64.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "0.64.0",
+    "@types/node": "25.5.0"
+  },
+  "pi": {
+    "extensions": ["./extensions"],
+    "prompts": ["./prompts"]
+  }
+}

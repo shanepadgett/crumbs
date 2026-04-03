@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force"
+  },
+  "include": ["extensions/**/*.ts", "shared/**/*.ts", ".pi/extensions/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

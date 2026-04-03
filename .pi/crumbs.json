@@ -1,0 +1,41 @@
+{
+  "$schema": "../schemas/crumbs.schema.json",
+  "defaultPolicy": "ask",
+  "onNoUi": "deny",
+  "allow": [
+    {
+      "match": "regex",
+      "value": "^mise\\s+run\\s+(?:format|lint|typecheck|check)$"
+    }
+  ],
+  "deny": [],
+  "fileGuard": {
+    "defaults": {
+      "onNoUi": "deny"
+    },
+    "paths": {
+      "hardBlocked": [
+        "docs/_hidden/",
+        ".env"
+      ],
+      "policyFiles": [
+        ".pi/crumbs.json"
+      ]
+    },
+    "rules": {
+      "block": [
+        "@hardBlocked"
+      ],
+      "gate": {
+        "mutate": [
+          {
+            "match": "@policyFiles",
+            "reason": "Editing crumbs policy requires approval.",
+            "onNoUi": "deny"
+          }
+        ]
+      }
+    },
+    "injectPromptReminder": true
+  }
+}

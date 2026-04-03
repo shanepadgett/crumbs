@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crumbs.dev/schemas/crumbs.schema.json",
+  "title": "Crumbs Configuration",
+  "description": "Configuration for the Crumbs package and its extensions. Includes the permission gate contract and file guard rules.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional schema reference used by editors for validation and autocomplete."
+    },
+    "defaultPolicy": {
+      "$ref": "#/$defs/defaultPolicy"
+    },
+    "onNoUi": {
+      "$ref": "#/$defs/onNoUi"
+    },
+    "allow": {
+      "$ref": "#/$defs/rulesArray"
+    },
+    "deny": {
+      "$ref": "#/$defs/rulesArray"
+    },
+    "fileGuard": {
+      "$ref": "#/$defs/fileGuardConfig"
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Namespace reserved for future permission-related options.",
+      "additionalProperties": true
+    },
+    "tools": {
+      "type": "object",
+      "description": "Namespace reserved for tool-specific configuration.",
+      "additionalProperties": true
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Namespace for extension-specific options keyed by extension id.",
+      "additionalProperties": true
+    },
+    "ui": {
+      "type": "object",
+      "description": "Namespace reserved for UI and interaction options.",
+      "additionalProperties": true
+    },
+    "experimental": {
+      "type": "object",
+      "description": "Namespace for experimental or preview options.",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "defaultPolicy": {
+      "type": "string",
+      "enum": ["ask", "allow", "deny"],
+      "default": "ask",
+      "description": "Default decision when no allow/deny rule matches."
+    },
+    "onNoUi": {
+      "type": "string",
+      "enum": ["deny", "allow"],
+      "default": "deny",
+      "description": "Decision when policy resolves to ask but no UI is available."
+    },
+    "ruleMatch": {
+      "type": "string",
+      "enum": ["exact", "prefix", "regex"],
+      "description": "How to compare a rule value to the normalized command string."
+    },
+    "rule": {
+      "type": "object",
+      "properties": {
+        "match": {
+          "$ref": "#/$defs/ruleMatch"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Match value. For regex, this is the JavaScript regular expression pattern string."
+        }
+      },
+      "required": ["match", "value"],
+      "additionalProperties": false
+    },
+    "rulesArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "default": []
+    },
+    "fileGuardRuleEntryObject": {
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path, directory, glob, or @group reference."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional custom approval reason shown in File Guard prompts."
+        },
+        "onNoUi": {
+          "$ref": "#/$defs/onNoUi"
+        }
+      },
+      "required": ["match"],
+      "additionalProperties": false
+    },
+    "fileGuardRuleEntry": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path, directory, glob, or @group reference."
+        },
+        {
+          "$ref": "#/$defs/fileGuardRuleEntryObject"
+        }
+      ]
+    },
+    "fileGuardRuleEntries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fileGuardRuleEntry"
+      },
+      "default": []
+    },
+    "fileGuardGateRules": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "$ref": "#/$defs/fileGuardRuleEntries"
+        },
+        "write": {
+          "$ref": "#/$defs/fileGuardRuleEntries"
+        },
+        "edit": {
+          "$ref": "#/$defs/fileGuardRuleEntries"
+        },
+        "bash": {
+          "$ref": "#/$defs/fileGuardRuleEntries"
+        },
+        "mutate": {
+          "$ref": "#/$defs/fileGuardRuleEntries",
+          "description": "Alias for edit+write rules."
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "fileGuardConfig": {
+      "type": "object",
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "onNoUi": {
+              "$ref": "#/$defs/onNoUi"
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "onNoUi": "deny"
+          }
+        },
+        "paths": {
+          "type": "object",
+          "description": "Reusable path groups referenced as @groupName in block/gate rules.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "default": {}
+        },
+        "rules": {
+          "type": "object",
+          "properties": {
+            "block": {
+              "$ref": "#/$defs/fileGuardRuleEntries"
+            },
+            "gate": {
+              "$ref": "#/$defs/fileGuardGateRules"
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "block": [],
+            "gate": {}
+          }
+        },
+        "blockReasonOverride": {
+          "type": "string",
+          "description": "Optional override for File Guard hard-block reason text."
+        },
+        "injectPromptReminder": {
+          "type": "boolean",
+          "description": "When true, inject File Guard policy summary into the system prompt.",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "$schema": "https://crumbs.dev/schemas/crumbs.schema.json",
+      "defaultPolicy": "ask",
+      "onNoUi": "deny",
+      "allow": [
+        {
+          "match": "exact",
+          "value": "git status"
+        }
+      ],
+      "deny": [
+        {
+          "match": "regex",
+          "value": "\\\\brm\\\\s+-rf\\\\b"
+        }
+      ],
+      "fileGuard": {
+        "defaults": {
+          "onNoUi": "deny"
+        },
+        "paths": {
+          "hardBlocked": ["docs/_hidden/", ".env"],
+          "policyFiles": [".pi/crumbs.json"]
+        },
+        "rules": {
+          "block": ["@hardBlocked"],
+          "gate": {
+            "mutate": [
+              {
+                "match": "@policyFiles",
+                "reason": "Editing crumbs policy requires approval.",
+                "onNoUi": "deny"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
