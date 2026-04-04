@@ -11,7 +11,7 @@ import type {
   Rule,
 } from "./types.js";
 
-const SIMPLE_SAFE_COMMANDS = new Set(["ls", "head", "wc", "echo", "printf", "true"]);
+const SIMPLE_SAFE_COMMANDS = new Set(["ls", "head", "wc", "echo", "printf", "true", "grep"]);
 
 // Baked-in safe defaults that can be expressed as simple rules.
 // Richer tools like `rg`, `find`, and `git` are handled by semantic evaluators below.

@@ -8,8 +8,24 @@
       "value": "^mise\\s+run\\s+(?:format|lint|typecheck|check)$"
     },
     {
+      "match": "regex",
+      "value": "^mkdir\\s+-p\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)+)(?:\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)+))*$"
+    },
+    {
+      "match": "regex",
+      "value": "^mv\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._*-]+)+)\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._*-]+)+)/?$"
+    },
+    {
+      "match": "regex",
+      "value": "^rmdir\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)*)(?:\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)*))*$"
+    },
+    {
       "match": "prefix",
       "value": "git show HEAD:"
+    },
+    {
+      "match": "exact",
+      "value": "mise tasks"
     }
   ],
   "deny": [],
@@ -18,18 +34,11 @@
       "onNoUi": "deny"
     },
     "paths": {
-      "hardBlocked": [
-        "docs/_hidden/",
-        ".env"
-      ],
-      "policyFiles": [
-        ".pi/crumbs.json"
-      ]
+      "hardBlocked": ["docs/_hidden/", ".env"],
+      "policyFiles": [".pi/crumbs.json"]
     },
     "rules": {
-      "block": [
-        "@hardBlocked"
-      ],
+      "block": ["@hardBlocked"],
       "gate": {
         "mutate": [
           {
