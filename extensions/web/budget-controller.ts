@@ -3,37 +3,42 @@
  *
  * What it does:
  * - Runs only inside the isolated `webresearch` child process.
- * - Tracks websearch/webfetch call budgets and steers the child to finalize once the web budget is spent.
+ * - Tracks separate websearch/webfetch budgets and steers the child from searching to fetching before final synthesis.
  *
  * How to use it:
  * - Loaded automatically by `webresearch`; not intended for direct invocation.
- * - When the child reaches or exceeds its web tool budget, it blocks more web calls and requests a final synthesis.
+ * - When search budget is spent, it blocks more searches and tells the child to fetch the best pages.
+ * - When both search and fetch budgets are spent, it blocks more web calls and requests a final synthesis.
  *
  * Example:
- * - A quick run can search once and fetch twice; after that, this extension tells the child to summarize from gathered evidence.
+ * - A balanced run can spend several searches to find candidates, then use the remaining fetch budget on the strongest pages before summarizing.
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { readResearchBudgetEnv } from "./shared/research-budget.js";
 
-const ENV_HAS_QUERY = "CRUMBS_RESEARCH_HAS_QUERY";
 const BLOCK_REASON =
   "Web research budget exhausted. Do not call websearch or webfetch again. Produce the final answer from gathered evidence only.";
+const SEARCH_BLOCK_REASON =
+  "Search budget exhausted. Do not call websearch again. Use the remaining budget on webfetch or finalize from gathered evidence.";
+const FETCH_BLOCK_REASON =
+  "Fetch budget exhausted. Do not call webfetch again. Finalize from gathered evidence or use any remaining search budget only if absolutely necessary.";
 const FINALIZE_MESSAGE = [
   "Stop searching and fetching now.",
   "Using only the information already gathered, produce the best possible final answer in the required response shape.",
   "Do not call websearch or webfetch again.",
   "Clearly note uncertainty or missing evidence where needed.",
 ].join(" ");
-
-function envFlag(name: string): boolean {
-  return process.env[name] === "1";
-}
-
-function remaining(limit: number | undefined, used: number): number {
-  if (limit === undefined) return Number.POSITIVE_INFINITY;
-  return Math.max(0, limit - used);
-}
+const SWITCH_TO_FETCH_MESSAGE = [
+  "Stop searching now.",
+  "Use the remaining budget on webfetch for the strongest candidate pages.",
+  "Do not call websearch again unless explicitly re-directed.",
+].join(" ");
+const SWITCH_TO_FINALIZE_MESSAGE = [
+  "Stop fetching now.",
+  "If you have enough evidence, produce the final answer from gathered material.",
+  "Do not call webfetch again.",
+].join(" ");
 
 export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
   if (process.env.CRUMBS_PATHFINDER_CHILD !== "1") return;
@@ -42,21 +47,19 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
   const budgetEnabled = Object.values(budget).some((value) => value !== undefined);
   if (!budgetEnabled) return;
 
-  const hasQuery = envFlag(ENV_HAS_QUERY);
   let searches = 0;
   let fetches = 0;
   let finalizeQueued = false;
+  let searchRedirectQueued = false;
+  let fetchRedirectQueued = false;
 
-  const shouldFinalizeAfterCurrentCall = () => {
-    const searchRemaining = remaining(budget.maxSearchCalls, searches);
-    const fetchRemaining = remaining(budget.maxFetchCalls, fetches);
-
-    if (!hasQuery) {
-      return fetchRemaining <= 0;
-    }
-
-    return searchRemaining <= 0 && fetchRemaining <= 0;
-  };
+  const actionsUsed = () => searches + fetches;
+  const searchBudgetSpent = () =>
+    budget.maxSearches !== undefined && searches >= budget.maxSearches;
+  const fetchBudgetSpent = () => budget.maxFetches !== undefined && fetches >= budget.maxFetches;
+  const totalBudgetSpent = () =>
+    budget.maxActions !== undefined && actionsUsed() >= budget.maxActions;
+  const allBudgetsSpent = () => searchBudgetSpent() && fetchBudgetSpent();
 
   const queueFinalize = (reason: string) => {
     if (finalizeQueued) return;
@@ -67,31 +70,67 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
     });
   };
 
+  const queueSearchRedirect = (reason: string) => {
+    if (searchRedirectQueued || finalizeQueued) return;
+    searchRedirectQueued = true;
+
+    pi.sendUserMessage(`${SWITCH_TO_FETCH_MESSAGE}\n\nReason: ${reason}`, {
+      deliverAs: "steer",
+    });
+  };
+
+  const queueFetchRedirect = (reason: string) => {
+    if (fetchRedirectQueued || finalizeQueued) return;
+    fetchRedirectQueued = true;
+
+    pi.sendUserMessage(`${SWITCH_TO_FINALIZE_MESSAGE}\n\nReason: ${reason}`, {
+      deliverAs: "steer",
+    });
+  };
+
   pi.on("tool_call", async (event) => {
     if (event.toolName !== "websearch" && event.toolName !== "webfetch") {
       return undefined;
     }
 
-    if (finalizeQueued) {
+    if (finalizeQueued || totalBudgetSpent() || allBudgetsSpent()) {
+      queueFinalize("web research budget fully used");
       return { block: true, reason: BLOCK_REASON };
     }
 
-    if (event.toolName === "websearch") {
-      if (budget.maxSearchCalls !== undefined && searches >= budget.maxSearchCalls) {
-        queueFinalize(`max websearch calls reached (${budget.maxSearchCalls})`);
-        return { block: true, reason: BLOCK_REASON };
-      }
-      searches += 1;
-    } else {
-      if (budget.maxFetchCalls !== undefined && fetches >= budget.maxFetchCalls) {
-        queueFinalize(`max fetched pages reached (${budget.maxFetchCalls})`);
-        return { block: true, reason: BLOCK_REASON };
-      }
-      fetches += 1;
+    if (event.toolName === "websearch" && searchBudgetSpent()) {
+      queueSearchRedirect(`max search calls reached (${budget.maxSearches})`);
+      return { block: true, reason: SEARCH_BLOCK_REASON };
     }
 
-    if (shouldFinalizeAfterCurrentCall()) {
-      queueFinalize("web research budget fully used");
+    if (event.toolName === "webfetch" && fetchBudgetSpent()) {
+      if (allBudgetsSpent() || totalBudgetSpent()) {
+        queueFinalize("web research budget fully used");
+        return { block: true, reason: BLOCK_REASON };
+      }
+      queueFetchRedirect(`max fetch calls reached (${budget.maxFetches})`);
+      return { block: true, reason: FETCH_BLOCK_REASON };
+    }
+
+    if (event.toolName === "websearch") searches += 1;
+    else fetches += 1;
+
+    if (totalBudgetSpent()) {
+      queueFinalize(`max web actions reached (${budget.maxActions})`);
+      return undefined;
+    }
+
+    if (allBudgetsSpent()) {
+      queueFinalize("search and fetch budgets fully used");
+      return undefined;
+    }
+
+    if (event.toolName === "websearch" && searchBudgetSpent()) {
+      queueSearchRedirect("search budget fully used; switch to fetching best pages");
+    }
+
+    if (event.toolName === "webfetch" && fetchBudgetSpent()) {
+      queueFetchRedirect("fetch budget fully used; finalize from gathered evidence");
     }
 
     return undefined;

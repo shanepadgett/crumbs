@@ -36,7 +36,7 @@ export interface ResolveResearchModelInput {
   task: string;
   query?: string;
   maxResults: number;
-  maxPages: number;
+  maxActions: number;
   maxCharsPerPage: number;
   cwd: string;
 }
@@ -151,11 +151,11 @@ function isComplexResearch(input: {
   task: string;
   query?: string;
   maxResults: number;
-  maxPages: number;
+  maxActions: number;
   maxCharsPerPage: number;
 }): boolean {
   let score = 0;
-  if (input.maxPages >= 6) score += 1;
+  if (input.maxActions >= 8) score += 1;
   if (input.maxResults >= 8) score += 1;
   if (input.maxCharsPerPage >= 16_000) score += 1;
   if (input.task.length >= 240) score += 1;
@@ -289,7 +289,7 @@ export async function resolveResearchModel(
     task: input.task,
     query: input.query,
     maxResults: input.maxResults,
-    maxPages: input.maxPages,
+    maxActions: input.maxActions,
     maxCharsPerPage: input.maxCharsPerPage,
   });
   const tier = pickTier(input.modelMode, complex);

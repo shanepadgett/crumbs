@@ -8,7 +8,7 @@
  * How to use it:
  * - Provide `task` plus `query`, `urls`, or both.
  * - Provide `responseShape` so the returned synthesis matches exactly what you need.
- * - Optionally cap breadth with `maxResults` and `maxPages`.
+ * - Optionally cap breadth with `maxResults`, `maxSearches`, and `maxFetches`.
  *
  * Example:
  * - "Research RDS Proxy session pinning for Django apps using query + links"
@@ -30,38 +30,48 @@ import {
 
 const WEB_RESEARCH_LABEL = "webresearch";
 const CHILD_AGENT_NAME = "Web Research Specialist";
+const SEARCH_ICON = "⌕";
+const FETCH_ICON = "⎘";
 
 type ModelMode = ResearchModelMode;
-type ResearchMode = "quick" | "balanced" | "thorough";
+type ResearchMode = "quick" | "balanced" | "deep";
 
 interface ResearchPreset {
   maxResults: number;
-  maxPages: number;
+  maxSearches: number;
+  maxFetches: number;
   maxCharsPerPage: number;
-  maxSearchCalls: number;
 }
 
 const RESEARCH_PRESETS: Record<ResearchMode, ResearchPreset> = {
   quick: {
-    maxResults: 4,
-    maxPages: 2,
-    maxCharsPerPage: 6_000,
-    maxSearchCalls: 1,
+    maxResults: 6,
+    maxSearches: 6,
+    maxFetches: 4,
+    maxCharsPerPage: 12_000,
   },
   balanced: {
-    maxResults: 6,
-    maxPages: 4,
-    maxCharsPerPage: 12_000,
-    maxSearchCalls: 2,
-  },
-  thorough: {
     maxResults: 10,
-    maxPages: 8,
+    maxSearches: 10,
+    maxFetches: 6,
     maxCharsPerPage: 20_000,
-    maxSearchCalls: 3,
+  },
+  deep: {
+    maxResults: 12,
+    maxSearches: 16,
+    maxFetches: 10,
+    maxCharsPerPage: 24_000,
   },
 };
 const DEFAULT_WEB_RESEARCH_MODEL = "claude-haiku-4-5";
+
+function normalizeResearchMode(value: unknown): ResearchMode | undefined {
+  if (typeof value !== "string") return undefined;
+  const mode = value.trim().toLowerCase();
+  if (mode === "thorough") return "deep";
+  if (mode === "quick" || mode === "balanced" || mode === "deep") return mode;
+  return undefined;
+}
 
 const WEBRESEARCH_PARAMS = Type.Object({
   task: Type.String({
@@ -80,10 +90,18 @@ const WEBRESEARCH_PARAMS = Type.Object({
     }),
   ),
   researchMode: Type.Optional(
-    Type.Union([Type.Literal("quick"), Type.Literal("balanced"), Type.Literal("thorough")], {
-      description:
-        "Research depth preset. quick = low-latency budget, balanced = default, thorough = broader search/fetch budget.",
-    }),
+    Type.Union(
+      [
+        Type.Literal("quick"),
+        Type.Literal("balanced"),
+        Type.Literal("deep"),
+        Type.Literal("thorough"),
+      ],
+      {
+        description:
+          "Research depth preset. quick = low-latency budget, balanced = default, deep = broader aggregate web action budget. `thorough` is accepted as a deprecated alias.",
+      },
+    ),
   ),
   modelMode: Type.Optional(
     Type.Union(
@@ -95,17 +113,40 @@ const WEBRESEARCH_PARAMS = Type.Object({
     ),
   ),
   maxResults: Type.Optional(
-    Type.Number({ description: "Max search results to consider (default: 6)." }),
+    Type.Number({
+      description:
+        "Max search results to consider (defaults vary by researchMode; balanced defaults to 10).",
+    }),
   ),
-  maxPages: Type.Optional(Type.Number({ description: "Max pages to fetch/read (default: 4)." })),
+  maxSearches: Type.Optional(
+    Type.Number({
+      description:
+        "Max websearch calls allowed before the agent should stop searching and switch to fetching (defaults vary by researchMode; balanced defaults to 10).",
+    }),
+  ),
+  maxFetches: Type.Optional(
+    Type.Number({
+      description:
+        "Max webfetch calls allowed before the agent should stop fetching and finalize from gathered evidence (defaults vary by researchMode; balanced defaults to 6).",
+    }),
+  ),
+  maxActions: Type.Optional(
+    Type.Number({
+      description:
+        "Deprecated total-action override. If set, it can only further limit the combined search+fetch budget.",
+    }),
+  ),
+  maxPages: Type.Optional(Type.Number({ description: "Deprecated alias for maxActions." })),
   maxCharsPerPage: Type.Optional(
     Type.Number({
-      description: "Preferred max characters per fetched page for synthesis (default: 12000).",
+      description:
+        "Preferred max characters per fetched page for synthesis (defaults vary by researchMode; balanced defaults to 20000).",
     }),
   ),
   citationStyle: Type.Optional(
     Type.Union([Type.Literal("numeric"), Type.Literal("inline")], {
-      description: "Citation format in the final synthesis (default: numeric).",
+      description:
+        "Citation format to use only when the required response shape explicitly asks for citations or sources (default: numeric).",
     }),
   ),
 });
@@ -141,14 +182,19 @@ function toLimit(value: number | undefined, fallback: number, min: number, max: 
 
 function phaseSummary(
   phase: PathfinderPhase,
-  searches: number,
-  fetches: number,
+  _searches: number,
+  _fetches: number,
   note?: string,
 ): string {
-  if (phase === "starting") return `starting${note ? ` — ${note}` : ""}`;
-  if (phase === "searching") return `searching (${searches})${note ? ` — ${note}` : ""}`;
-  if (phase === "reading") return `fetching (${fetches})${note ? ` — ${note}` : ""}`;
-  return `compiling final synthesis${note ? ` — ${note}` : ""}`;
+  const trimmed = (note ?? "").trim();
+  if (phase === "starting") return trimmed ? `starting — ${trimmed}` : "starting";
+  if (phase === "searching") {
+    return trimmed ? `searching "${truncateInline(trimmed, 86)}"` : "searching";
+  }
+  if (phase === "reading") {
+    return trimmed ? `fetching "${truncateInline(trimmed, 86)}"` : "fetching";
+  }
+  return "synthesizing";
 }
 
 function renderRunTag(
@@ -156,31 +202,20 @@ function renderRunTag(
   options?: { showUnknownWhenMissing?: boolean },
 ): string {
   const showUnknown = options?.showUnknownWhenMissing ?? false;
-  const mode = details.researchMode;
-  const modeTag =
-    mode === "quick"
-      ? "fast"
-      : mode === "thorough"
-        ? "deep"
-        : mode === "balanced"
-          ? "balanced"
-          : showUnknown
-            ? "..."
-            : "balanced";
+  const mode = normalizeResearchMode(details.researchMode);
+  const modeTag = mode ?? (showUnknown ? "..." : "balanced");
 
   const modelMode = details.modelMode;
   const costTag =
     modelMode === "cheap"
       ? "$"
-      : modelMode === "current"
+      : modelMode === "best"
         ? "$$$"
-        : modelMode === "best"
-          ? "$$$$"
-          : modelMode === "auto"
-            ? "$$"
-            : showUnknown
-              ? "..."
-              : "$$";
+        : modelMode === "auto" || modelMode === "current"
+          ? "$$"
+          : showUnknown
+            ? "..."
+            : "$$";
 
   return `[${modeTag}/${costTag}]`;
 }
@@ -192,20 +227,14 @@ function activityLine(details: Partial<WebResearchDetails>, fallback?: string): 
   const note = (details.note ?? "").trim();
 
   if (phase === "searching") {
-    if (note.startsWith("query:")) {
-      return `searching "${truncateInline(note.slice(6).trim(), 86)}"`;
-    }
-    return "searching";
+    return note ? `searching "${truncateInline(note, 86)}"` : "searching";
   }
 
   if (phase === "reading") {
-    if (note.startsWith("url:")) {
-      return `fetching "${truncateInline(note.slice(4).trim(), 86)}"`;
-    }
-    return "fetching";
+    return note ? `fetching "${truncateInline(note, 86)}"` : "fetching";
   }
 
-  if (phase === "synthesizing") return "compiling final synthesis";
+  if (phase === "synthesizing") return "synthesizing";
   return "starting";
 }
 
@@ -217,13 +246,20 @@ function formatElapsedShort(elapsedMs: number): string {
   return `${minutes}m${seconds}s`;
 }
 
-function usageSummary(usage: PathfinderUsage, options?: { budgetExhausted?: boolean }): string {
+function usageSummary(usage: PathfinderUsage): string {
   return [
-    options?.budgetExhausted ? `↺${usage.turns} - exhausted` : `↺${usage.turns}`,
     `↑${usage.input} ↓${usage.output}`,
     `$${usage.cost.toFixed(4)}`,
     usage.model ?? "(unknown model)",
   ].join(" | ");
+}
+
+function actionSummary(
+  details: Partial<WebResearchDetails>,
+  fg: (color: "error" | "muted", text: string) => string,
+): string {
+  const text = `${SEARCH_ICON}${details.searches ?? 0} ${FETCH_ICON}${details.fetches ?? 0}`;
+  return details.budgetExhausted ? fg("error", text) : fg("muted", text);
 }
 
 export default function webResearchExtension(pi: ExtensionAPI) {
@@ -249,7 +285,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
     promptGuidelines: [
       "Prefer webresearch for all web information gathering, including single URLs.",
       "Always provide responseShape so results match the exact output format you need.",
-      "Use researchMode=quick for speed, balanced for normal work, and thorough for deeper coverage.",
+      "Use researchMode=quick for speed, balanced for normal work, and deep for broader web action budget.",
       "Use modelMode=cheap for lightweight distillation and modelMode=best/current for advanced technical synthesis.",
       "Provide specific goals and constraints in task/query for better signal.",
     ],
@@ -302,22 +338,34 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       if (!expanded) {
         const parts: string[] = [];
         if (Number.isFinite(details.elapsedMs)) {
-          parts.push(formatElapsedShort(details.elapsedMs ?? 0));
+          parts.push(theme.fg("dim", formatElapsedShort(details.elapsedMs ?? 0)));
         }
+        parts.push(actionSummary(details, (color, text) => theme.fg(color, text)));
         if (details.usageSummary) {
-          parts.push(details.usageSummary);
+          parts.push(theme.fg("dim", details.usageSummary));
         }
         if (output.trim()) {
-          parts.push(keyHint("app.tools.expand", "to expand"));
+          parts.push(theme.fg("dim", keyHint("app.tools.expand", "to expand")));
         }
-        const line = parts.join(" | ");
-        return new Text(line ? theme.fg("dim", line) : "", 0, 0);
+        const line = parts.join(theme.fg("dim", " | "));
+        return new Text(line, 0, 0);
       }
 
-      const usageLine = details.usageSummary ?? "";
-      const usage = usageLine ? `\n${theme.fg("dim", usageLine)}` : "";
-      if (!output && !usage) return new Text("", 0, 0);
-      return new Text(`${theme.fg("toolOutput", output)}${usage}`, 0, 0);
+      const expandedParts: string[] = [];
+      if (Number.isFinite(details.elapsedMs)) {
+        expandedParts.push(theme.fg("dim", formatElapsedShort(details.elapsedMs ?? 0)));
+      }
+      expandedParts.push(actionSummary(details, (color, text) => theme.fg(color, text)));
+      if (details.usageSummary) {
+        expandedParts.push(theme.fg("dim", details.usageSummary));
+      }
+      if (output.trim()) {
+        expandedParts.push(theme.fg("dim", keyHint("app.tools.expand", "to collapse")));
+      }
+      const summaryLine = expandedParts.join(theme.fg("dim", " | "));
+      const footer = summaryLine ? `\n${summaryLine}` : "";
+      if (!output && !footer) return new Text("", 0, 0);
+      return new Text(`${theme.fg("toolOutput", output)}${footer}`, 0, 0);
     },
     async execute(_toolCallId, params, signal, onUpdate, ctx: ExtensionContext) {
       const rawUrls = (params.urls ?? []) as string[];
@@ -325,7 +373,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       const query = typeof params.query === "string" ? params.query.trim() : undefined;
       const hasQuery = Boolean(query);
       const hasUrls = urls.length > 0;
-      const researchMode = (params.researchMode ?? "balanced") as ResearchMode;
+      const researchMode = normalizeResearchMode(params.researchMode) ?? "balanced";
       const preset = RESEARCH_PRESETS[researchMode];
       const modelMode = (params.modelMode ??
         (researchMode === "quick" ? "cheap" : "auto")) as ModelMode;
@@ -345,7 +393,14 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       }
 
       const maxResults = toLimit(params.maxResults, preset.maxResults, 1, 12);
-      const maxPages = toLimit(params.maxPages, preset.maxPages, 1, 10);
+      const maxSearches = toLimit(params.maxSearches, preset.maxSearches, 1, 24);
+      const maxFetches = toLimit(params.maxFetches, preset.maxFetches, 1, 16);
+      const maxActions = toLimit(
+        params.maxActions ?? params.maxPages,
+        maxSearches + maxFetches,
+        1,
+        40,
+      );
       const maxCharsPerPage = toLimit(
         params.maxCharsPerPage,
         preset.maxCharsPerPage,
@@ -353,7 +408,6 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         30_000,
       );
       const citationStyle = (params.citationStyle ?? "numeric") as "numeric" | "inline";
-      const maxSearchCalls = Math.max(1, Math.min(maxResults, preset.maxSearchCalls));
       const responseShape = params.responseShape.trim();
 
       const resolution = await resolveResearchModel({
@@ -364,7 +418,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         task: params.task,
         query,
         maxResults,
-        maxPages,
+        maxActions,
         maxCharsPerPage,
         cwd: ctx.cwd,
       });
@@ -374,9 +428,10 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         agentName: CHILD_AGENT_NAME,
         hasQuery,
         hasUrls,
-        maxSearchCalls,
+        maxSearches,
+        maxFetches,
+        maxActions,
         maxResults,
-        maxPages,
         maxCharsPerPage,
         citationStyle,
         responseShape,
@@ -386,9 +441,10 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         task: params.task,
         query,
         urls,
-        maxSearchCalls,
+        maxSearches,
+        maxFetches,
+        maxActions,
         maxResults,
-        maxPages,
         maxCharsPerPage,
         responseShape,
       });
@@ -444,12 +500,11 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           extensionPaths,
           signal,
           env: {
-            CRUMBS_RESEARCH_MAX_SEARCH_CALLS: String(maxSearchCalls),
-            CRUMBS_RESEARCH_MAX_FETCH_CALLS: String(maxPages),
+            CRUMBS_RESEARCH_MAX_SEARCHES: String(maxSearches),
+            CRUMBS_RESEARCH_MAX_FETCHES: String(maxFetches),
+            CRUMBS_RESEARCH_MAX_ACTIONS: String(maxActions),
             CRUMBS_RESEARCH_MAX_RESULTS: String(maxResults),
             CRUMBS_RESEARCH_MAX_CHARS_PER_PAGE: String(maxCharsPerPage),
-            CRUMBS_RESEARCH_HAS_QUERY: hasQuery ? "1" : "0",
-            CRUMBS_RESEARCH_HAS_URLS: hasUrls ? "1" : "0",
           },
           onProgress: (progress) => {
             phase = progress.phase;
@@ -513,7 +568,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         }
 
         const output = run.output.trim() || "No synthesis produced.";
-        const summary = usageSummary(run.usage, { budgetExhausted: run.budgetExhausted });
+        const summary = usageSummary(run.usage);
 
         return {
           content: [{ type: "text", text: output }],

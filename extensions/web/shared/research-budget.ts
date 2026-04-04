@@ -3,7 +3,7 @@
  *
  * What it does:
  * - Reads per-run webresearch budget limits from child-process environment variables.
- * - Tracks search/fetch tool call counts and enforces hard caps.
+ * - Tracks separate websearch and webfetch budgets, plus an optional total action cap.
  * - Provides optional per-page character cap for fetched content.
  *
  * How to use it:
@@ -15,14 +15,16 @@
  * - claimSearch(8) may return 4 when the active budget caps per-search results at 4.
  */
 
-const ENV_MAX_SEARCH_CALLS = "CRUMBS_RESEARCH_MAX_SEARCH_CALLS";
-const ENV_MAX_FETCH_CALLS = "CRUMBS_RESEARCH_MAX_FETCH_CALLS";
+const ENV_MAX_SEARCHES = "CRUMBS_RESEARCH_MAX_SEARCHES";
+const ENV_MAX_FETCHES = "CRUMBS_RESEARCH_MAX_FETCHES";
+const ENV_MAX_ACTIONS = "CRUMBS_RESEARCH_MAX_ACTIONS";
 const ENV_MAX_RESULTS = "CRUMBS_RESEARCH_MAX_RESULTS";
 const ENV_MAX_CHARS_PER_PAGE = "CRUMBS_RESEARCH_MAX_CHARS_PER_PAGE";
 
 export interface ResearchBudget {
-  maxSearchCalls?: number;
-  maxFetchCalls?: number;
+  maxSearches?: number;
+  maxFetches?: number;
+  maxActions?: number;
   maxResultsPerSearch?: number;
   maxCharsPerPage?: number;
 }
@@ -45,8 +47,9 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 
 export function readResearchBudgetEnv(): ResearchBudget {
   return {
-    maxSearchCalls: parsePositiveInt(process.env[ENV_MAX_SEARCH_CALLS]),
-    maxFetchCalls: parsePositiveInt(process.env[ENV_MAX_FETCH_CALLS]),
+    maxSearches: parsePositiveInt(process.env[ENV_MAX_SEARCHES]),
+    maxFetches: parsePositiveInt(process.env[ENV_MAX_FETCHES]),
+    maxActions: parsePositiveInt(process.env[ENV_MAX_ACTIONS]),
     maxResultsPerSearch: parsePositiveInt(process.env[ENV_MAX_RESULTS]),
     maxCharsPerPage: parsePositiveInt(process.env[ENV_MAX_CHARS_PER_PAGE]),
   };
@@ -61,15 +64,37 @@ function getState(): ResearchBudgetState {
   return state;
 }
 
+function usedActions(state: ResearchBudgetState): number {
+  return state.searches + state.fetches;
+}
+
+function ensureActionBudget(state: ResearchBudgetState): void {
+  const maxActions = state.budget.maxActions;
+  if (maxActions !== undefined && usedActions(state) >= maxActions) {
+    throw new Error(`Research budget exceeded: max web actions reached (${maxActions})`);
+  }
+}
+
+function ensureSearchBudget(state: ResearchBudgetState): void {
+  const maxSearches = state.budget.maxSearches;
+  if (maxSearches !== undefined && state.searches >= maxSearches) {
+    throw new Error(`Research budget exceeded: max search calls reached (${maxSearches})`);
+  }
+}
+
+function ensureFetchBudget(state: ResearchBudgetState): void {
+  const maxFetches = state.budget.maxFetches;
+  if (maxFetches !== undefined && state.fetches >= maxFetches) {
+    throw new Error(`Research budget exceeded: max fetch calls reached (${maxFetches})`);
+  }
+}
+
 export function claimSearch(requestedResults: number): number {
   const s = getState();
   if (!s.enabled) return requestedResults;
 
-  const maxCalls = s.budget.maxSearchCalls;
-  if (maxCalls !== undefined && s.searches >= maxCalls) {
-    throw new Error(`Research budget exceeded: max search calls reached (${maxCalls})`);
-  }
-
+  ensureSearchBudget(s);
+  ensureActionBudget(s);
   s.searches += 1;
 
   const maxResults = s.budget.maxResultsPerSearch;
@@ -81,11 +106,8 @@ export function claimFetch(): void {
   const s = getState();
   if (!s.enabled) return;
 
-  const maxCalls = s.budget.maxFetchCalls;
-  if (maxCalls !== undefined && s.fetches >= maxCalls) {
-    throw new Error(`Research budget exceeded: max fetched pages reached (${maxCalls})`);
-  }
-
+  ensureFetchBudget(s);
+  ensureActionBudget(s);
   s.fetches += 1;
 }
 

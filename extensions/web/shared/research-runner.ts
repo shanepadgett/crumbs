@@ -52,6 +52,10 @@ interface JsonEvent {
     };
     content?: Array<{ type?: string; text?: string }>;
   };
+  assistantMessageEvent?: {
+    type?: string;
+    delta?: string;
+  };
   toolName?: string;
   arguments?: unknown;
   input?: unknown;
@@ -195,7 +199,7 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
             phase: "searching",
             searches,
             fetches,
-            note: query ? `query: ${query}` : `search ${searches}`,
+            note: query?.trim() || "",
           });
           return;
         }
@@ -207,16 +211,34 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
             phase: "reading",
             searches,
             fetches,
-            note: url ? `url: ${url}` : `page ${fetches}`,
+            note: url?.trim() || "",
           });
           return;
         }
+      }
+
+      if (event.type === "message_update" && event.message?.role === "assistant") {
+        if ((searches > 0 || fetches > 0) && event.assistantMessageEvent?.type === "text_delta") {
+          emitProgress({
+            phase: "synthesizing",
+            searches,
+            fetches,
+            note: "",
+          });
+        }
+        return;
       }
 
       if (event.type === "message_end" && event.message?.role === "user") {
         const text = messageText(event.message);
         if (text.startsWith("Stop searching and fetching now.")) {
           budgetExhausted = true;
+          emitProgress({
+            phase: "synthesizing",
+            searches,
+            fetches,
+            note: "",
+          });
         }
         return;
       }
