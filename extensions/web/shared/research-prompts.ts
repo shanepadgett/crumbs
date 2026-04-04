@@ -16,6 +16,7 @@ export function buildResearchSystemPrompt(params: {
   agentName: string;
   hasQuery: boolean;
   hasUrls: boolean;
+  maxSearchCalls: number;
   maxResults: number;
   maxPages: number;
   maxCharsPerPage: number;
@@ -37,7 +38,8 @@ Operating rules:
 - Keep costs low and stay on-task.
 - Never call any tool other than websearch/webfetch.
 - Respect limits strictly:
-  - max search results considered: ${params.maxResults}
+  - max websearch calls: ${params.maxSearchCalls}
+  - max search results considered per search: ${params.maxResults}
   - max pages fetched: ${params.maxPages}
   - preferred max chars consumed per page: ${params.maxCharsPerPage}
 - Prioritize official docs, changelogs, specs, and primary sources.
@@ -47,7 +49,8 @@ Workflow:
 ${params.hasQuery ? "1) Run websearch with the provided query and identify best candidates." : "1) Skip search (no query provided)."}
 ${params.hasUrls ? "2) Include provided URLs in evaluation and fetch queue." : "2) No explicit URLs provided."}
 3) Fetch and read only the most relevant pages.
-4) Do exactly one final synthesis after all tool calls are complete.
+4) If the web tool budget is exhausted or a web tool call is blocked, stop using tools and produce the final synthesis from gathered evidence.
+5) Do exactly one final synthesis after all tool calls are complete.
 
 Output contract:
 - Follow this required response shape exactly:
@@ -60,6 +63,7 @@ export function buildResearchTask(params: {
   task: string;
   query?: string;
   urls: string[];
+  maxSearchCalls: number;
   maxResults: number;
   maxPages: number;
   maxCharsPerPage: number;
@@ -71,7 +75,7 @@ export function buildResearchTask(params: {
     text += `\n\nSeed URLs:\n${params.urls.map((u, i) => `${i + 1}. ${u}`).join("\n")}`;
   }
 
-  text += `\n\nExecution limits:\n- maxResults: ${params.maxResults}\n- maxPages: ${params.maxPages}\n- maxCharsPerPage: ${params.maxCharsPerPage}`;
+  text += `\n\nExecution limits:\n- maxSearchCalls: ${params.maxSearchCalls}\n- maxResults: ${params.maxResults}\n- maxPages: ${params.maxPages}\n- maxCharsPerPage: ${params.maxCharsPerPage}`;
   text += `\n\nRequired response shape:\n${params.responseShape}`;
   return text;
 }

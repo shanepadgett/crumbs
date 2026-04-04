@@ -20,7 +20,7 @@ const ENV_MAX_FETCH_CALLS = "CRUMBS_RESEARCH_MAX_FETCH_CALLS";
 const ENV_MAX_RESULTS = "CRUMBS_RESEARCH_MAX_RESULTS";
 const ENV_MAX_CHARS_PER_PAGE = "CRUMBS_RESEARCH_MAX_CHARS_PER_PAGE";
 
-interface ResearchBudget {
+export interface ResearchBudget {
   maxSearchCalls?: number;
   maxFetchCalls?: number;
   maxResultsPerSearch?: number;
@@ -43,16 +43,19 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   return parsed;
 }
 
-function getState(): ResearchBudgetState {
-  if (state) return state;
-
-  const budget: ResearchBudget = {
+export function readResearchBudgetEnv(): ResearchBudget {
+  return {
     maxSearchCalls: parsePositiveInt(process.env[ENV_MAX_SEARCH_CALLS]),
     maxFetchCalls: parsePositiveInt(process.env[ENV_MAX_FETCH_CALLS]),
     maxResultsPerSearch: parsePositiveInt(process.env[ENV_MAX_RESULTS]),
     maxCharsPerPage: parsePositiveInt(process.env[ENV_MAX_CHARS_PER_PAGE]),
   };
+}
 
+function getState(): ResearchBudgetState {
+  if (state) return state;
+
+  const budget = readResearchBudgetEnv();
   const enabled = Object.values(budget).some((v) => v !== undefined);
   state = { enabled, budget, searches: 0, fetches: 0 };
   return state;

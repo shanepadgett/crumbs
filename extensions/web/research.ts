@@ -16,15 +16,10 @@
 
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { keyHint, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
-import {
-  buildAbort,
-  clampTimeout,
-  truncateInline,
-  WEBRESEARCH_DEFAULT_TIMEOUT,
-} from "./shared/common.js";
+import { Type, type Static } from "@sinclair/typebox";
+import { truncateInline } from "./shared/common.js";
 import { resolveResearchModel, type ResearchModelMode } from "./shared/research-model-selection.js";
 import { buildResearchSystemPrompt, buildResearchTask } from "./shared/research-prompts.js";
 import {
@@ -43,8 +38,6 @@ interface ResearchPreset {
   maxResults: number;
   maxPages: number;
   maxCharsPerPage: number;
-  timeout: number;
-  idleTimeout: number;
   maxSearchCalls: number;
 }
 
@@ -53,24 +46,18 @@ const RESEARCH_PRESETS: Record<ResearchMode, ResearchPreset> = {
     maxResults: 4,
     maxPages: 2,
     maxCharsPerPage: 6_000,
-    timeout: 75,
-    idleTimeout: 30,
     maxSearchCalls: 1,
   },
   balanced: {
     maxResults: 6,
     maxPages: 4,
     maxCharsPerPage: 12_000,
-    timeout: 120,
-    idleTimeout: 45,
     maxSearchCalls: 2,
   },
   thorough: {
     maxResults: 10,
     maxPages: 8,
     maxCharsPerPage: 20_000,
-    timeout: 420,
-    idleTimeout: 90,
     maxSearchCalls: 3,
   },
 };
@@ -95,7 +82,7 @@ const WEBRESEARCH_PARAMS = Type.Object({
   researchMode: Type.Optional(
     Type.Union([Type.Literal("quick"), Type.Literal("balanced"), Type.Literal("thorough")], {
       description:
-        "Research depth preset. quick = low-latency budget, balanced = default, thorough = broader search/fetch and longer timeout.",
+        "Research depth preset. quick = low-latency budget, balanced = default, thorough = broader search/fetch budget.",
     }),
   ),
   modelMode: Type.Optional(
@@ -121,15 +108,9 @@ const WEBRESEARCH_PARAMS = Type.Object({
       description: "Citation format in the final synthesis (default: numeric).",
     }),
   ),
-  timeout: Type.Optional(
-    Type.Number({ description: "Overall timeout in seconds (mode-based default, max: 600)." }),
-  ),
-  idleTimeout: Type.Optional(
-    Type.Number({
-      description: "Idle timeout in seconds (abort if no progress updates; mode-based default).",
-    }),
-  ),
 });
+
+type WebResearchParams = Static<typeof WEBRESEARCH_PARAMS>;
 
 interface WebResearchDetails {
   status: "running" | "done" | "error";
@@ -150,23 +131,12 @@ interface WebResearchDetails {
   usageSummary?: string;
   elapsedMs?: number;
   error?: string;
+  budgetExhausted?: true;
 }
 
 function toLimit(value: number | undefined, fallback: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(value!)));
-}
-
-function toIdleTimeout(
-  value: number | undefined,
-  fallback: number,
-  overallTimeout: number,
-): number {
-  if (!Number.isFinite(value)) {
-    return Math.max(10, Math.min(fallback, Math.max(10, overallTimeout - 5)));
-  }
-  const bounded = Math.max(10, Math.floor(value!));
-  return Math.min(bounded, Math.max(10, overallTimeout - 5));
 }
 
 function phaseSummary(
@@ -247,9 +217,9 @@ function formatElapsedShort(elapsedMs: number): string {
   return `${minutes}m${seconds}s`;
 }
 
-function usageSummary(usage: PathfinderUsage): string {
+function usageSummary(usage: PathfinderUsage, options?: { budgetExhausted?: boolean }): string {
   return [
-    `↺${usage.turns}`,
+    options?.budgetExhausted ? `↺${usage.turns} - exhausted` : `↺${usage.turns}`,
     `↑${usage.input} ↓${usage.output}`,
     `$${usage.cost.toFixed(4)}`,
     usage.model ?? "(unknown model)",
@@ -284,6 +254,17 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       "Provide specific goals and constraints in task/query for better signal.",
     ],
     parameters: WEBRESEARCH_PARAMS,
+    prepareArguments(args): WebResearchParams {
+      if (!args || typeof args !== "object" || Array.isArray(args)) {
+        return args as WebResearchParams;
+      }
+      const {
+        timeout: _timeout,
+        idleTimeout: _idleTimeout,
+        ...rest
+      } = args as Record<string, unknown>;
+      return rest as WebResearchParams;
+    },
     renderCall(args, theme) {
       const task = truncateInline((args.task ?? "").trim(), 76);
       const tag = renderRunTag(
@@ -326,11 +307,15 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         if (details.usageSummary) {
           parts.push(details.usageSummary);
         }
+        if (output.trim()) {
+          parts.push(keyHint("app.tools.expand", "to expand"));
+        }
         const line = parts.join(" | ");
         return new Text(line ? theme.fg("dim", line) : "", 0, 0);
       }
 
-      const usage = details.usageSummary ? `\n${theme.fg("dim", details.usageSummary)}` : "";
+      const usageLine = details.usageSummary ?? "";
+      const usage = usageLine ? `\n${theme.fg("dim", usageLine)}` : "";
       if (!output && !usage) return new Text("", 0, 0);
       return new Text(`${theme.fg("toolOutput", output)}${usage}`, 0, 0);
     },
@@ -359,8 +344,6 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         };
       }
 
-      const timeout = clampTimeout(params.timeout, preset.timeout ?? WEBRESEARCH_DEFAULT_TIMEOUT);
-      const idleTimeout = toIdleTimeout(params.idleTimeout, preset.idleTimeout, timeout);
       const maxResults = toLimit(params.maxResults, preset.maxResults, 1, 12);
       const maxPages = toLimit(params.maxPages, preset.maxPages, 1, 10);
       const maxCharsPerPage = toLimit(
@@ -391,6 +374,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         agentName: CHILD_AGENT_NAME,
         hasQuery,
         hasUrls,
+        maxSearchCalls,
         maxResults,
         maxPages,
         maxCharsPerPage,
@@ -402,6 +386,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         task: params.task,
         query,
         urls,
+        maxSearchCalls,
         maxResults,
         maxPages,
         maxCharsPerPage,
@@ -409,6 +394,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       });
 
       const extensionPaths = [
+        path.resolve(extensionDir, "budget-controller.ts"),
         path.resolve(extensionDir, "search.ts"),
         path.resolve(extensionDir, "fetch.ts"),
       ];
@@ -447,7 +433,6 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         emitProgress();
       }, 250);
 
-      const gate = buildAbort(timeout, signal);
       emitProgress();
 
       try {
@@ -457,13 +442,14 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           systemPrompt,
           model,
           extensionPaths,
-          signal: gate.signal,
-          idleTimeoutSeconds: idleTimeout,
+          signal,
           env: {
             CRUMBS_RESEARCH_MAX_SEARCH_CALLS: String(maxSearchCalls),
             CRUMBS_RESEARCH_MAX_FETCH_CALLS: String(maxPages),
             CRUMBS_RESEARCH_MAX_RESULTS: String(maxResults),
             CRUMBS_RESEARCH_MAX_CHARS_PER_PAGE: String(maxCharsPerPage),
+            CRUMBS_RESEARCH_HAS_QUERY: hasQuery ? "1" : "0",
+            CRUMBS_RESEARCH_HAS_URLS: hasUrls ? "1" : "0",
           },
           onProgress: (progress) => {
             phase = progress.phase;
@@ -474,16 +460,9 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           },
         });
 
-        if (gate.signal.aborted || run.abortedBy === "idle_timeout") {
-          const canceled = signal?.aborted;
-          const idleTimedOut = run.abortedBy === "idle_timeout";
-          const message = canceled
-            ? `${WEB_RESEARCH_LABEL} was canceled.`
-            : idleTimedOut
-              ? `${WEB_RESEARCH_LABEL} timed out after ${idleTimeout}s with no progress.`
-              : `${WEB_RESEARCH_LABEL} timed out after ${timeout}s.`;
+        if (signal?.aborted || run.abortedBy === "signal") {
           return {
-            content: [{ type: "text", text: message }],
+            content: [{ type: "text", text: `${WEB_RESEARCH_LABEL} was canceled.` }],
             details: {
               status: "error",
               model,
@@ -499,7 +478,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
               searches: run.searches,
               fetches: run.fetches,
               elapsedMs: run.elapsedMs,
-              error: canceled ? "canceled" : idleTimedOut ? "timeout_idle" : "timeout_overall",
+              error: "canceled",
             } as WebResearchDetails,
             isError: true,
           };
@@ -527,13 +506,14 @@ export default function webResearchExtension(pi: ExtensionAPI) {
               usage: run.usage,
               elapsedMs: run.elapsedMs,
               error: message,
+              ...(run.budgetExhausted ? { budgetExhausted: true as const } : {}),
             } as WebResearchDetails,
             isError: true,
           };
         }
 
         const output = run.output.trim() || "No synthesis produced.";
-        const summary = usageSummary(run.usage);
+        const summary = usageSummary(run.usage, { budgetExhausted: run.budgetExhausted });
 
         return {
           content: [{ type: "text", text: output }],
@@ -554,11 +534,11 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             usage: run.usage,
             usageSummary: summary,
             elapsedMs: run.elapsedMs,
+            ...(run.budgetExhausted ? { budgetExhausted: true as const } : {}),
           } as WebResearchDetails,
         };
       } finally {
         clearInterval(tick);
-        gate.clear();
       }
     },
   });

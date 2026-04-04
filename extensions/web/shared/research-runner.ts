@@ -24,7 +24,6 @@ export interface RunPathfinderOptions {
   model: string;
   extensionPaths: string[];
   signal?: AbortSignal;
-  idleTimeoutSeconds?: number;
   env?: Record<string, string | undefined>;
   onProgress?: (progress: PathfinderProgress) => void;
 }
@@ -37,7 +36,8 @@ export interface RunPathfinderResult {
   searches: number;
   fetches: number;
   elapsedMs: number;
-  abortedBy?: "signal" | "idle_timeout";
+  abortedBy?: "signal";
+  budgetExhausted?: true;
 }
 
 interface JsonEvent {
@@ -76,7 +76,7 @@ function parseJsonLine(line: string): JsonEvent | null {
   }
 }
 
-function assistantText(message: JsonEvent["message"]): string {
+function messageText(message: JsonEvent["message"]): string {
   if (!message?.content || !Array.isArray(message.content)) return "";
   return message.content
     .filter(
@@ -86,6 +86,10 @@ function assistantText(message: JsonEvent["message"]): string {
     .map((part) => part.text)
     .join("\n")
     .trim();
+}
+
+function assistantText(message: JsonEvent["message"]): string {
+  return messageText(message);
 }
 
 function usageFromMessage(message: JsonEvent["message"]): PathfinderUsage {
@@ -156,7 +160,8 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
   let stderr = "";
   let searches = 0;
   let fetches = 0;
-  let abortedBy: "signal" | "idle_timeout" | undefined;
+  let abortedBy: "signal" | undefined;
+  let budgetExhausted: true | undefined;
 
   options.onProgress?.({ phase: "starting", searches, fetches, note: "launching process" });
 
@@ -173,32 +178,12 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     });
 
     let stdoutBuffer = "";
-    let idleTimer: ReturnType<typeof setTimeout> | undefined;
-    const idleMs = options.idleTimeoutSeconds
-      ? Math.max(1, Math.floor(options.idleTimeoutSeconds)) * 1000
-      : 0;
-
-    const bumpIdleWatchdog = () => {
-      if (!idleMs || proc.killed) return;
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        if (abortedBy) return;
-        abortedBy = "idle_timeout";
-        proc.kill("SIGTERM");
-        setTimeout(() => {
-          if (!proc.killed) proc.kill("SIGKILL");
-        }, 3000);
-      }, idleMs);
-    };
 
     const emitProgress = (progress: PathfinderProgress) => {
-      bumpIdleWatchdog();
       options.onProgress?.(progress);
     };
 
     const handleLine = (line: string) => {
-      bumpIdleWatchdog();
-
       const event = parseJsonLine(line);
       if (!event?.type) return;
 
@@ -228,6 +213,14 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
         }
       }
 
+      if (event.type === "message_end" && event.message?.role === "user") {
+        const text = messageText(event.message);
+        if (text.startsWith("Stop searching and fetching now.")) {
+          budgetExhausted = true;
+        }
+        return;
+      }
+
       if (event.type === "message_end" && event.message?.role === "assistant") {
         const text = assistantText(event.message);
         if (text.length > 0) finalOutput = text;
@@ -241,10 +234,7 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
       }
     };
 
-    bumpIdleWatchdog();
-
     proc.stdout.on("data", (chunk: Buffer) => {
-      bumpIdleWatchdog();
       stdoutBuffer += chunk.toString();
       const lines = stdoutBuffer.split("\n");
       stdoutBuffer = lines.pop() ?? "";
@@ -256,19 +246,16 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
-      bumpIdleWatchdog();
       stderr += chunk.toString();
     });
 
     proc.on("close", (code) => {
-      if (idleTimer) clearTimeout(idleTimer);
       const last = stdoutBuffer.trim();
       if (last) handleLine(last);
       resolve(code ?? 0);
     });
 
     proc.on("error", () => {
-      if (idleTimer) clearTimeout(idleTimer);
       resolve(1);
     });
 
@@ -295,5 +282,6 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     fetches,
     elapsedMs: Date.now() - startedAt,
     abortedBy,
+    budgetExhausted,
   };
 }
