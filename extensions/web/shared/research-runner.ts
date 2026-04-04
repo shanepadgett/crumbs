@@ -24,6 +24,8 @@ export interface RunPathfinderOptions {
   model: string;
   extensionPaths: string[];
   signal?: AbortSignal;
+  idleTimeoutSeconds?: number;
+  env?: Record<string, string | undefined>;
   onProgress?: (progress: PathfinderProgress) => void;
 }
 
@@ -34,6 +36,8 @@ export interface RunPathfinderResult {
   usage: PathfinderUsage;
   searches: number;
   fetches: number;
+  elapsedMs: number;
+  abortedBy?: "signal" | "idle_timeout";
 }
 
 interface JsonEvent {
@@ -49,6 +53,17 @@ interface JsonEvent {
     content?: Array<{ type?: string; text?: string }>;
   };
   toolName?: string;
+  arguments?: unknown;
+  input?: unknown;
+  params?: unknown;
+  args?: unknown;
+  toolArguments?: unknown;
+  toolInput?: unknown;
+  toolCall?: {
+    arguments?: unknown;
+    params?: unknown;
+    input?: unknown;
+  };
 }
 
 function parseJsonLine(line: string): JsonEvent | null {
@@ -83,6 +98,33 @@ function usageFromMessage(message: JsonEvent["message"]): PathfinderUsage {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  return value as Record<string, unknown>;
+}
+
+function extractToolArg(event: JsonEvent, key: "query" | "url"): string | undefined {
+  const candidates: unknown[] = [
+    event.arguments,
+    event.input,
+    event.params,
+    event.args,
+    event.toolArguments,
+    event.toolInput,
+    event.toolCall?.arguments,
+    event.toolCall?.params,
+    event.toolCall?.input,
+  ];
+
+  for (const candidate of candidates) {
+    const record = asRecord(candidate);
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  return undefined;
+}
+
 export async function runPathfinder(options: RunPathfinderOptions): Promise<RunPathfinderResult> {
   const args: string[] = [
     "--mode",
@@ -109,10 +151,12 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     model: options.model,
   };
 
+  const startedAt = Date.now();
   let finalOutput = "";
   let stderr = "";
   let searches = 0;
   let fetches = 0;
+  let abortedBy: "signal" | "idle_timeout" | undefined;
 
   options.onProgress?.({ phase: "starting", searches, fetches, note: "launching process" });
 
@@ -121,47 +165,67 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
       cwd: options.cwd,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, CRUMBS_PATHFINDER_CHILD: "1" },
+      env: {
+        ...process.env,
+        ...options.env,
+        CRUMBS_PATHFINDER_CHILD: "1",
+      },
     });
 
     let stdoutBuffer = "";
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const idleMs = options.idleTimeoutSeconds
+      ? Math.max(1, Math.floor(options.idleTimeoutSeconds)) * 1000
+      : 0;
+
+    const bumpIdleWatchdog = () => {
+      if (!idleMs || proc.killed) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (abortedBy) return;
+        abortedBy = "idle_timeout";
+        proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (!proc.killed) proc.kill("SIGKILL");
+        }, 3000);
+      }, idleMs);
+    };
+
+    const emitProgress = (progress: PathfinderProgress) => {
+      bumpIdleWatchdog();
+      options.onProgress?.(progress);
+    };
 
     const handleLine = (line: string) => {
+      bumpIdleWatchdog();
+
       const event = parseJsonLine(line);
       if (!event?.type) return;
 
       if (event.type === "tool_execution_start") {
         if (event.toolName === "websearch") {
           searches++;
-          options.onProgress?.({
+          const query = extractToolArg(event, "query");
+          emitProgress({
             phase: "searching",
             searches,
             fetches,
-            note: `search ${searches}`,
+            note: query ? `query: ${query}` : `search ${searches}`,
           });
           return;
         }
 
         if (event.toolName === "webfetch") {
           fetches++;
-          options.onProgress?.({
+          const url = extractToolArg(event, "url");
+          emitProgress({
             phase: "reading",
             searches,
             fetches,
-            note: `page ${fetches}`,
+            note: url ? `url: ${url}` : `page ${fetches}`,
           });
           return;
         }
-      }
-
-      if (event.type === "message_update" && event.message?.role === "assistant") {
-        options.onProgress?.({
-          phase: "synthesizing",
-          searches,
-          fetches,
-          note: "drafting synthesis",
-        });
-        return;
       }
 
       if (event.type === "message_end" && event.message?.role === "assistant") {
@@ -177,7 +241,10 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
       }
     };
 
+    bumpIdleWatchdog();
+
     proc.stdout.on("data", (chunk: Buffer) => {
+      bumpIdleWatchdog();
       stdoutBuffer += chunk.toString();
       const lines = stdoutBuffer.split("\n");
       stdoutBuffer = lines.pop() ?? "";
@@ -189,21 +256,25 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
+      bumpIdleWatchdog();
       stderr += chunk.toString();
     });
 
     proc.on("close", (code) => {
+      if (idleTimer) clearTimeout(idleTimer);
       const last = stdoutBuffer.trim();
       if (last) handleLine(last);
       resolve(code ?? 0);
     });
 
     proc.on("error", () => {
+      if (idleTimer) clearTimeout(idleTimer);
       resolve(1);
     });
 
     if (options.signal) {
       const terminate = () => {
+        if (!abortedBy) abortedBy = "signal";
         proc.kill("SIGTERM");
         setTimeout(() => {
           if (!proc.killed) proc.kill("SIGKILL");
@@ -222,5 +293,7 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     usage,
     searches,
     fetches,
+    elapsedMs: Date.now() - startedAt,
+    abortedBy,
   };
 }

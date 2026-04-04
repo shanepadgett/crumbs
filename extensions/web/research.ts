@@ -1,14 +1,14 @@
 /**
- * Web Research Extension (Pathfinder)
+ * Web Research Extension
  *
  * What it does:
- * - Adds a `webresearch` tool that launches an isolated Pathfinder subagent.
- * - Pathfinder searches/fetches pages in disposable context and returns only relevant findings.
+ * - Adds a `webresearch` tool that launches an isolated web research subagent.
+ * - The subagent searches/fetches pages in disposable context and returns targeted findings.
  *
  * How to use it:
  * - Provide `task` plus `query`, `urls`, or both.
+ * - Provide `responseShape` so the returned synthesis matches exactly what you need.
  * - Optionally cap breadth with `maxResults` and `maxPages`.
- * - Use `modelMode` to pick cheap/current/best strategy, or set `model` explicitly.
  *
  * Example:
  * - "Research RDS Proxy session pinning for Django apps using query + links"
@@ -16,13 +16,8 @@
 
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { StringEnum } from "@mariozechner/pi-ai";
-import {
-  getMarkdownTheme,
-  type ExtensionAPI,
-  type ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
-import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import { type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import {
   buildAbort,
@@ -30,40 +25,56 @@ import {
   truncateInline,
   WEBRESEARCH_DEFAULT_TIMEOUT,
 } from "./shared/common.js";
+import { resolveResearchModel, type ResearchModelMode } from "./shared/research-model-selection.js";
+import { buildResearchSystemPrompt, buildResearchTask } from "./shared/research-prompts.js";
 import {
   runPathfinder,
   type PathfinderPhase,
   type PathfinderUsage,
 } from "./shared/research-runner.js";
 
-const PATHFINDER_NAME = "Pathfinder";
-const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"] as const;
+const WEB_RESEARCH_LABEL = "webresearch";
+const CHILD_AGENT_NAME = "Web Research Specialist";
 
-type ModelMode = "auto" | "cheap" | "current" | "best";
+type ModelMode = ResearchModelMode;
+type ResearchMode = "quick" | "balanced" | "thorough";
 
-const CHEAP_MODELS: Record<string, string> = {
-  anthropic: "claude-haiku-4-5",
-  openai: "gpt-4.1-mini",
-  google: "gemini-2.0-flash",
-  groq: "llama-3.3-70b-versatile",
-  xai: "grok-3-mini-fast",
-  mistral: "mistral-small-latest",
-  openrouter: "anthropic/claude-haiku-4-5",
+interface ResearchPreset {
+  maxResults: number;
+  maxPages: number;
+  maxCharsPerPage: number;
+  timeout: number;
+  idleTimeout: number;
+  maxSearchCalls: number;
+}
+
+const RESEARCH_PRESETS: Record<ResearchMode, ResearchPreset> = {
+  quick: {
+    maxResults: 4,
+    maxPages: 2,
+    maxCharsPerPage: 6_000,
+    timeout: 75,
+    idleTimeout: 30,
+    maxSearchCalls: 1,
+  },
+  balanced: {
+    maxResults: 6,
+    maxPages: 4,
+    maxCharsPerPage: 12_000,
+    timeout: 120,
+    idleTimeout: 45,
+    maxSearchCalls: 2,
+  },
+  thorough: {
+    maxResults: 10,
+    maxPages: 8,
+    maxCharsPerPage: 20_000,
+    timeout: 420,
+    idleTimeout: 90,
+    maxSearchCalls: 3,
+  },
 };
-
-const BEST_MODELS: Record<string, string> = {
-  anthropic: "claude-sonnet-4-5",
-  openai: "gpt-5",
-  google: "gemini-2.5-pro",
-  groq: "llama-3.3-70b-versatile",
-  xai: "grok-3",
-  mistral: "mistral-medium-latest",
-  openrouter: "anthropic/claude-sonnet-4-5",
-};
-
-const DEFAULT_PATHFINDER_MODEL = "claude-haiku-4-5";
-const COMPLEX_TASK_HINT =
-  /(white\s*paper|paper|rag|retrieval|benchmark|ablation|trade\s*-?off|architecture|state\s*of\s*the\s*art|cutting\s*edge|research|survey|technical\s+analysis)/i;
+const DEFAULT_WEB_RESEARCH_MODEL = "claude-haiku-4-5";
 
 const WEBRESEARCH_PARAMS = Type.Object({
   task: Type.String({
@@ -71,17 +82,30 @@ const WEBRESEARCH_PARAMS = Type.Object({
   }),
   query: Type.Optional(Type.String({ description: "Search query to discover candidate sources." })),
   urls: Type.Optional(Type.Array(Type.String(), { description: "Explicit URLs to investigate." })),
+  responseShape: Type.String({
+    description:
+      "Required. Exact shape/style of the synthesis you want back (bullets, JSON schema, sections, required fields, etc.).",
+  }),
   model: Type.Optional(
     Type.String({
       description:
-        "Exact Pathfinder model override (e.g., openai/gpt-5). Takes precedence over modelMode.",
+        "Exact web research model override (e.g., openai/gpt-5). Takes precedence over modelMode.",
+    }),
+  ),
+  researchMode: Type.Optional(
+    Type.Union([Type.Literal("quick"), Type.Literal("balanced"), Type.Literal("thorough")], {
+      description:
+        "Research depth preset. quick = low-latency budget, balanced = default, thorough = broader search/fetch and longer timeout.",
     }),
   ),
   modelMode: Type.Optional(
-    StringEnum(["auto", "cheap", "current", "best"] as const, {
-      description:
-        "Model strategy. auto = choose based on task complexity, cheap = lower cost, current = use current session model, best = stronger provider model when possible.",
-    }),
+    Type.Union(
+      [Type.Literal("auto"), Type.Literal("cheap"), Type.Literal("current"), Type.Literal("best")],
+      {
+        description:
+          "Model strategy. auto = choose based on task complexity, cheap = lower cost, current = use current session model, best = stronger provider model when possible.",
+      },
+    ),
   ),
   maxResults: Type.Optional(
     Type.Number({ description: "Max search results to consider (default: 6)." }),
@@ -93,22 +117,29 @@ const WEBRESEARCH_PARAMS = Type.Object({
     }),
   ),
   citationStyle: Type.Optional(
-    StringEnum(["numeric", "inline"] as const, {
+    Type.Union([Type.Literal("numeric"), Type.Literal("inline")], {
       description: "Citation format in the final synthesis (default: numeric).",
     }),
   ),
   timeout: Type.Optional(
-    Type.Number({ description: "Timeout in seconds (default: 120, max: 240)." }),
+    Type.Number({ description: "Overall timeout in seconds (mode-based default, max: 600)." }),
+  ),
+  idleTimeout: Type.Optional(
+    Type.Number({
+      description: "Idle timeout in seconds (abort if no progress updates; mode-based default).",
+    }),
   ),
 });
 
 interface WebResearchDetails {
   status: "running" | "done" | "error";
-  pathfinder: string;
   model: string;
   modelMode?: ModelMode;
+  researchMode?: ResearchMode;
   modelReason?: string;
   provider?: string;
+  task?: string;
+  responseShape?: string;
   query?: string;
   urls?: string[];
   phase?: PathfinderPhase;
@@ -117,196 +148,25 @@ interface WebResearchDetails {
   fetches?: number;
   usage?: PathfinderUsage;
   usageSummary?: string;
+  elapsedMs?: number;
   error?: string;
-}
-
-interface ModelResolutionInput {
-  explicitModel?: string;
-  modelMode: ModelMode;
-  provider?: string;
-  currentModelId?: string;
-  task: string;
-  query?: string;
-  maxResults: number;
-  maxPages: number;
-  maxCharsPerPage: number;
-}
-
-interface ModelResolutionResult {
-  model: string;
-  mode: ModelMode;
-  reason: string;
-  provider?: string;
-}
-
-function normalizeProvider(provider: string | undefined): string | undefined {
-  const value = provider?.trim().toLowerCase();
-  if (!value) return undefined;
-  return value;
-}
-
-function toCliModel(modelId: string, provider: string | undefined): string {
-  const id = modelId.trim();
-  const p = normalizeProvider(provider);
-  if (!p) return id;
-  if (id.startsWith(`${p}/`)) return id;
-
-  // OpenRouter model IDs often contain a slash (e.g. anthropic/claude-*),
-  // but still need the provider prefix for robust subprocess resolution.
-  if (p === "openrouter") return `${p}/${id}`;
-
-  // For other providers, if the id already has a provider prefix, keep it.
-  if (id.includes("/")) return id;
-
-  return `${p}/${id}`;
-}
-
-function isComplexResearch(
-  input: Omit<ModelResolutionInput, "explicitModel" | "provider" | "currentModelId" | "modelMode">,
-): boolean {
-  let score = 0;
-
-  if (input.maxPages >= 6) score += 1;
-  if (input.maxResults >= 8) score += 1;
-  if (input.maxCharsPerPage >= 16_000) score += 1;
-  if (input.task.length >= 240) score += 1;
-  if (input.query && input.query.length >= 120) score += 1;
-  if (COMPLEX_TASK_HINT.test(`${input.task}\n${input.query ?? ""}`)) score += 1;
-
-  return score >= 2;
-}
-
-function resolvePathfinderModel(input: ModelResolutionInput): ModelResolutionResult {
-  const provider = normalizeProvider(input.provider);
-
-  if (input.explicitModel) {
-    return {
-      model: toCliModel(input.explicitModel, provider),
-      mode: input.modelMode,
-      reason: "explicit model override",
-      provider,
-    };
-  }
-
-  const cheapModel = provider ? CHEAP_MODELS[provider] : undefined;
-  const bestModel = provider ? BEST_MODELS[provider] : undefined;
-  const currentModel = input.currentModelId
-    ? toCliModel(input.currentModelId, provider)
-    : undefined;
-
-  if (input.modelMode === "current") {
-    if (currentModel) {
-      return {
-        model: currentModel,
-        mode: input.modelMode,
-        reason: "current model requested",
-        provider,
-      };
-    }
-    if (cheapModel) {
-      return {
-        model: toCliModel(cheapModel, provider),
-        mode: input.modelMode,
-        reason: "current unavailable; falling back to cheap provider model",
-        provider,
-      };
-    }
-  }
-
-  if (input.modelMode === "cheap") {
-    if (cheapModel) {
-      return {
-        model: toCliModel(cheapModel, provider),
-        mode: input.modelMode,
-        reason: "cheap mode requested",
-        provider,
-      };
-    }
-    if (currentModel) {
-      return {
-        model: currentModel,
-        mode: input.modelMode,
-        reason: "cheap provider mapping unavailable; using current model",
-        provider,
-      };
-    }
-  }
-
-  if (input.modelMode === "best") {
-    if (bestModel) {
-      return {
-        model: toCliModel(bestModel, provider),
-        mode: input.modelMode,
-        reason: "best mode requested",
-        provider,
-      };
-    }
-    if (currentModel) {
-      return {
-        model: currentModel,
-        mode: input.modelMode,
-        reason: "best provider mapping unavailable; using current model",
-        provider,
-      };
-    }
-    if (cheapModel) {
-      return {
-        model: toCliModel(cheapModel, provider),
-        mode: input.modelMode,
-        reason: "best provider mapping unavailable; using cheap provider model",
-        provider,
-      };
-    }
-  }
-
-  const complex = isComplexResearch({
-    task: input.task,
-    query: input.query,
-    maxResults: input.maxResults,
-    maxPages: input.maxPages,
-    maxCharsPerPage: input.maxCharsPerPage,
-  });
-
-  if (complex && currentModel) {
-    return {
-      model: currentModel,
-      mode: "auto",
-      reason: "auto mode: complex task detected, using current model",
-      provider,
-    };
-  }
-
-  if (cheapModel) {
-    return {
-      model: toCliModel(cheapModel, provider),
-      mode: "auto",
-      reason: complex
-        ? "auto mode: no current model, using cheap provider model"
-        : "auto mode: lightweight task, using cheap provider model",
-      provider,
-    };
-  }
-
-  if (currentModel) {
-    return {
-      model: currentModel,
-      mode: "auto",
-      reason: "auto mode: no cheap mapping, using current model",
-      provider,
-    };
-  }
-
-  return {
-    model: DEFAULT_PATHFINDER_MODEL,
-    mode: "auto",
-    reason: "fallback default model",
-    provider,
-  };
 }
 
 function toLimit(value: number | undefined, fallback: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(value!)));
+}
+
+function toIdleTimeout(
+  value: number | undefined,
+  fallback: number,
+  overallTimeout: number,
+): number {
+  if (!Number.isFinite(value)) {
+    return Math.max(10, Math.min(fallback, Math.max(10, overallTimeout - 5)));
+  }
+  const bounded = Math.max(10, Math.floor(value!));
+  return Math.min(bounded, Math.max(10, overallTimeout - 5));
 }
 
 function phaseSummary(
@@ -315,81 +175,85 @@ function phaseSummary(
   fetches: number,
   note?: string,
 ): string {
-  if (phase === "starting") return `starting up${note ? ` (${note})` : ""}`;
-  if (phase === "searching") return `searching web (${searches})${note ? ` — ${note}` : ""}`;
-  if (phase === "reading") return `reading sources (${fetches})${note ? ` — ${note}` : ""}`;
-  return `synthesizing findings${note ? ` — ${note}` : ""}`;
+  if (phase === "starting") return `starting${note ? ` — ${note}` : ""}`;
+  if (phase === "searching") return `searching (${searches})${note ? ` — ${note}` : ""}`;
+  if (phase === "reading") return `fetching (${fetches})${note ? ` — ${note}` : ""}`;
+  return `compiling final synthesis${note ? ` — ${note}` : ""}`;
+}
+
+function renderRunTag(
+  details: Partial<WebResearchDetails>,
+  options?: { showUnknownWhenMissing?: boolean },
+): string {
+  const showUnknown = options?.showUnknownWhenMissing ?? false;
+  const mode = details.researchMode;
+  const modeTag =
+    mode === "quick"
+      ? "fast"
+      : mode === "thorough"
+        ? "deep"
+        : mode === "balanced"
+          ? "balanced"
+          : showUnknown
+            ? "..."
+            : "balanced";
+
+  const modelMode = details.modelMode;
+  const costTag =
+    modelMode === "cheap"
+      ? "$"
+      : modelMode === "current"
+        ? "$$$"
+        : modelMode === "best"
+          ? "$$$$"
+          : modelMode === "auto"
+            ? "$$"
+            : showUnknown
+              ? "..."
+              : "$$";
+
+  return `[${modeTag}/${costTag}]`;
+}
+
+function activityLine(details: Partial<WebResearchDetails>, fallback?: string): string {
+  if (fallback && fallback.trim()) return truncateInline(fallback.trim(), 110);
+
+  const phase = details.phase ?? "starting";
+  const note = (details.note ?? "").trim();
+
+  if (phase === "searching") {
+    if (note.startsWith("query:")) {
+      return `searching "${truncateInline(note.slice(6).trim(), 86)}"`;
+    }
+    return "searching";
+  }
+
+  if (phase === "reading") {
+    if (note.startsWith("url:")) {
+      return `fetching "${truncateInline(note.slice(4).trim(), 86)}"`;
+    }
+    return "fetching";
+  }
+
+  if (phase === "synthesizing") return "compiling final synthesis";
+  return "starting";
+}
+
+function formatElapsedShort(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m${seconds}s`;
 }
 
 function usageSummary(usage: PathfinderUsage): string {
   return [
-    `${usage.turns} turns`,
+    `↺${usage.turns}`,
     `↑${usage.input} ↓${usage.output}`,
     `$${usage.cost.toFixed(4)}`,
     usage.model ?? "(unknown model)",
   ].join(" | ");
-}
-
-function buildResearchSystemPrompt(params: {
-  hasQuery: boolean;
-  hasUrls: boolean;
-  maxResults: number;
-  maxPages: number;
-  maxCharsPerPage: number;
-  citationStyle: "numeric" | "inline";
-}): string {
-  const citationRule =
-    params.citationStyle === "inline"
-      ? "Include direct URL citations inline at the end of each claim."
-      : "Use numeric citations like [1], [2] and provide a Sources section mapping numbers to URLs.";
-
-  return `You are ${PATHFINDER_NAME}, a focused web research specialist.
-
-Available tools:
-- websearch: discover relevant URLs
-- webfetch: retrieve readable page content
-
-Operating rules:
-- Keep costs low and stay on-task.
-- Never call any tool other than websearch/webfetch.
-- Respect limits strictly:
-  - max search results considered: ${params.maxResults}
-  - max pages fetched: ${params.maxPages}
-  - preferred max chars consumed per page: ${params.maxCharsPerPage}
-- Prioritize official docs, changelogs, specs, and primary sources.
-- If a source looks low quality or irrelevant, skip it.
-
-Workflow:
-${params.hasQuery ? "1) Run websearch with the provided query and identify best candidates." : "1) Skip search (no query provided)."}
-${params.hasUrls ? "2) Include provided URLs in evaluation and fetch queue." : "2) No explicit URLs provided."}
-3) Fetch and read only the most relevant pages.
-4) Synthesize findings for the request. Remove noise and tangents.
-
-Output contract:
-- Start with "## Key Findings"
-- Then "## Evidence" with concise bullets tied to sources
-- Then "## Sources"
-- Include caveats and uncertainty when evidence is weak
-- ${citationRule}
-- Keep answer compact and scannable.`;
-}
-
-function buildResearchTask(params: {
-  task: string;
-  query?: string;
-  urls: string[];
-  maxResults: number;
-  maxPages: number;
-  maxCharsPerPage: number;
-}): string {
-  let text = `Research task:\n${params.task}`;
-  if (params.query) text += `\n\nSearch query:\n${params.query}`;
-  if (params.urls.length > 0) {
-    text += `\n\nSeed URLs:\n${params.urls.map((u, i) => `${i + 1}. ${u}`).join("\n")}`;
-  }
-
-  text += `\n\nExecution limits:\n- maxResults: ${params.maxResults}\n- maxPages: ${params.maxPages}\n- maxCharsPerPage: ${params.maxCharsPerPage}`;
-  return text;
 }
 
 export default function webResearchExtension(pi: ExtensionAPI) {
@@ -410,36 +274,40 @@ export default function webResearchExtension(pi: ExtensionAPI) {
     name: "webresearch",
     label: "Web Research",
     description:
-      "Research a task with Pathfinder (isolated subagent). Pathfinder can search + fetch pages and returns a concise, cited synthesis.",
-    promptSnippet: "Run isolated web research and return concise, cited findings",
+      "Research a task with an isolated web research subagent. It can search + fetch pages and return targeted findings.",
+    promptSnippet: "Run isolated web research and return targeted findings",
     promptGuidelines: [
       "Prefer webresearch for all web information gathering, including single URLs.",
+      "Always provide responseShape so results match the exact output format you need.",
+      "Use researchMode=quick for speed, balanced for normal work, and thorough for deeper coverage.",
       "Use modelMode=cheap for lightweight distillation and modelMode=best/current for advanced technical synthesis.",
       "Provide specific goals and constraints in task/query for better signal.",
     ],
     parameters: WEBRESEARCH_PARAMS,
     renderCall(args, theme) {
-      const query = truncateInline((args.query ?? "").trim(), 70);
-      const urlCount = args.urls?.length ?? 0;
-      const task = truncateInline((args.task ?? "").trim(), 64);
-      let text = `${theme.fg("toolTitle", theme.bold("webresearch"))} `;
-      if (query) text += theme.fg("accent", `"${query}"`);
-      if (urlCount > 0) {
-        if (query) text += theme.fg("muted", " + ");
-        text += theme.fg("accent", `${urlCount} URL(s)`);
-      }
-      if (!query && urlCount === 0) text += theme.fg("accent", "(needs query or urls)");
-      text += `\n  ${theme.fg("dim", task || "...")}`;
-      return new Text(text, 0, 0);
+      const task = truncateInline((args.task ?? "").trim(), 76);
+      const tag = renderRunTag(
+        {
+          researchMode: args.researchMode as ResearchMode | undefined,
+          modelMode: args.modelMode as ModelMode | undefined,
+        },
+        { showUnknownWhenMissing: true },
+      );
+      const title = `${theme.fg("toolTitle", theme.bold(WEB_RESEARCH_LABEL))} ${theme.fg("muted", tag)} ${theme.fg("accent", `"${task || "..."}"`)}`;
+      return new Text(title, 0, 0);
     },
     renderResult(result, { expanded, isPartial }, theme) {
       const details = (result.details ?? {}) as Partial<WebResearchDetails>;
 
       if (isPartial || details.status === "running") {
         const textPart = result.content.find((c) => c.type === "text");
-        const line =
-          textPart?.type === "text" ? textPart.text : `${PATHFINDER_NAME} is researching...`;
-        return new Text(theme.fg("warning", line), 0, 0);
+        const activity = activityLine(
+          details,
+          textPart?.type === "text" ? textPart.text : undefined,
+        );
+        const elapsed = formatElapsedShort(details.elapsedMs ?? 0);
+        const status = theme.fg("muted", `└ [${elapsed}] ${activity}`);
+        return new Text(status, 0, 0);
       }
 
       if (details.status === "error") {
@@ -451,69 +319,61 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       const output = content?.type === "text" ? content.text : "";
 
       if (!expanded) {
-        let text = `${theme.fg("success", "✓")} ${theme.fg("toolTitle", `${PATHFINDER_NAME} complete`)}`;
-        if (details.phase) text += theme.fg("muted", ` (${details.phase})`);
-
-        if (output) {
-          const preview = output.split("\n").slice(0, 4).join("\n");
-          text += `\n${theme.fg("toolOutput", preview)}`;
-          if (output.split("\n").length > 4) {
-            text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
-          }
+        const parts: string[] = [];
+        if (Number.isFinite(details.elapsedMs)) {
+          parts.push(formatElapsedShort(details.elapsedMs ?? 0));
         }
-
         if (details.usageSummary) {
-          text += `\n${theme.fg("dim", details.usageSummary)}`;
+          parts.push(details.usageSummary);
         }
-        return new Text(text, 0, 0);
+        const line = parts.join(" | ");
+        return new Text(line ? theme.fg("dim", line) : "", 0, 0);
       }
 
-      const mdTheme = getMarkdownTheme();
-      const container = new Container();
-      let header = `${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(`${PATHFINDER_NAME} synthesis`))}`;
-      if (details.model) header += theme.fg("muted", ` (${details.model})`);
-      container.addChild(new Text(header, 0, 0));
-
-      if (output) {
-        container.addChild(new Spacer(1));
-        container.addChild(new Markdown(output, 0, 0, mdTheme));
-      }
-
-      if (details.usageSummary) {
-        container.addChild(new Spacer(1));
-        container.addChild(new Text(theme.fg("dim", details.usageSummary), 0, 0));
-      }
-
-      return container;
+      const usage = details.usageSummary ? `\n${theme.fg("dim", details.usageSummary)}` : "";
+      if (!output && !usage) return new Text("", 0, 0);
+      return new Text(`${theme.fg("toolOutput", output)}${usage}`, 0, 0);
     },
     async execute(_toolCallId, params, signal, onUpdate, ctx: ExtensionContext) {
-      const urls = (params.urls ?? []).map((u) => u.trim()).filter((u) => u.length > 0);
-      const query = params.query?.trim();
+      const rawUrls = (params.urls ?? []) as string[];
+      const urls = rawUrls.map((u: string) => u.trim()).filter((u: string) => u.length > 0);
+      const query = typeof params.query === "string" ? params.query.trim() : undefined;
       const hasQuery = Boolean(query);
       const hasUrls = urls.length > 0;
-      const modelMode = params.modelMode ?? "auto";
+      const researchMode = (params.researchMode ?? "balanced") as ResearchMode;
+      const preset = RESEARCH_PRESETS[researchMode];
+      const modelMode = (params.modelMode ??
+        (researchMode === "quick" ? "cheap" : "auto")) as ModelMode;
 
       if (!hasQuery && !hasUrls) {
         return {
           content: [{ type: "text", text: "Provide at least `query` or `urls` (or both)." }],
           details: {
             status: "error",
-            pathfinder: PATHFINDER_NAME,
-            model: DEFAULT_PATHFINDER_MODEL,
+            model: DEFAULT_WEB_RESEARCH_MODEL,
             modelMode,
+            researchMode,
             error: "missing_input",
           } as WebResearchDetails,
           isError: true,
         };
       }
 
-      const timeout = clampTimeout(params.timeout, WEBRESEARCH_DEFAULT_TIMEOUT);
-      const maxResults = toLimit(params.maxResults, 6, 1, 12);
-      const maxPages = toLimit(params.maxPages, 4, 1, 10);
-      const maxCharsPerPage = toLimit(params.maxCharsPerPage, 12_000, 2_000, 30_000);
-      const citationStyle = params.citationStyle ?? "numeric";
+      const timeout = clampTimeout(params.timeout, preset.timeout ?? WEBRESEARCH_DEFAULT_TIMEOUT);
+      const idleTimeout = toIdleTimeout(params.idleTimeout, preset.idleTimeout, timeout);
+      const maxResults = toLimit(params.maxResults, preset.maxResults, 1, 12);
+      const maxPages = toLimit(params.maxPages, preset.maxPages, 1, 10);
+      const maxCharsPerPage = toLimit(
+        params.maxCharsPerPage,
+        preset.maxCharsPerPage,
+        2_000,
+        30_000,
+      );
+      const citationStyle = (params.citationStyle ?? "numeric") as "numeric" | "inline";
+      const maxSearchCalls = Math.max(1, Math.min(maxResults, preset.maxSearchCalls));
+      const responseShape = params.responseShape.trim();
 
-      const resolution = resolvePathfinderModel({
+      const resolution = await resolveResearchModel({
         explicitModel: params.model,
         modelMode,
         provider: ctx.model?.provider ?? lastProvider,
@@ -523,16 +383,19 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         maxResults,
         maxPages,
         maxCharsPerPage,
+        cwd: ctx.cwd,
       });
       const model = resolution.model;
 
       const systemPrompt = buildResearchSystemPrompt({
+        agentName: CHILD_AGENT_NAME,
         hasQuery,
         hasUrls,
         maxResults,
         maxPages,
         maxCharsPerPage,
         citationStyle,
+        responseShape,
       });
 
       const task = buildResearchTask({
@@ -542,6 +405,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
         maxResults,
         maxPages,
         maxCharsPerPage,
+        responseShape,
       });
 
       const extensionPaths = [
@@ -553,34 +417,35 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       let note = "";
       let searches = 0;
       let fetches = 0;
-      let frame = 0;
+      const startedAt = Date.now();
 
       const emitProgress = () => {
-        const spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
-        const text = `${spinner} ${PATHFINDER_NAME}: ${phaseSummary(phase, searches, fetches, note)}`;
+        const text = phaseSummary(phase, searches, fetches, note);
         onUpdate?.({
           content: [{ type: "text", text }],
           details: {
             status: "running",
-            pathfinder: PATHFINDER_NAME,
             model,
             modelMode: resolution.mode,
+            researchMode,
             modelReason: resolution.reason,
             provider: resolution.provider,
+            task: params.task,
+            responseShape,
             query,
             urls,
             phase,
             note,
             searches,
             fetches,
+            elapsedMs: Date.now() - startedAt,
           } as WebResearchDetails,
         });
       };
 
       const tick = setInterval(() => {
-        frame += 1;
         emitProgress();
-      }, 170);
+      }, 250);
 
       const gate = buildAbort(timeout, signal);
       emitProgress();
@@ -593,6 +458,13 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           model,
           extensionPaths,
           signal: gate.signal,
+          idleTimeoutSeconds: idleTimeout,
+          env: {
+            CRUMBS_RESEARCH_MAX_SEARCH_CALLS: String(maxSearchCalls),
+            CRUMBS_RESEARCH_MAX_FETCH_CALLS: String(maxPages),
+            CRUMBS_RESEARCH_MAX_RESULTS: String(maxResults),
+            CRUMBS_RESEARCH_MAX_CHARS_PER_PAGE: String(maxCharsPerPage),
+          },
           onProgress: (progress) => {
             phase = progress.phase;
             note = progress.note ?? "";
@@ -602,26 +474,32 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           },
         });
 
-        if (gate.signal.aborted) {
+        if (gate.signal.aborted || run.abortedBy === "idle_timeout") {
           const canceled = signal?.aborted;
+          const idleTimedOut = run.abortedBy === "idle_timeout";
           const message = canceled
-            ? `${PATHFINDER_NAME} was canceled.`
-            : `${PATHFINDER_NAME} timed out after ${timeout}s.`;
+            ? `${WEB_RESEARCH_LABEL} was canceled.`
+            : idleTimedOut
+              ? `${WEB_RESEARCH_LABEL} timed out after ${idleTimeout}s with no progress.`
+              : `${WEB_RESEARCH_LABEL} timed out after ${timeout}s.`;
           return {
             content: [{ type: "text", text: message }],
             details: {
               status: "error",
-              pathfinder: PATHFINDER_NAME,
               model,
               modelMode: resolution.mode,
+              researchMode,
               modelReason: resolution.reason,
               provider: resolution.provider,
+              task: params.task,
+              responseShape,
               query,
               urls,
               phase,
               searches: run.searches,
               fetches: run.fetches,
-              error: canceled ? "canceled" : "timeout",
+              elapsedMs: run.elapsedMs,
+              error: canceled ? "canceled" : idleTimedOut ? "timeout_idle" : "timeout_overall",
             } as WebResearchDetails,
             isError: true,
           };
@@ -629,22 +507,25 @@ export default function webResearchExtension(pi: ExtensionAPI) {
 
         if (run.exitCode !== 0) {
           const message =
-            run.stderr.trim() || run.output.trim() || "Pathfinder failed with no output.";
+            run.stderr.trim() || run.output.trim() || "Web research failed with no output.";
           return {
             content: [{ type: "text", text: `Research failed: ${message}` }],
             details: {
               status: "error",
-              pathfinder: PATHFINDER_NAME,
               model,
               modelMode: resolution.mode,
+              researchMode,
               modelReason: resolution.reason,
               provider: resolution.provider,
+              task: params.task,
+              responseShape,
               query,
               urls,
               phase,
               searches: run.searches,
               fetches: run.fetches,
               usage: run.usage,
+              elapsedMs: run.elapsedMs,
               error: message,
             } as WebResearchDetails,
             isError: true,
@@ -658,11 +539,13 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           content: [{ type: "text", text: output }],
           details: {
             status: "done",
-            pathfinder: PATHFINDER_NAME,
             model: run.usage.model ?? model,
             modelMode: resolution.mode,
+            researchMode,
             modelReason: resolution.reason,
             provider: resolution.provider,
+            task: params.task,
+            responseShape,
             query,
             urls,
             phase: "synthesizing",
@@ -670,6 +553,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             fetches: run.fetches,
             usage: run.usage,
             usageSummary: summary,
+            elapsedMs: run.elapsedMs,
           } as WebResearchDetails,
         };
       } finally {

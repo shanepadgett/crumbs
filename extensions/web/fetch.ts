@@ -6,7 +6,7 @@
  * - Supports inline image return and output truncation for large pages.
  *
  * How to use it:
- * - This tool is primarily internal to Pathfinder (`webresearch`).
+ * - This tool is primarily internal to `webresearch`.
  * - Set `CRUMBS_ENABLE_RAW_WEB_TOOLS=1` to expose it directly for debugging.
  *
  * Example:
@@ -14,7 +14,6 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { StringEnum } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import {
@@ -29,17 +28,18 @@ import {
   WEBFETCH_MAX_BYTES,
   withTruncation,
 } from "./shared/common.js";
+import { claimFetch, maxCharsPerPage } from "./shared/research-budget.js";
 import { htmlToMarkdown, htmlToText } from "./shared/html.js";
 
 const WEBFETCH_PARAMS = Type.Object({
   url: Type.String({ description: "URL to fetch (http:// or https://)" }),
   format: Type.Optional(
-    StringEnum(["text", "markdown", "html"] as const, {
+    Type.Union([Type.Literal("text"), Type.Literal("markdown"), Type.Literal("html")], {
       description: "Output format (default: markdown)",
     }),
   ),
   timeout: Type.Optional(
-    Type.Number({ description: "Timeout in seconds (default: 30, max: 240)" }),
+    Type.Number({ description: "Timeout in seconds (default: 30, max: 600)" }),
   ),
 });
 
@@ -99,9 +99,11 @@ export default function webFetchExtension(pi: ExtensionAPI) {
     },
     async execute(_toolCallId, params, signal) {
       const parsed = ensureHttpUrl(params.url);
-      const format = params.format ?? "markdown";
+      const format = (params.format ?? "markdown") as "text" | "markdown" | "html";
       const timeout = clampTimeout(params.timeout, WEBFETCH_DEFAULT_TIMEOUT);
       const gate = buildAbort(timeout, signal);
+
+      claimFetch();
 
       try {
         let accept = "*/*";
@@ -185,7 +187,13 @@ export default function webFetchExtension(pi: ExtensionAPI) {
                 ? htmlToMarkdown(raw)
                 : raw;
 
-        const cut = withTruncation(text);
+        const perPageCap = maxCharsPerPage();
+        const budgetedText =
+          perPageCap && text.length > perPageCap
+            ? `${text.slice(0, perPageCap)}\n\n[Per-page character cap reached (${perPageCap}).]`
+            : text;
+
+        const cut = withTruncation(budgetedText);
         return {
           content: [{ type: "text", text: cut.text }],
           details: {

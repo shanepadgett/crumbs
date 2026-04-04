@@ -10,10 +10,10 @@ export const WEBFETCH_MAX_BYTES = 5 * 1024 * 1024;
 export const WEBFETCH_DEFAULT_TIMEOUT = 30;
 export const WEBSEARCH_DEFAULT_TIMEOUT = 25;
 export const WEBRESEARCH_DEFAULT_TIMEOUT = 120;
-export const WEBTOOLS_MAX_TIMEOUT = 240;
+export const WEBTOOLS_MAX_TIMEOUT = 600;
 
 /**
- * Raw web tools (websearch/webfetch) are intended for internal Pathfinder use.
+ * Raw web tools (websearch/webfetch) are intended for internal webresearch use.
  * Set CRUMBS_ENABLE_RAW_WEB_TOOLS=1 to expose them in the parent agent for debugging.
  */
 export function shouldRegisterRawWebTools(): boolean {

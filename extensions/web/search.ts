@@ -6,7 +6,7 @@
  * - Returns concise search context text suitable for follow-up fetch/summarize steps.
  *
  * How to use it:
- * - This tool is primarily internal to Pathfinder (`webresearch`).
+ * - This tool is primarily internal to `webresearch`.
  * - Set `CRUMBS_ENABLE_RAW_WEB_TOOLS=1` to expose it directly for debugging.
  *
  * Example:
@@ -14,7 +14,6 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { StringEnum } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import {
@@ -25,6 +24,7 @@ import {
   WEBSEARCH_DEFAULT_TIMEOUT,
   withTruncation,
 } from "./shared/common.js";
+import { claimSearch, maxCharsPerPage } from "./shared/research-budget.js";
 
 const EXA_URL = "https://mcp.exa.ai/mcp";
 
@@ -34,13 +34,13 @@ const WEBSEARCH_PARAMS = Type.Object({
     Type.Number({ description: "Number of results to request from Exa (default: 8)" }),
   ),
   livecrawl: Type.Optional(
-    StringEnum(["fallback", "preferred"] as const, {
+    Type.Union([Type.Literal("fallback"), Type.Literal("preferred")], {
       description:
         "Live crawl mode. fallback = use live crawl when cache is missing. preferred = prioritize live crawl.",
     }),
   ),
   type: Type.Optional(
-    StringEnum(["auto", "fast"] as const, {
+    Type.Union([Type.Literal("auto"), Type.Literal("fast")], {
       description: "Search depth mode",
     }),
   ),
@@ -48,7 +48,7 @@ const WEBSEARCH_PARAMS = Type.Object({
     Type.Number({ description: "Max context characters returned by Exa" }),
   ),
   timeout: Type.Optional(
-    Type.Number({ description: "Timeout in seconds (default: 25, max: 240)" }),
+    Type.Number({ description: "Timeout in seconds (default: 25, max: 600)" }),
   ),
 });
 
@@ -161,9 +161,16 @@ export default function webSearchExtension(pi: ExtensionAPI) {
     },
     async execute(_toolCallId, params, signal) {
       const timeout = clampTimeout(params.timeout, WEBSEARCH_DEFAULT_TIMEOUT);
-      const mode = params.type ?? "auto";
-      const crawl = params.livecrawl ?? "fallback";
-      const count = params.numResults ?? 8;
+      const mode = (params.type ?? "auto") as "auto" | "fast";
+      const crawl = (params.livecrawl ?? "fallback") as "fallback" | "preferred";
+      const requestedCount = params.numResults ?? 8;
+      const count = claimSearch(requestedCount);
+      const cappedContextChars = maxCharsPerPage();
+      const contextMaxCharacters = params.contextMaxCharacters
+        ? cappedContextChars
+          ? Math.min(params.contextMaxCharacters, cappedContextChars)
+          : params.contextMaxCharacters
+        : cappedContextChars;
 
       const body: SearchRequest = {
         jsonrpc: "2.0",
@@ -176,7 +183,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
             type: mode,
             numResults: count,
             livecrawl: crawl,
-            contextMaxCharacters: params.contextMaxCharacters,
+            contextMaxCharacters,
           },
         },
       };
@@ -217,7 +224,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
               numResults: count,
               livecrawl: crawl,
               type: mode,
-              contextMaxCharacters: params.contextMaxCharacters,
+              contextMaxCharacters,
             } as WebSearchDetails,
           };
         }
@@ -230,7 +237,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
             numResults: count,
             livecrawl: crawl,
             type: mode,
-            contextMaxCharacters: params.contextMaxCharacters,
+            contextMaxCharacters,
             truncation: cut.truncation,
           } as WebSearchDetails,
         };
