@@ -24,7 +24,7 @@ import {
   truncateInline,
   WEBSEARCH_DEFAULT_TIMEOUT,
   withTruncation,
-} from "../shared/web-tools/common.js";
+} from "./shared/common.js";
 
 const EXA_URL = "https://mcp.exa.ai/mcp";
 

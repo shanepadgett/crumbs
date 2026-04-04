@@ -3,7 +3,7 @@
  */
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { showOptionPicker, type OptionPickerLine } from "../option-picker.js";
+import { showOptionPicker, type OptionPickerLine } from "../shared/option-picker.js";
 import type { ApprovalAction, ApprovalResult } from "./types.js";
 
 const APPROVAL_OPTIONS: ReadonlyArray<{ id: ApprovalAction; label: string }> = [

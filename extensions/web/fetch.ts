@@ -28,8 +28,8 @@ import {
   WEBFETCH_DEFAULT_TIMEOUT,
   WEBFETCH_MAX_BYTES,
   withTruncation,
-} from "../shared/web-tools/common.js";
-import { htmlToMarkdown, htmlToText } from "../shared/web-tools/html.js";
+} from "./shared/common.js";
+import { htmlToMarkdown, htmlToText } from "./shared/html.js";
 
 const WEBFETCH_PARAMS = Type.Object({
   url: Type.String({ description: "URL to fetch (http:// or https://)" }),

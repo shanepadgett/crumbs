@@ -11,6 +11,6 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force"
   },
-  "include": ["extensions/**/*.ts", "shared/**/*.ts", ".pi/extensions/**/*.ts"],
+  "include": ["extensions/**/*.ts", ".pi/extensions/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

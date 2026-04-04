@@ -18,25 +18,16 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "../shared/events.js";
-import {
-  formatApprovalNote,
-  showApprovalPrompt,
-  userBlockReason,
-} from "../shared/permission-gate/approval.js";
+import { formatApprovalNote, showApprovalPrompt, userBlockReason } from "./approval.js";
 import {
   ensurePolicyFileWithAllowRule,
   persistMarkedReviewRecord,
   projectPolicyPath,
   resolveSchemaRefForPersistence,
   userPolicyPath,
-} from "../shared/permission-gate/persistence.js";
-import {
-  evaluatePolicy,
-  formatRuleMatchReason,
-  mergePolicy,
-  readPolicyFile,
-} from "../shared/permission-gate/policy.js";
-import { normalizeCommand } from "../shared/permission-gate/shell.js";
+} from "./persistence.js";
+import { evaluatePolicy, formatRuleMatchReason, mergePolicy, readPolicyFile } from "./policy.js";
+import { normalizeCommand } from "./shell.js";
 
 const approvalNotesByToolCallId = new Map<string, string>();
 

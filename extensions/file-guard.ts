@@ -10,8 +10,8 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, matchesGlob, relative, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { showOptionPicker, type OptionPickerLine } from "../shared/option-picker.js";
-import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "../shared/events.js";
+import { showOptionPicker, type OptionPickerLine } from "./shared/option-picker.js";
+import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "./shared/events.js";
 
 type GuardedTool = "read" | "write" | "edit" | "bash";
 type GateTool = GuardedTool | "mutate";

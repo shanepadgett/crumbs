@@ -1,0 +1,9 @@
+{
+  "name": "@crumbs-pi/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "pi": {
+    "extensions": ["./fetch.ts", "./search.ts", "./research.ts"]
+  }
+}

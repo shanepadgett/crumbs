@@ -13,7 +13,7 @@
  * - Windows toast: Windows Terminal (WSL)
  *
  * macOS sound config:
- * - Plays `extensions/assets/notify/notification.mp3` with `afplay`
+ * - Plays `extensions/notify/assets/notification.mp3` with `afplay`
  * - CRUMBS_NOTIFY_SOUND=none disables the bundled sound
  */
 
@@ -23,7 +23,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "../shared/events.js";
 
 const TITLE = "Pi";
-const MAC_SOUND_FILE = fileURLToPath(new URL("./assets/notify/notification.mp3", import.meta.url));
+const MAC_SOUND_FILE = fileURLToPath(new URL("./assets/notification.mp3", import.meta.url));
 
 function notifyOSC777(title: string, body: string): void {
   process.stdout.write(`\x1b]777;notify;${title};${body}\x07`);

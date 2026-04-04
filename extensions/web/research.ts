@@ -29,12 +29,12 @@ import {
   clampTimeout,
   truncateInline,
   WEBRESEARCH_DEFAULT_TIMEOUT,
-} from "../shared/web-tools/common.js";
+} from "./shared/common.js";
 import {
   runPathfinder,
   type PathfinderPhase,
   type PathfinderUsage,
-} from "../shared/web-tools/research-runner.js";
+} from "./shared/research-runner.js";
 
 const PATHFINDER_NAME = "Pathfinder";
 const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"] as const;
@@ -545,8 +545,8 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       });
 
       const extensionPaths = [
-        path.join(extensionDir, "web-search.ts"),
-        path.join(extensionDir, "web-fetch.ts"),
+        path.resolve(extensionDir, "search.ts"),
+        path.resolve(extensionDir, "fetch.ts"),
       ];
 
       let phase: PathfinderPhase = "starting";
