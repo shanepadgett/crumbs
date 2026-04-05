@@ -612,13 +612,28 @@ function blockReasonForHit(hit: RuleHit, config: FileGuardConfig): string {
 
 interface ApprovalResult {
   action: ApprovalAction;
+  note?: string;
   denyReason?: string;
 }
 
+function formatUserNoteSection(note: string): string {
+  return `[user note]\n${note}`;
+}
+
+function formatDecisionSection(text: string): string {
+  return `[decision]\n${text}`;
+}
+
 function userGateBlockReason(source: string, denyReason?: string): string {
-  const base = `Blocked by user via File Guard gate (${source})`;
-  if (!denyReason || denyReason.trim().length === 0) return base;
-  return `${base}: ${denyReason.trim()}`;
+  const note = (denyReason ?? "").trim();
+  const sections: string[] = [];
+
+  if (note.length > 0) {
+    sections.push(formatUserNoteSection(note));
+  }
+
+  sections.push(formatDecisionSection(`Denied by user via File Guard gate (${source})`));
+  return `Blocked by user via File Guard gate (${source})\n\n${sections.join("\n\n")}`;
 }
 
 async function showApprovalPrompt(
@@ -642,15 +657,18 @@ async function showApprovalPrompt(
 
   if (!result) return null;
 
+  const selectedNote = (result.notes[result.action] ?? "").trim();
+  const note = selectedNote.length > 0 ? selectedNote : undefined;
+
   if (result.action === "deny") {
-    const trimmed = (result.notes.deny ?? "").trim();
     return {
       action: "deny",
-      denyReason: trimmed.length > 0 ? trimmed : undefined,
+      note,
+      denyReason: note,
     };
   }
 
-  return { action: result.action };
+  return { action: result.action, note };
 }
 
 async function evaluateGate(
