@@ -1,54 +1,47 @@
 {
   "$schema": "../schemas/crumbs.schema.json",
-  "defaultPolicy": "ask",
-  "onNoUi": "deny",
-  "allow": [
-    {
-      "match": "regex",
-      "value": "^mise\\s+run\\s+(?:format|lint|typecheck|check)$"
-    },
-    {
-      "match": "regex",
-      "value": "^mkdir\\s+-p\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)+)(?:\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)+))*$"
-    },
-    {
-      "match": "regex",
-      "value": "^mv\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._*-]+)+)\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._*-]+)+)/?$"
-    },
-    {
-      "match": "regex",
-      "value": "^rmdir\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)*)(?:\\s+(?:(?:extensions|shared)(?:/[A-Za-z0-9._-]+)*))*$"
-    },
-    {
-      "match": "prefix",
-      "value": "git show HEAD:"
-    },
-    {
-      "match": "exact",
-      "value": "mise tasks"
-    }
-  ],
-  "deny": [],
-  "fileGuard": {
-    "defaults": {
-      "onNoUi": "deny"
-    },
-    "paths": {
-      "hardBlocked": ["docs/_hidden/", ".env"],
-      "policyFiles": [".pi/crumbs.json"]
-    },
-    "rules": {
-      "block": ["@hardBlocked"],
-      "gate": {
-        "mutate": [
-          {
-            "match": "@policyFiles",
-            "reason": "Editing crumbs policy requires approval.",
-            "onNoUi": "deny"
-          }
-        ]
+  "permissions": {
+    "mode": "research",
+    "modes": {
+      "research": {
+        "label": "research",
+        "base": "read-only",
+        "networkMode": "open",
+        "direct": {
+          "mutation": "paths",
+          "allowPaths": ["docs/research/**/*.md", "docs/notes/**/*.md", "docs/plans/**/*.md"]
+        },
+        "shell": {
+          "writeRoots": [".git/", "/tmp"]
+        }
       }
     },
-    "injectPromptReminder": true
+    "blockedPaths": [".env", ".env.*", "~/.ssh/", "~/.aws/", "~/.gnupg/", "docs/_hidden/"],
+    "protectedMutationPaths": [
+      ".pi/crumbs.json",
+      "AGENTS.md",
+      "tsconfig.json",
+      "bun.lock",
+      ".markdownlint.yaml",
+      ".gitignore"
+    ],
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "*.github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "registry.npmjs.org",
+        "npmjs.org",
+        "*.npmjs.org",
+        "mcp.exa.ai"
+      ]
+    },
+    "ui": {
+      "showFooterStatus": true
+    },
+    "destructive": {
+      "onNoUi": "deny"
+    }
   }
 }

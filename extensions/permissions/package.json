@@ -1,9 +1,12 @@
 {
-  "name": "@crumbs-pi/permission-gate",
+  "name": "@crumbs-pi/permissions",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "pi": {
     "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.26"
   }
 }

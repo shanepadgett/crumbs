@@ -30,6 +30,7 @@ import {
 } from "./shared/common.js";
 import { claimFetch, maxCharsPerPage } from "./shared/research-budget.js";
 import { htmlToMarkdown, htmlToText } from "./shared/html.js";
+import { assertUrlAllowed } from "./shared/permissions.js";
 
 const WEBFETCH_PARAMS = Type.Object({
   url: Type.String({ description: "URL to fetch (http:// or https://)" }),
@@ -97,8 +98,9 @@ export default function webFetchExtension(pi: ExtensionAPI) {
 
       return output ? new Text(`\n${output}`, 0, 0) : new Text("", 0, 0);
     },
-    async execute(_toolCallId, params, signal) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const parsed = ensureHttpUrl(params.url);
+      await assertUrlAllowed(ctx.cwd, parsed.toString());
       const format = (params.format ?? "markdown") as "text" | "markdown" | "html";
       const timeout = clampTimeout(params.timeout, WEBFETCH_DEFAULT_TIMEOUT);
       const gate = buildAbort(timeout, signal);

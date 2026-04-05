@@ -25,6 +25,7 @@ import {
   withTruncation,
 } from "./shared/common.js";
 import { claimSearch, maxCharsPerPage } from "./shared/research-budget.js";
+import { assertUrlAllowed } from "./shared/permissions.js";
 
 const EXA_URL = "https://mcp.exa.ai/mcp";
 
@@ -159,7 +160,8 @@ export default function webSearchExtension(pi: ExtensionAPI) {
 
       return output ? new Text(`\n${output}`, 0, 0) : new Text("", 0, 0);
     },
-    async execute(_toolCallId, params, signal) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      await assertUrlAllowed(ctx.cwd, EXA_URL);
       const timeout = clampTimeout(params.timeout, WEBSEARCH_DEFAULT_TIMEOUT);
       const mode = (params.type ?? "auto") as "auto" | "fast";
       const crawl = (params.livecrawl ?? "fallback") as "fallback" | "preferred";

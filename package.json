@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["extensions/notify", "extensions/permission-gate", "extensions/web"],
+  "workspaces": ["extensions/notify", "extensions/permissions", "extensions/web"],
   "description": "Personal Pi extensions packaged for local install/uninstall.",
   "keywords": ["pi-package"],
   "dependencies": {

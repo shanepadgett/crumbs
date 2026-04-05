@@ -2,248 +2,268 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://crumbs.dev/schemas/crumbs.schema.json",
   "title": "Crumbs Configuration",
-  "description": "Configuration for the Crumbs package and its extensions. Includes the permission gate contract and file guard rules.",
+  "description": "Configuration for the Crumbs package and its extensions.",
   "type": "object",
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Optional schema reference used by editors for validation and autocomplete."
     },
-    "defaultPolicy": {
-      "$ref": "#/$defs/defaultPolicy"
-    },
-    "onNoUi": {
-      "$ref": "#/$defs/onNoUi"
-    },
-    "allow": {
-      "$ref": "#/$defs/rulesArray"
-    },
-    "deny": {
-      "$ref": "#/$defs/rulesArray"
-    },
-    "fileGuard": {
-      "$ref": "#/$defs/fileGuardConfig"
-    },
     "permissions": {
-      "type": "object",
-      "description": "Namespace reserved for future permission-related options.",
-      "additionalProperties": true
+      "$ref": "#/$defs/permissionsConfig"
     },
     "tools": {
       "type": "object",
-      "description": "Namespace reserved for tool-specific configuration.",
       "additionalProperties": true
     },
     "extensions": {
       "type": "object",
-      "description": "Namespace for extension-specific options keyed by extension id.",
       "additionalProperties": true
     },
     "ui": {
       "type": "object",
-      "description": "Namespace reserved for UI and interaction options.",
       "additionalProperties": true
     },
     "experimental": {
       "type": "object",
-      "description": "Namespace for experimental or preview options.",
       "additionalProperties": true
     }
   },
   "additionalProperties": true,
   "$defs": {
-    "defaultPolicy": {
+    "permissionsModeBase": {
       "type": "string",
-      "enum": ["ask", "allow", "deny"],
-      "default": "ask",
-      "description": "Default decision when no allow/deny rule matches."
+      "enum": ["read-only", "workspace", "full-access"]
     },
-    "onNoUi": {
+    "permissionsNetworkMode": {
+      "type": "string",
+      "enum": ["restricted", "open"]
+    },
+    "permissionsDirectMutationPolicy": {
+      "type": "string",
+      "enum": ["none", "workspace", "any", "paths"]
+    },
+    "permissionsDestructivePolicy": {
+      "type": "string",
+      "enum": ["block", "prompt", "allow"]
+    },
+    "permissionsOnNoUi": {
       "type": "string",
       "enum": ["deny", "allow"],
-      "default": "deny",
-      "description": "Decision when policy resolves to ask but no UI is available."
+      "default": "deny"
     },
-    "ruleMatch": {
-      "type": "string",
-      "enum": ["exact", "prefix", "regex"],
-      "description": "How to compare a rule value to the normalized command string."
-    },
-    "rule": {
+    "permissionsNetwork": {
       "type": "object",
       "properties": {
-        "match": {
-          "$ref": "#/$defs/ruleMatch"
-        },
-        "value": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Match value. For regex, this is the JavaScript regular expression pattern string."
-        }
-      },
-      "required": ["match", "value"],
-      "additionalProperties": false
-    },
-    "rulesArray": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/rule"
-      },
-      "default": []
-    },
-    "fileGuardRuleEntryObject": {
-      "type": "object",
-      "properties": {
-        "match": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Path, directory, glob, or @group reference."
-        },
-        "reason": {
-          "type": "string",
-          "description": "Optional custom approval reason shown in File Guard prompts."
-        },
-        "onNoUi": {
-          "$ref": "#/$defs/onNoUi"
-        }
-      },
-      "required": ["match"],
-      "additionalProperties": false
-    },
-    "fileGuardRuleEntry": {
-      "oneOf": [
-        {
-          "type": "string",
-          "minLength": 1,
-          "description": "Path, directory, glob, or @group reference."
-        },
-        {
-          "$ref": "#/$defs/fileGuardRuleEntryObject"
-        }
-      ]
-    },
-    "fileGuardRuleEntries": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/fileGuardRuleEntry"
-      },
-      "default": []
-    },
-    "fileGuardGateRules": {
-      "type": "object",
-      "properties": {
-        "read": {
-          "$ref": "#/$defs/fileGuardRuleEntries"
-        },
-        "write": {
-          "$ref": "#/$defs/fileGuardRuleEntries"
-        },
-        "edit": {
-          "$ref": "#/$defs/fileGuardRuleEntries"
-        },
-        "bash": {
-          "$ref": "#/$defs/fileGuardRuleEntries"
-        },
-        "mutate": {
-          "$ref": "#/$defs/fileGuardRuleEntries",
-          "description": "Alias for edit+write rules."
+        "allowedDomains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
         }
       },
       "additionalProperties": false,
-      "default": {}
+      "default": {
+        "allowedDomains": []
+      }
     },
-    "fileGuardConfig": {
+    "permissionsUi": {
       "type": "object",
       "properties": {
-        "defaults": {
-          "type": "object",
-          "properties": {
-            "onNoUi": {
-              "$ref": "#/$defs/onNoUi"
-            }
-          },
-          "additionalProperties": false,
-          "default": {
-            "onNoUi": "deny"
-          }
-        },
-        "paths": {
-          "type": "object",
-          "description": "Reusable path groups referenced as @groupName in block/gate rules.",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "default": {}
-        },
-        "rules": {
-          "type": "object",
-          "properties": {
-            "block": {
-              "$ref": "#/$defs/fileGuardRuleEntries"
-            },
-            "gate": {
-              "$ref": "#/$defs/fileGuardGateRules"
-            }
-          },
-          "additionalProperties": false,
-          "default": {
-            "block": [],
-            "gate": {}
-          }
-        },
-        "blockReasonOverride": {
-          "type": "string",
-          "description": "Optional override for File Guard hard-block reason text."
-        },
-        "injectPromptReminder": {
+        "showFooterStatus": {
           "type": "boolean",
-          "description": "When true, inject File Guard policy summary into the system prompt.",
           "default": true
         }
       },
+      "additionalProperties": false,
+      "default": {
+        "showFooterStatus": true
+      }
+    },
+    "permissionsDestructive": {
+      "type": "object",
+      "properties": {
+        "onNoUi": {
+          "$ref": "#/$defs/permissionsOnNoUi"
+        }
+      },
+      "additionalProperties": false,
+      "default": {
+        "onNoUi": "deny"
+      }
+    },
+    "permissionsModeDirect": {
+      "type": "object",
+      "properties": {
+        "mutation": {
+          "$ref": "#/$defs/permissionsDirectMutationPolicy"
+        },
+        "allowPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        }
+      },
       "additionalProperties": false
+    },
+    "permissionsModeShell": {
+      "type": "object",
+      "properties": {
+        "writeRoots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "permissionsModeDefinition": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "$ref": "#/$defs/permissionsModeBase"
+        },
+        "sandbox": {
+          "type": "boolean"
+        },
+        "networkMode": {
+          "$ref": "#/$defs/permissionsNetworkMode"
+        },
+        "direct": {
+          "$ref": "#/$defs/permissionsModeDirect"
+        },
+        "shell": {
+          "$ref": "#/$defs/permissionsModeShell"
+        },
+        "destructive": {
+          "$ref": "#/$defs/permissionsDestructivePolicy"
+        }
+      },
+      "required": ["base"],
+      "additionalProperties": false
+    },
+    "permissionsModes": {
+      "type": "object",
+      "description": "Custom named permission modes. Built-in mode keys are read-only, read-only-open, workspace, workspace-open, and full-access.",
+      "additionalProperties": {
+        "$ref": "#/$defs/permissionsModeDefinition"
+      },
+      "default": {}
+    },
+    "permissionsConfig": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "Active mode key. Built-in keys are read-only, read-only-open, workspace, workspace-open, and full-access. Custom keys can be defined in permissions.modes.",
+          "default": "workspace"
+        },
+        "modes": {
+          "$ref": "#/$defs/permissionsModes"
+        },
+        "blockedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "protectedMutationPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "network": {
+          "$ref": "#/$defs/permissionsNetwork"
+        },
+        "ui": {
+          "$ref": "#/$defs/permissionsUi"
+        },
+        "destructive": {
+          "$ref": "#/$defs/permissionsDestructive"
+        }
+      },
+      "additionalProperties": false,
+      "default": {
+        "mode": "workspace",
+        "modes": {},
+        "blockedPaths": [".env", ".env.*", "~/.ssh/", "~/.aws/", "~/.gnupg/"],
+        "protectedMutationPaths": [".pi/crumbs.json"],
+        "network": {
+          "allowedDomains": [
+            "github.com",
+            "*.github.com",
+            "api.github.com",
+            "raw.githubusercontent.com",
+            "registry.npmjs.org",
+            "npmjs.org",
+            "*.npmjs.org",
+            "mcp.exa.ai"
+          ]
+        },
+        "ui": {
+          "showFooterStatus": true
+        },
+        "destructive": {
+          "onNoUi": "deny"
+        }
+      }
     }
   },
   "examples": [
     {
       "$schema": "https://crumbs.dev/schemas/crumbs.schema.json",
-      "defaultPolicy": "ask",
-      "onNoUi": "deny",
-      "allow": [
-        {
-          "match": "exact",
-          "value": "git status"
-        }
-      ],
-      "deny": [
-        {
-          "match": "regex",
-          "value": "\\\\brm\\\\s+-rf\\\\b"
-        }
-      ],
-      "fileGuard": {
-        "defaults": {
-          "onNoUi": "deny"
-        },
-        "paths": {
-          "hardBlocked": ["docs/_hidden/", ".env"],
-          "policyFiles": [".pi/crumbs.json"]
-        },
-        "rules": {
-          "block": ["@hardBlocked"],
-          "gate": {
-            "mutate": [
-              {
-                "match": "@policyFiles",
-                "reason": "Editing crumbs policy requires approval.",
-                "onNoUi": "deny"
-              }
-            ]
+      "permissions": {
+        "mode": "workspace",
+        "modes": {
+          "research": {
+            "label": "research",
+            "base": "read-only",
+            "networkMode": "open",
+            "direct": {
+              "mutation": "paths",
+              "allowPaths": ["research/**/*.md", "notes/**/*.md", "plans/**/*.md"]
+            },
+            "shell": {
+              "writeRoots": ["/tmp"]
+            }
           }
+        },
+        "blockedPaths": [".env", ".env.*", "~/.ssh/", "~/.aws/", "~/.gnupg/"],
+        "protectedMutationPaths": [".pi/crumbs.json"],
+        "network": {
+          "allowedDomains": [
+            "github.com",
+            "*.github.com",
+            "api.github.com",
+            "raw.githubusercontent.com",
+            "registry.npmjs.org",
+            "npmjs.org",
+            "*.npmjs.org",
+            "mcp.exa.ai"
+          ]
+        },
+        "ui": {
+          "showFooterStatus": true
+        },
+        "destructive": {
+          "onNoUi": "deny"
         }
       }
     }
