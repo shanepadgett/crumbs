@@ -22,7 +22,7 @@ import type { Model } from "@mariozechner/pi-ai";
 import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { applyPatch } from "./src/apply-patch.js";
+import { applyPatch, type ApplyPatchSummary } from "./src/apply-patch.js";
 import { type CodexCompatCapabilities, getCodexCompatCapabilities } from "./src/capabilities.js";
 import {
   normalizeMaxOutputTokens,
@@ -73,7 +73,10 @@ const WRITE_STDIN_PARAMS = Type.Object({
 });
 
 const APPLY_PATCH_PARAMS = Type.Object({
-  input: Type.String({ description: "Full patch text to apply" }),
+  input: Type.String({
+    description:
+      "Full patch text. Use *** Begin Patch / *** End Patch with Add/Update/Delete File sections and optional *** Move to: lines.",
+  }),
 });
 
 const VIEW_IMAGE_PARAMS = Type.Object({
@@ -267,6 +270,31 @@ function renderApplyPatchResult(result: any, options: { expanded: boolean }, the
   return new Text(`\n${withHint}`, 0, 0);
 }
 
+function formatApplyPatchContent(summary: ApplyPatchSummary): string {
+  const lines = [
+    "Applied patch successfully.",
+    `Added files: ${summary.added.length}`,
+    `Updated files: ${summary.updated.length}`,
+    `Deleted files: ${summary.deleted.length}`,
+    `Moved files: ${summary.moved.length}`,
+  ];
+
+  if (summary.added.length > 0) {
+    lines.push(`Added: ${summary.added.join(", ")}`);
+  }
+  if (summary.updated.length > 0) {
+    lines.push(`Updated: ${summary.updated.join(", ")}`);
+  }
+  if (summary.deleted.length > 0) {
+    lines.push(`Deleted: ${summary.deleted.join(", ")}`);
+  }
+  if (summary.moved.length > 0) {
+    lines.push(`Moved: ${summary.moved.map((move) => `${move.from} -> ${move.to}`).join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
+
 function throwOnFailedExec(result: ShellResultShape) {
   if (result.exit_code === undefined || result.exit_code === 0) return;
   const output = result.output.trim();
@@ -284,6 +312,8 @@ function buildCompatPromptDelta(): string {
     "- Prefer exec_command for project exploration, searches, local file reads, scripts, and tests.",
     "- Pass workdir when you want to operate in another directory instead of using cd inside command text when practical.",
     "- Prefer apply_patch for edits, file creation, file deletion, and coordinated multi-file changes. Put the full patch text in the input field.",
+    "- Prefer a single apply_patch call that updates all related files together when one coherent patch will do.",
+    "- When making coordinated edits across multiple files, include them in one apply_patch call instead of splitting them into separate patches.",
     "- Prefer webresearch for external information gathering. Do not rely on any native web_search tool.",
     "- Use write_stdin only when exec_command returns a session_id for a still-running command.",
     "- If the parallel tool is available, use it only for independent work.",
@@ -572,6 +602,7 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     promptSnippet: "Apply focused multi-file text patches",
     promptGuidelines: [
       "Use apply_patch for file edits, file creation, file deletion, and coordinated multi-file changes.",
+      "When one task needs coordinated edits across multiple files, send them in a single apply_patch call when one coherent patch will do.",
       "Put the full patch text in the input field.",
       "Prefer one coherent patch over many tiny edits when the changes belong together.",
     ],
@@ -586,7 +617,7 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const summary = await applyPatch(ctx.cwd, params.input);
       return {
-        content: plainTextResult("Patch applied."),
+        content: plainTextResult(formatApplyPatchContent(summary)),
         details: summary,
       };
     },

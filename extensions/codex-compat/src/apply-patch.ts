@@ -36,6 +36,11 @@ interface ParsedPatch {
   operations: PatchOperation[];
 }
 
+interface FileSnapshot {
+  existed: boolean;
+  content: string;
+}
+
 function isOperationBoundary(line: string): boolean {
   return (
     line === "*** End Patch" ||
@@ -284,25 +289,66 @@ async function withMutationQueuePaths<T>(paths: string[], fn: () => Promise<T>):
   return current();
 }
 
+function buildOperationPaths(operations: PatchOperation[]): string[] {
+  const paths = new Set<string>();
+
+  for (const operation of operations) {
+    paths.add(operation.path);
+    if (operation.type === "update" && operation.moveTo) {
+      paths.add(operation.moveTo);
+    }
+  }
+
+  return Array.from(paths);
+}
+
+async function captureSnapshots(paths: string[]): Promise<Map<string, FileSnapshot>> {
+  const snapshots = new Map<string, FileSnapshot>();
+
+  for (const path of Array.from(new Set(paths)).sort()) {
+    if (!(await pathExists(path))) {
+      snapshots.set(path, { existed: false, content: "" });
+      continue;
+    }
+
+    snapshots.set(path, {
+      existed: true,
+      content: await readFile(path, "utf8"),
+    });
+  }
+
+  return snapshots;
+}
+
+async function restoreSnapshots(snapshots: Map<string, FileSnapshot>) {
+  for (const [path, snapshot] of snapshots) {
+    if (!snapshot.existed) {
+      if (await pathExists(path)) {
+        await unlink(path);
+      }
+      continue;
+    }
+
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, snapshot.content, "utf8");
+  }
+}
+
 async function applyAdd(cwd: string, operation: Extract<PatchOperation, { type: "add" }>) {
   const target = await resolveMutationPath(cwd, operation.path);
   if (await pathExists(target.canonicalPath)) {
     throw new Error(`Cannot add existing file: ${operation.path}`);
   }
 
-  await withMutationQueuePaths([target.canonicalPath], async () => {
-    await mkdir(dirname(target.canonicalPath), { recursive: true });
-    await writeFile(target.canonicalPath, operation.content, "utf8");
-  });
+  await mkdir(dirname(target.canonicalPath), { recursive: true });
+  await writeFile(target.canonicalPath, operation.content, "utf8");
 
   return target.inputPath;
 }
 
 async function applyDelete(cwd: string, operation: Extract<PatchOperation, { type: "delete" }>) {
   const target = await resolveExistingPath(cwd, operation.path, "file");
-  await withMutationQueuePaths([target.canonicalPath], async () => {
-    await unlink(target.canonicalPath);
-  });
+  await unlink(target.canonicalPath);
   return target.inputPath;
 }
 
@@ -318,22 +364,16 @@ async function applyUpdate(cwd: string, operation: Extract<PatchOperation, { typ
     throw new Error(`Move target already exists: ${operation.moveTo}`);
   }
 
-  await withMutationQueuePaths(
-    [source.canonicalPath, ...(target ? [target.canonicalPath] : [])],
-    async () => {
-      const current = await readFile(source.canonicalPath, "utf8");
-      const next = applyHunks(current, operation.hunks);
+  const current = await readFile(source.canonicalPath, "utf8");
+  const next = applyHunks(current, operation.hunks);
 
-      if (!target || target.canonicalPath === source.canonicalPath) {
-        await writeFile(source.canonicalPath, next, "utf8");
-        return;
-      }
-
-      await mkdir(dirname(target.canonicalPath), { recursive: true });
-      await writeFile(source.canonicalPath, next, "utf8");
-      await rename(source.canonicalPath, target.canonicalPath);
-    },
-  );
+  if (!target || target.canonicalPath === source.canonicalPath) {
+    await writeFile(source.canonicalPath, next, "utf8");
+  } else {
+    await mkdir(dirname(target.canonicalPath), { recursive: true });
+    await writeFile(source.canonicalPath, next, "utf8");
+    await rename(source.canonicalPath, target.canonicalPath);
+  }
 
   return {
     updated: source.inputPath,
@@ -343,28 +383,56 @@ async function applyUpdate(cwd: string, operation: Extract<PatchOperation, { typ
 
 export async function applyPatch(cwd: string, input: string): Promise<ApplyPatchSummary> {
   const parsed = parsePatch(input);
-  const summary: ApplyPatchSummary = {
-    added: [],
-    updated: [],
-    deleted: [],
-    moved: [],
-  };
-
-  for (const operation of parsed.operations) {
-    if (operation.type === "add") {
-      summary.added.push(await applyAdd(cwd, operation));
-      continue;
-    }
-
-    if (operation.type === "delete") {
-      summary.deleted.push(await applyDelete(cwd, operation));
-      continue;
-    }
-
-    const result = await applyUpdate(cwd, operation);
-    summary.updated.push(result.updated);
-    if (result.moved) summary.moved.push(result.moved);
+  if (parsed.operations.length === 0) {
+    throw new Error("Patch did not contain any file operations.");
   }
 
-  return summary;
+  const queuePaths = await Promise.all(
+    buildOperationPaths(parsed.operations).map(async (path) => {
+      const resolved = await resolveMutationPath(cwd, path);
+      return resolved.canonicalPath;
+    }),
+  );
+
+  return withMutationQueuePaths(queuePaths, async () => {
+    const snapshots = await captureSnapshots(queuePaths);
+    const summary: ApplyPatchSummary = {
+      added: [],
+      updated: [],
+      deleted: [],
+      moved: [],
+    };
+
+    try {
+      for (const operation of parsed.operations) {
+        if (operation.type === "add") {
+          summary.added.push(await applyAdd(cwd, operation));
+          continue;
+        }
+
+        if (operation.type === "delete") {
+          summary.deleted.push(await applyDelete(cwd, operation));
+          continue;
+        }
+
+        const result = await applyUpdate(cwd, operation);
+        summary.updated.push(result.updated);
+        if (result.moved) summary.moved.push(result.moved);
+      }
+
+      return summary;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      try {
+        await restoreSnapshots(snapshots);
+      } catch (rollbackError) {
+        const rollbackMessage =
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new Error(`${message}\n\nPatch rollback failed: ${rollbackMessage}`);
+      }
+
+      throw new Error(`${message}\n\nPatch was rolled back. No changes were applied.`);
+    }
+  });
 }
