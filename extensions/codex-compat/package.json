@@ -1,0 +1,9 @@
+{
+  "name": "@crumbs-pi/codex-compat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

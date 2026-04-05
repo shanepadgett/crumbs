@@ -2,28 +2,37 @@
   "name": "crumbs-pi-extensions",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "description": "Personal Pi extensions packaged for local install/uninstall.",
+  "keywords": [
+    "pi-package"
+  ],
   "workspaces": [
+    "extensions/codex-compat",
     "extensions/memory",
     "extensions/notify",
     "extensions/permissions",
     "extensions/web"
   ],
-  "description": "Personal Pi extensions packaged for local install/uninstall.",
-  "keywords": ["pi-package"],
+  "type": "module",
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",
     "@mariozechner/pi-tui": "0.64.0",
-    "@sinclair/typebox": "0.34.41"
+    "@sinclair/typebox": "0.34.41",
+    "node-pty": "1.1.0"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "0.64.0",
+    "@types/node": "25.5.0",
     "oxfmt": "0.43.0",
     "oxlint": "1.58.0",
-    "typescript": "6.0.2",
-    "@types/node": "25.5.0"
+    "typescript": "6.0.2"
   },
+  "trustedDependencies": [
+    "node-pty"
+  ],
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": [
+      "./extensions"
+    ]
   }
 }

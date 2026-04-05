@@ -53,6 +53,22 @@ async function confirmDestructiveOperation(
   return ctx.ui.confirm("Destructive operation", `${reason}\n\nCommand:\n${command}`);
 }
 
+function extractApplyPatchTargets(input: string): string[] {
+  const paths = new Set<string>();
+
+  for (const match of input.matchAll(/^\*\*\* (?:Add|Delete|Update) File: (.+)$/gm)) {
+    const value = match[1]?.trim();
+    if (value) paths.add(value);
+  }
+
+  for (const match of input.matchAll(/^\*\*\* Move to: (.+)$/gm)) {
+    const value = match[1]?.trim();
+    if (value) paths.add(value);
+  }
+
+  return Array.from(paths);
+}
+
 export default function permissionsExtension(pi: ExtensionAPI) {
   const localCwd = process.cwd();
   const localBash = createBashTool(localCwd);
@@ -130,19 +146,8 @@ export default function permissionsExtension(pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
     const config = await ensureConfig(ctx.cwd);
 
-    if (isToolCallEventType("read", event)) {
-      const blocked = await evaluateReadPath(ctx.cwd, event.input.path, config);
-      if (blocked) {
-        return {
-          block: true,
-          reason: `Blocked by permissions: read target matches blocked path (${blocked})`,
-        };
-      }
-      return undefined;
-    }
-
-    if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
-      const outcome = await evaluateMutationPath(ctx.cwd, event.input.path, config);
+    const blockMutationPath = async (path: string) => {
+      const outcome = await evaluateMutationPath(ctx.cwd, path, config);
       if (!outcome) return undefined;
 
       if (outcome.type === "protected") {
@@ -153,7 +158,7 @@ export default function permissionsExtension(pi: ExtensionAPI) {
           };
         }
 
-        if (await confirmProtectedMutation(event.input.path, ctx)) return undefined;
+        if (await confirmProtectedMutation(path, ctx)) return undefined;
         return {
           block: true,
           reason: `Blocked by permissions: direct mutation denied for protected path (${outcome.match})`,
@@ -171,10 +176,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         block: true,
         reason: `Blocked by permissions: mutation target is not allowed in mode ${config.activeMode.key} (${outcome.match})`,
       };
-    }
+    };
 
-    if (isToolCallEventType("bash", event)) {
-      const interlock = findInterlockMatch(event.input.command);
+    const blockDestructiveCommand = async (command: string) => {
+      const interlock = findInterlockMatch(command);
       if (!interlock) return undefined;
 
       if (config.activeMode.destructivePolicy === "allow") {
@@ -196,13 +201,62 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         };
       }
 
-      if (await confirmDestructiveOperation(event.input.command, interlock.reason, ctx)) {
+      if (await confirmDestructiveOperation(command, interlock.reason, ctx)) {
         return undefined;
       }
       return {
         block: true,
         reason: `Blocked by permissions: user denied ${interlock.label}`,
       };
+    };
+
+    if (isToolCallEventType("read", event)) {
+      const blocked = await evaluateReadPath(ctx.cwd, event.input.path, config);
+      if (blocked) {
+        return {
+          block: true,
+          reason: `Blocked by permissions: read target matches blocked path (${blocked})`,
+        };
+      }
+      return undefined;
+    }
+
+    if (event.toolName === "view_image") {
+      const input = event.input as { path?: string };
+      if (typeof input.path !== "string") return undefined;
+      const blocked = await evaluateReadPath(ctx.cwd, input.path, config);
+      if (blocked) {
+        return {
+          block: true,
+          reason: `Blocked by permissions: image target matches blocked path (${blocked})`,
+        };
+      }
+      return undefined;
+    }
+
+    if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
+      return blockMutationPath(event.input.path);
+    }
+
+    if (event.toolName === "apply_patch") {
+      const input = event.input as { input?: string };
+      if (typeof input.input !== "string") return undefined;
+      for (const targetPath of extractApplyPatchTargets(input.input)) {
+        const blocked = await blockMutationPath(targetPath);
+        if (blocked) return blocked;
+      }
+      return undefined;
+    }
+
+    if (isToolCallEventType("bash", event)) {
+      return blockDestructiveCommand(event.input.command);
+    }
+
+    if (event.toolName === "exec_command") {
+      const input = event.input as { cmd?: string; command?: string };
+      const command = typeof input.cmd === "string" ? input.cmd : input.command;
+      if (typeof command !== "string") return undefined;
+      return blockDestructiveCommand(command);
     }
 
     return undefined;

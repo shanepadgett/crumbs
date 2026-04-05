@@ -20,26 +20,22 @@
  * - If failing, extension injects an automation message with output context.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Box, Container, Spacer, Text } from "@mariozechner/pi-tui";
 import {
   ensurePackageManagerDirectories,
   formatCommandForDisplay,
   wrapCommandWithPackageManagerEnvironment,
 } from "./shared/package-manager-env.js";
+import { collectMutatedPaths, extractToolCommand } from "./shared/tool-observation.js";
 
 const MARKDOWNLINT_BASH_REGEX =
   /\b(?:bunx\s+markdownlint-cli|npx(?:\s+--yes)?\s+markdownlint-cli)\b/;
 const CUSTOM_MESSAGE_TYPE = "automation.markdownlint";
-const MAX_OUTPUT_CHARS = 3_000;
-
-function normalizePath(pathValue: unknown): string | null {
-  if (typeof pathValue !== "string") return null;
-  const normalized = pathValue.trim().replace(/^@/, "");
-  return normalized.length > 0 ? normalized : null;
-}
 
 function isMarkdownPath(pathValue: unknown): boolean {
-  const path = normalizePath(pathValue);
+  if (typeof pathValue !== "string") return false;
+  const path = pathValue.trim().replace(/^@/, "");
   if (!path) return false;
   const lower = path.toLowerCase();
   return lower.endsWith(".md") || lower.endsWith(".markdown");
@@ -50,39 +46,101 @@ function isMarkdownLintCommand(commandValue: unknown): boolean {
   return MARKDOWNLINT_BASH_REGEX.test(commandValue);
 }
 
-function tail(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return `...\n${text.slice(-maxChars)}`;
-}
-
-function fenceSafe(text: string): string {
-  return text.replace(/```/g, "``\\`");
-}
-
 function buildFailureMessage(
   result: { code: number; stdout?: string; stderr?: string },
   rerunCmd: string,
 ): string {
   const stdout = (result.stdout || "").trim();
   const stderr = (result.stderr || "").trim();
-  const output = [
-    stdout ? `stdout:\n${tail(stdout, MAX_OUTPUT_CHARS)}` : "",
-    stderr ? `stderr:\n${tail(stderr, MAX_OUTPUT_CHARS)}` : "",
-  ]
+  const detail = (stderr || stdout)
+    .split("\n")
+    .map((line) => line.trim())
     .filter(Boolean)
-    .join("\n\n");
+    .at(-1);
 
   return [
-    `Automated markdownlint check with --fix failed (exit code ${result.code}).`,
-    `Address remaining Markdown issues and verify with \`${rerunCmd}\` before continuing.`,
-    output ? `\n\nRecent output:\n\n\`\`\`text\n${fenceSafe(output)}\n\`\`\`` : "",
-  ].join(" ");
+    `markdownlint failed (exit ${result.code}).`,
+    detail ? `Issue: ${detail}` : "",
+    `Run \`${rerunCmd}\` after fixes.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildExpandedOutput(stdout: string | undefined, stderr: string | undefined): string {
+  const lines: string[] = [];
+  if (stdout?.trim()) {
+    lines.push("stdout:", stdout.trimEnd());
+  }
+  if (stderr?.trim()) {
+    if (lines.length > 0) lines.push("");
+    lines.push("stderr:", stderr.trimEnd());
+  }
+  return lines.join("\n");
 }
 
 export default function markdownlintOnMdExtension(pi: ExtensionAPI): void {
   const dirtyMarkdownFiles = new Set<string>();
   let checkInFlight = false;
   let preferredRunner: "bunx" | "npx" | null = null;
+
+  pi.registerMessageRenderer<{
+    command?: string;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+  }>(CUSTOM_MESSAGE_TYPE, (message, options, theme) => {
+    const details = message.details ?? {};
+    const exitCode =
+      typeof details.exitCode === "number" && Number.isFinite(details.exitCode)
+        ? details.exitCode
+        : undefined;
+    const status = [
+      theme.fg("warning", "failed"),
+      exitCode !== undefined ? theme.fg("muted", `(exit ${exitCode})`) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const root = new Container();
+    const box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
+    root.addChild(box);
+
+    const label = theme.fg("customMessageLabel", `\x1b[1m[${message.customType}]\x1b[22m`);
+    box.addChild(new Text(label, 0, 0));
+    box.addChild(new Spacer(1));
+
+    const summary = [
+      theme.fg("toolTitle", theme.bold("markdownlint")),
+      status,
+      !options.expanded
+        ? theme.fg("muted", `(${keyHint("app.tools.expand", "to expand")})`)
+        : theme.fg("muted", `(${keyHint("app.tools.expand", "to collapse")})`),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    box.addChild(new Text(summary, 0, 0));
+
+    if (!options.expanded) {
+      return root;
+    }
+
+    const lines: string[] = [];
+    if (typeof details.command === "string" && details.command.trim()) {
+      lines.push(theme.fg("muted", `$ ${details.command}`));
+    }
+
+    const fullOutput = buildExpandedOutput(details.stdout, details.stderr);
+    if (fullOutput) {
+      lines.push(theme.fg("toolOutput", fullOutput));
+    }
+
+    if (lines.length > 0) {
+      box.addChild(new Spacer(1));
+      box.addChild(new Text(lines.join("\n\n"), 0, 0));
+    }
+
+    return root;
+  });
 
   async function detectRunner(signal?: AbortSignal): Promise<"bunx" | "npx"> {
     if (preferredRunner) return preferredRunner;
@@ -104,19 +162,19 @@ export default function markdownlintOnMdExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("tool_result", async (event) => {
-    if (
-      (event.toolName === "edit" || event.toolName === "write") &&
-      !event.isError &&
-      isMarkdownPath(event.input?.path)
-    ) {
-      const path = normalizePath(event.input?.path);
-      if (path) dirtyMarkdownFiles.add(path);
-      return;
+    if (!event.isError) {
+      const touchedPaths = collectMutatedPaths(event.toolName, event.input);
+      for (const path of touchedPaths) {
+        if (isMarkdownPath(path)) {
+          dirtyMarkdownFiles.add(path);
+        }
+      }
     }
 
     // Any explicit markdownlint run counts as a check for currently dirty markdown files,
     // regardless of success/failure, matching the existing mise-check-on-ts semantics.
-    if (event.toolName === "bash" && isMarkdownLintCommand(event.input?.command)) {
+    const toolCommand = extractToolCommand(event.input);
+    if (isMarkdownLintCommand(toolCommand)) {
       dirtyMarkdownFiles.clear();
     }
   });

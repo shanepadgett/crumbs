@@ -7,7 +7,7 @@
  * the terminal will show a "Pi" notification with "Ready for input".
  *
  * Supports multiple notification backends:
- * - AppleScript (`osascript`): macOS native Notification Center + bundled sound
+ * - AppleScript (`osascript`): macOS Ghostty only, native Notification Center + bundled sound
  * - OSC 777: Ghostty, iTerm2, WezTerm, rxvt-unicode
  * - OSC 99: Kitty
  * - Windows toast: Windows Terminal (WSL)
@@ -24,6 +24,21 @@ import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "../shared/events.js";
 
 const TITLE = "Pi";
 const MAC_SOUND_FILE = fileURLToPath(new URL("./assets/notification.mp3", import.meta.url));
+
+function isGhosttyTerminal(): boolean {
+  if (process.env.TERM_PROGRAM?.toLowerCase() !== "ghostty") return false;
+
+  const term = process.env.TERM?.toLowerCase() ?? "";
+  if (term.includes("tmux") || term.includes("screen")) return false;
+
+  if (process.env.TMUX) return false;
+  if (process.env.STY) return false;
+  if (process.env.ZELLIJ) return false;
+  if (process.env.CMUX || process.env.CMUX_SESSION) return false;
+  if (Object.keys(process.env).some((key) => key.startsWith("CMUX_"))) return false;
+
+  return true;
+}
 
 function notifyOSC777(title: string, body: string): void {
   process.stdout.write(`\x1b]777;notify;${title};${body}\x07`);
@@ -75,7 +90,7 @@ function notifyMac(title: string, body: string): void {
 }
 
 function notify(title: string, body: string): void {
-  if (process.platform === "darwin") return notifyMac(title, body);
+  if (process.platform === "darwin" && isGhosttyTerminal()) return notifyMac(title, body);
   if (process.env.WT_SESSION) return notifyWindows(title, body);
   if (process.env.KITTY_WINDOW_ID) return notifyOSC99(title, body);
   notifyOSC777(title, body);

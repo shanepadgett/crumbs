@@ -20,11 +20,15 @@
  * - If failing, extension injects an automation message with output context.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Box, Container, Spacer, Text } from "@mariozechner/pi-tui";
+import {
+  collectMutatedPaths,
+  extractToolCommand,
+} from "../../extensions/shared/tool-observation.js";
 
 const CHECK_COMMAND_REGEX = /\bmise\s+run\s+check\b/;
 const CUSTOM_MESSAGE_TYPE = "automation.mise-check";
-const MAX_OUTPUT_CHARS = 3_000;
 
 function isTypeScriptPath(pathValue: unknown): boolean {
   if (typeof pathValue !== "string") return false;
@@ -37,36 +41,98 @@ function isCheckCommand(commandValue: unknown): boolean {
   return CHECK_COMMAND_REGEX.test(commandValue);
 }
 
-function tail(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return `...\n${text.slice(-maxChars)}`;
-}
-
-function fenceSafe(text: string): string {
-  return text.replace(/```/g, "``\\`");
-}
-
 function buildFailureMessage(result: { code: number; stdout?: string; stderr?: string }): string {
   const stdout = (result.stdout || "").trim();
   const stderr = (result.stderr || "").trim();
-  const output = [
-    stdout ? `stdout:\n${tail(stdout, MAX_OUTPUT_CHARS)}` : "",
-    stderr ? `stderr:\n${tail(stderr, MAX_OUTPUT_CHARS)}` : "",
-  ]
+  const detail = (stderr || stdout)
+    .split("\n")
+    .map((line) => line.trim())
     .filter(Boolean)
-    .join("\n\n");
+    .at(-1);
 
   return [
-    `Automated check failed (exit code ${result.code}).`,
-    "Fix the reported issues and verify with `mise run check` before continuing.",
-    output ? `\n\nRecent output:\n\n\`\`\`text\n${fenceSafe(output)}\n\`\`\`` : "",
-  ].join(" ");
+    `mise run check failed (exit ${result.code}).`,
+    detail ? `Issue: ${detail}` : "",
+    "Run `mise run check` after fixes.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildExpandedOutput(stdout: string | undefined, stderr: string | undefined): string {
+  const lines: string[] = [];
+  if (stdout?.trim()) {
+    lines.push("stdout:", stdout.trimEnd());
+  }
+  if (stderr?.trim()) {
+    if (lines.length > 0) lines.push("");
+    lines.push("stderr:", stderr.trimEnd());
+  }
+  return lines.join("\n");
 }
 
 export default function miseCheckOnTsExtension(pi: ExtensionAPI): void {
   let tsEditSeq = 0;
   let lastCheckedTsEditSeq = 0;
   let checkInFlight = false;
+
+  pi.registerMessageRenderer<{
+    command?: string;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+  }>(CUSTOM_MESSAGE_TYPE, (message, options, theme) => {
+    const details = message.details ?? {};
+    const exitCode =
+      typeof details.exitCode === "number" && Number.isFinite(details.exitCode)
+        ? details.exitCode
+        : undefined;
+    const status = [
+      theme.fg("warning", "failed"),
+      exitCode !== undefined ? theme.fg("muted", `(exit ${exitCode})`) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const root = new Container();
+    const box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
+    root.addChild(box);
+
+    const label = theme.fg("customMessageLabel", `\x1b[1m[${message.customType}]\x1b[22m`);
+    box.addChild(new Text(label, 0, 0));
+    box.addChild(new Spacer(1));
+
+    const summary = [
+      theme.fg("toolTitle", theme.bold("mise run check")),
+      status,
+      !options.expanded
+        ? theme.fg("muted", `(${keyHint("app.tools.expand", "to expand")})`)
+        : theme.fg("muted", `(${keyHint("app.tools.expand", "to collapse")})`),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    box.addChild(new Text(summary, 0, 0));
+
+    if (!options.expanded) {
+      return root;
+    }
+
+    const lines: string[] = [];
+    if (typeof details.command === "string" && details.command.trim()) {
+      lines.push(theme.fg("muted", `$ ${details.command}`));
+    }
+
+    const fullOutput = buildExpandedOutput(details.stdout, details.stderr);
+    if (fullOutput) {
+      lines.push(theme.fg("toolOutput", fullOutput));
+    }
+
+    if (lines.length > 0) {
+      box.addChild(new Spacer(1));
+      box.addChild(new Text(lines.join("\n\n"), 0, 0));
+    }
+
+    return root;
+  });
 
   pi.on("agent_start", async () => {
     tsEditSeq = 0;
@@ -75,18 +141,17 @@ export default function miseCheckOnTsExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("tool_result", async (event) => {
-    if (
-      (event.toolName === "edit" || event.toolName === "write") &&
-      !event.isError &&
-      isTypeScriptPath(event.input?.path)
-    ) {
-      tsEditSeq += 1;
-      return;
+    if (!event.isError) {
+      const touchedPaths = collectMutatedPaths(event.toolName, event.input);
+      if (touchedPaths.some((path) => isTypeScriptPath(path))) {
+        tsEditSeq += 1;
+      }
     }
 
     // Any explicit `mise run check` execution counts as a check after the latest edit,
     // regardless of success or failure, matching the requested semantics.
-    if (event.toolName === "bash" && isCheckCommand(event.input?.command)) {
+    const toolCommand = extractToolCommand(event.input);
+    if (isCheckCommand(toolCommand)) {
       lastCheckedTsEditSeq = tsEditSeq;
     }
   });
