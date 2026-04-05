@@ -9,12 +9,9 @@
  *   repository state.
  * - Guides the model to group semantically related edits together and split
  *   independent work into separate commits when that makes review/revert safer.
- * - Writes the exact injected `/commit` context to a report file for review.
  *
  * How to use:
  * - Run `/commit` from inside a git repository with uncommitted changes.
- * - Review `.pi/reports/commit-context.latest.md` to see exactly what context
- *   gets injected for commit planning.
  * - The extension gathers a deterministic evidence packet and asks the agent to
  *   create one or more semantic commits.
  *
@@ -26,8 +23,6 @@
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 
 const COMMAND_DESCRIPTION = "Create semantic git commit groupings from deterministic git evidence";
 const COMMIT_TRIGGER_MESSAGE =
@@ -40,7 +35,6 @@ const MAX_DIFF_SECTION_CHARS = 8_000;
 const MAX_DIFF_SECTION_LINES = 300;
 const MAX_TOTAL_DIFF_CHARS = 80_000;
 const MIN_DIFF_BUDGET_CHARS = 1_500;
-const CONTEXT_REPORT_RELATIVE_PATH = ".pi/reports/commit-context.latest.md";
 
 type OptionalText = string | null;
 
@@ -81,10 +75,6 @@ interface CommitEvidence {
   stagedSummary: string;
   unstagedSummary: string;
   diffBudgetRemainingChars: number;
-}
-
-interface ContextReport {
-  path: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -523,16 +513,6 @@ function renderCommitPrompt(evidence: CommitEvidence): string {
   return lines.join("\n").trimEnd();
 }
 
-async function writeContextReport(
-  evidence: CommitEvidence,
-  prompt: string,
-): Promise<ContextReport> {
-  const reportPath = join(evidence.repoRoot, CONTEXT_REPORT_RELATIVE_PATH);
-  await mkdir(join(evidence.repoRoot, ".pi", "reports"), { recursive: true });
-  await writeFile(reportPath, `${prompt}\n`, "utf8");
-  return { path: reportPath };
-}
-
 export default function commitExtension(pi: ExtensionAPI): void {
   let pendingPrompt: string | null = null;
 
@@ -557,14 +537,6 @@ export default function commitExtension(pi: ExtensionAPI): void {
 
       const prompt = renderCommitPrompt(evidence);
       pendingPrompt = prompt;
-
-      try {
-        const report = await writeContextReport(evidence, prompt);
-        ctx.ui.notify(`Injected /commit context saved: ${report.path}`, "info");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`Failed to write commit context report: ${message}`, "warning");
-      }
 
       pi.sendUserMessage(COMMIT_TRIGGER_MESSAGE);
     },
