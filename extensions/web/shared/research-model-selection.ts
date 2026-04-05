@@ -2,55 +2,48 @@
  * Web Research Model Selection
  *
  * What it does:
- * - Resolves model selection for webresearch using explicit tier maps.
- * - Stays on the active provider and only falls back within that provider.
+ * - Resolves model selection for webresearch using provider-specific tier maps.
+ * - Keeps model choice directly tied to a single research mode: fast/balanced/deep.
  *
  * How to use it:
- * - Call `resolveResearchModel(...)` from `research.ts`.
+ * - Call `resolveResearchModel(...)` from `research.ts` with the selected `mode`.
  *
  * Example:
- * - resolveResearchModel({ modelMode: "cheap", provider: "openai-codex", ... })
+ * - resolveResearchModel({ mode: "fast", provider: "openai-codex", ... })
  */
 
 import { spawn } from "node:child_process";
 
-export type ResearchModelMode = "auto" | "cheap" | "current" | "best";
+export type ResearchMode = "fast" | "balanced" | "deep";
 
-type Tier = "cheap" | "balanced" | "best";
+type Tier = ResearchMode;
 
 interface TierSpec {
   model: string;
 }
 
 interface ProviderTierSpec {
-  cheap?: TierSpec;
+  fast?: TierSpec;
   balanced?: TierSpec;
-  best?: TierSpec;
+  deep?: TierSpec;
 }
 
 export interface ResolveResearchModelInput {
   explicitModel?: string;
-  modelMode: ResearchModelMode;
+  mode: ResearchMode;
   provider?: string;
   currentModelId?: string;
-  task: string;
-  query?: string;
-  maxResults: number;
-  maxActions: number;
-  maxCharsPerPage: number;
   cwd: string;
 }
 
 export interface ResolveResearchModelResult {
   model: string;
-  mode: ResearchModelMode;
+  mode: ResearchMode;
   reason: string;
   provider?: string;
 }
 
 const DEFAULT_WEB_RESEARCH_MODEL = "claude-haiku-4-5";
-const COMPLEX_TASK_HINT =
-  /(white\s*paper|paper|rag|retrieval|benchmark|ablation|trade\s*-?off|architecture|state\s*of\s*the\s*art|cutting\s*edge|research|survey|technical\s+analysis)/i;
 
 const PROVIDER_ALIASES: Record<string, string> = {
   codex: "openai-codex",
@@ -59,64 +52,64 @@ const PROVIDER_ALIASES: Record<string, string> = {
 
 const RESEARCH_TIER_MAP: Record<string, ProviderTierSpec> = {
   openai: {
-    cheap: { model: "gpt-5.4-mini" },
+    fast: { model: "gpt-5.4-mini" },
     balanced: { model: "gpt-5.4" },
-    best: { model: "gpt-5.4" },
+    deep: { model: "gpt-5.4" },
   },
   "openai-codex": {
-    cheap: { model: "gpt-5.4-mini" },
+    fast: { model: "gpt-5.4-mini" },
     balanced: { model: "gpt-5.4" },
-    best: { model: "gpt-5.4" },
+    deep: { model: "gpt-5.4" },
   },
   anthropic: {
-    cheap: { model: "claude-haiku-4-5" },
+    fast: { model: "claude-haiku-4-5" },
     balanced: { model: "claude-sonnet-4-5" },
-    best: { model: "claude-opus-4-6" },
+    deep: { model: "claude-opus-4-6" },
   },
   google: {
-    cheap: { model: "gemini-2.0-flash" },
+    fast: { model: "gemini-2.0-flash" },
     balanced: { model: "gemini-2.5-pro" },
-    best: { model: "gemini-3.1-pro-preview" },
+    deep: { model: "gemini-3.1-pro-preview" },
   },
   "google-gemini-cli": {
-    cheap: { model: "gemini-3-flash-preview" },
+    fast: { model: "gemini-3-flash-preview" },
     balanced: { model: "gemini-3-pro-preview" },
-    best: { model: "gemini-3.1-pro-preview" },
+    deep: { model: "gemini-3.1-pro-preview" },
   },
   "google-antigravity": {
-    cheap: { model: "gemini-3-flash-preview" },
+    fast: { model: "gemini-3-flash-preview" },
     balanced: { model: "gemini-3-pro-preview" },
-    best: { model: "gemini-3.1-pro-preview" },
+    deep: { model: "gemini-3.1-pro-preview" },
   },
   "github-copilot": {
-    cheap: { model: "gpt-5.4-mini" },
+    fast: { model: "gpt-5.4-mini" },
     balanced: { model: "claude-sonnet-4.6" },
-    best: { model: "claude-opus-4.6" },
+    deep: { model: "claude-opus-4.6" },
   },
   mistral: {
-    cheap: { model: "mistral-small-latest" },
+    fast: { model: "mistral-small-latest" },
     balanced: { model: "mistral-medium-latest" },
-    best: { model: "mistral-large-latest" },
+    deep: { model: "mistral-large-latest" },
   },
   groq: {
-    cheap: { model: "llama-3.3-70b-versatile" },
+    fast: { model: "llama-3.3-70b-versatile" },
     balanced: { model: "llama-3.3-70b-versatile" },
-    best: { model: "llama-3.3-70b-versatile" },
+    deep: { model: "llama-3.3-70b-versatile" },
   },
   xai: {
-    cheap: { model: "grok-3-mini-fast" },
+    fast: { model: "grok-3-mini-fast" },
     balanced: { model: "grok-3" },
-    best: { model: "grok-3" },
+    deep: { model: "grok-3" },
   },
   openrouter: {
-    cheap: { model: "anthropic/claude-haiku-4-5" },
+    fast: { model: "anthropic/claude-haiku-4-5" },
     balanced: { model: "anthropic/claude-sonnet-4-5" },
-    best: { model: "anthropic/claude-opus-4-6" },
+    deep: { model: "anthropic/claude-opus-4-6" },
   },
   "azure-openai-responses": {
-    cheap: { model: "gpt-5.4-mini" },
+    fast: { model: "gpt-5.4-mini" },
     balanced: { model: "gpt-5.4" },
-    best: { model: "gpt-5.4" },
+    deep: { model: "gpt-5.4" },
   },
 };
 
@@ -145,23 +138,6 @@ function toCliModel(modelId: string, provider: string | undefined): string {
   if (id.includes("/")) return id;
 
   return `${p}/${id}`;
-}
-
-function isComplexResearch(input: {
-  task: string;
-  query?: string;
-  maxResults: number;
-  maxActions: number;
-  maxCharsPerPage: number;
-}): boolean {
-  let score = 0;
-  if (input.maxActions >= 8) score += 1;
-  if (input.maxResults >= 8) score += 1;
-  if (input.maxCharsPerPage >= 16_000) score += 1;
-  if (input.task.length >= 240) score += 1;
-  if (input.query && input.query.length >= 120) score += 1;
-  if (COMPLEX_TASK_HINT.test(`${input.task}\n${input.query ?? ""}`)) score += 1;
-  return score >= 2;
 }
 
 function parseModelCatalog(text: string): Map<string, Set<string>> {
@@ -235,22 +211,15 @@ async function loadModelCatalog(cwd: string): Promise<Map<string, Set<string>>> 
 }
 
 function modelForTier(spec: ProviderTierSpec, tier: Tier): string | undefined {
-  if (tier === "cheap") return spec.cheap?.model;
-  if (tier === "best") return spec.best?.model;
+  if (tier === "fast") return spec.fast?.model;
+  if (tier === "deep") return spec.deep?.model;
   return spec.balanced?.model;
 }
 
 function tierFallbackOrder(tier: Tier): Tier[] {
-  if (tier === "cheap") return ["cheap", "balanced", "best"];
-  if (tier === "best") return ["best", "balanced", "cheap"];
-  return ["balanced", "cheap", "best"];
-}
-
-function pickTier(mode: ResearchModelMode, complex: boolean): Tier {
-  if (mode === "cheap") return "cheap";
-  if (mode === "best") return "best";
-  if (mode === "current") return "balanced";
-  return complex ? "best" : "balanced";
+  if (tier === "fast") return ["fast", "balanced", "deep"];
+  if (tier === "deep") return ["deep", "balanced", "fast"];
+  return ["balanced", "fast", "deep"];
 }
 
 function hasModel(catalog: Map<string, Set<string>>, provider: string, model: string): boolean {
@@ -266,7 +235,7 @@ export async function resolveResearchModel(
   if (input.explicitModel) {
     return {
       model: toCliModel(input.explicitModel, provider),
-      mode: input.modelMode,
+      mode: input.mode,
       reason: "explicit model override",
       provider,
     };
@@ -276,23 +245,6 @@ export async function resolveResearchModel(
     ? toCliModel(input.currentModelId, provider)
     : undefined;
 
-  if (input.modelMode === "current" && currentModel) {
-    return {
-      model: currentModel,
-      mode: input.modelMode,
-      reason: "current model requested",
-      provider,
-    };
-  }
-
-  const complex = isComplexResearch({
-    task: input.task,
-    query: input.query,
-    maxResults: input.maxResults,
-    maxActions: input.maxActions,
-    maxCharsPerPage: input.maxCharsPerPage,
-  });
-  const tier = pickTier(input.modelMode, complex);
   const activeProvider =
     provider ??
     (input.currentModelId?.includes("/")
@@ -303,18 +255,18 @@ export async function resolveResearchModel(
     const spec = RESEARCH_TIER_MAP[activeProvider];
     if (spec) {
       const catalog = await loadModelCatalog(input.cwd);
-      for (const candidateTier of tierFallbackOrder(tier)) {
+      for (const candidateTier of tierFallbackOrder(input.mode)) {
         const model = modelForTier(spec, candidateTier);
         if (!model) continue;
         if (!hasModel(catalog, activeProvider, model)) continue;
 
         return {
           model: toCliModel(model, activeProvider),
-          mode: input.modelMode,
+          mode: input.mode,
           reason:
-            candidateTier === tier
-              ? `${input.modelMode} mode: using mapped ${candidateTier} tier`
-              : `${input.modelMode} mode: mapped ${tier} unavailable, using ${candidateTier} tier`,
+            candidateTier === input.mode
+              ? `${input.mode} mode: using mapped ${candidateTier} tier`
+              : `${input.mode} mode: mapped tier unavailable, using ${candidateTier} tier`,
           provider: activeProvider,
         };
       }
@@ -324,7 +276,7 @@ export async function resolveResearchModel(
   if (currentModel) {
     return {
       model: currentModel,
-      mode: input.modelMode,
+      mode: input.mode,
       reason: "no mapped model available; using current model",
       provider,
     };
@@ -332,7 +284,7 @@ export async function resolveResearchModel(
 
   return {
     model: DEFAULT_WEB_RESEARCH_MODEL,
-    mode: input.modelMode,
+    mode: input.mode,
     reason: "fallback default model",
     provider,
   };

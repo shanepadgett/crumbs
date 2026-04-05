@@ -20,7 +20,7 @@ import { keyHint, type ExtensionAPI, type ExtensionContext } from "@mariozechner
 import { Text } from "@mariozechner/pi-tui";
 import { Type, type Static } from "@sinclair/typebox";
 import { truncateInline } from "./shared/common.js";
-import { resolveResearchModel, type ResearchModelMode } from "./shared/research-model-selection.js";
+import { resolveResearchModel, type ResearchMode } from "./shared/research-model-selection.js";
 import { buildResearchSystemPrompt, buildResearchTask } from "./shared/research-prompts.js";
 import {
   runPathfinder,
@@ -33,8 +33,7 @@ const CHILD_AGENT_NAME = "Web Research Specialist";
 const SEARCH_ICON = "⌕";
 const FETCH_ICON = "⎘";
 
-type ModelMode = ResearchModelMode;
-type ResearchMode = "quick" | "balanced" | "deep";
+type ResearchModeAlias = "simple" | "cheap" | "expensive" | "quick" | "thorough";
 
 interface ResearchPreset {
   maxResults: number;
@@ -44,7 +43,7 @@ interface ResearchPreset {
 }
 
 const RESEARCH_PRESETS: Record<ResearchMode, ResearchPreset> = {
-  quick: {
+  fast: {
     maxResults: 6,
     maxSearches: 6,
     maxFetches: 4,
@@ -67,9 +66,10 @@ const DEFAULT_WEB_RESEARCH_MODEL = "claude-haiku-4-5";
 
 function normalizeResearchMode(value: unknown): ResearchMode | undefined {
   if (typeof value !== "string") return undefined;
-  const mode = value.trim().toLowerCase();
-  if (mode === "thorough") return "deep";
-  if (mode === "quick" || mode === "balanced" || mode === "deep") return mode;
+  const mode = value.trim().toLowerCase() as ResearchMode | ResearchModeAlias;
+  if (mode === "simple" || mode === "cheap" || mode === "quick") return "fast";
+  if (mode === "expensive" || mode === "thorough") return "deep";
+  if (mode === "fast" || mode === "balanced" || mode === "deep") return mode;
   return undefined;
 }
 
@@ -86,29 +86,24 @@ const WEBRESEARCH_PARAMS = Type.Object({
   model: Type.Optional(
     Type.String({
       description:
-        "Exact web research model override (e.g., openai/gpt-5). Takes precedence over modelMode.",
+        "Exact web research model override (e.g., openai/gpt-5). Takes precedence over researchMode.",
     }),
   ),
   researchMode: Type.Optional(
     Type.Union(
       [
-        Type.Literal("quick"),
+        Type.Literal("fast"),
         Type.Literal("balanced"),
         Type.Literal("deep"),
+        Type.Literal("simple"),
+        Type.Literal("cheap"),
+        Type.Literal("expensive"),
+        Type.Literal("quick"),
         Type.Literal("thorough"),
       ],
       {
         description:
-          "Research depth preset. quick = low-latency budget, balanced = default, deep = broader aggregate web action budget. `thorough` is accepted as a deprecated alias.",
-      },
-    ),
-  ),
-  modelMode: Type.Optional(
-    Type.Union(
-      [Type.Literal("auto"), Type.Literal("cheap"), Type.Literal("current"), Type.Literal("best")],
-      {
-        description:
-          "Model strategy. auto = choose based on task complexity, cheap = lower cost, current = use current session model, best = stronger provider model when possible.",
+          "Research preset that controls both budget and model tier. fast = low-latency + cheaper model, balanced = default, deep = larger budget + stronger model. `simple`/`cheap`/`quick` and `expensive`/`thorough` are accepted as deprecated aliases.",
       },
     ),
   ),
@@ -156,7 +151,6 @@ type WebResearchParams = Static<typeof WEBRESEARCH_PARAMS>;
 interface WebResearchDetails {
   status: "running" | "done" | "error";
   model: string;
-  modelMode?: ModelMode;
   researchMode?: ResearchMode;
   modelReason?: string;
   provider?: string;
@@ -204,20 +198,7 @@ function renderRunTag(
   const showUnknown = options?.showUnknownWhenMissing ?? false;
   const mode = normalizeResearchMode(details.researchMode);
   const modeTag = mode ?? (showUnknown ? "..." : "balanced");
-
-  const modelMode = details.modelMode;
-  const costTag =
-    modelMode === "cheap"
-      ? "$"
-      : modelMode === "best"
-        ? "$$$"
-        : modelMode === "auto" || modelMode === "current"
-          ? "$$"
-          : showUnknown
-            ? "..."
-            : "$$";
-
-  return `[${modeTag}/${costTag}]`;
+  return `[${modeTag}]`;
 }
 
 function activityLine(details: Partial<WebResearchDetails>, fallback?: string): string {
@@ -285,8 +266,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
     promptGuidelines: [
       "Prefer webresearch for all web information gathering, including single URLs.",
       "Always provide responseShape so results match the exact output format you need.",
-      "Use researchMode=quick for speed, balanced for normal work, and deep for broader web action budget.",
-      "Use modelMode=cheap for lightweight distillation and modelMode=best/current for advanced technical synthesis.",
+      "Use researchMode=fast for speed/cost, balanced for normal work, and deep for broader/stronger runs.",
       "Provide specific goals and constraints in task/query for better signal.",
     ],
     parameters: WEBRESEARCH_PARAMS,
@@ -305,8 +285,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       const task = truncateInline((args.task ?? "").trim(), 76);
       const tag = renderRunTag(
         {
-          researchMode: args.researchMode as ResearchMode | undefined,
-          modelMode: args.modelMode as ModelMode | undefined,
+          researchMode: normalizeResearchMode(args.researchMode),
         },
         { showUnknownWhenMissing: true },
       );
@@ -375,8 +354,6 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       const hasUrls = urls.length > 0;
       const researchMode = normalizeResearchMode(params.researchMode) ?? "balanced";
       const preset = RESEARCH_PRESETS[researchMode];
-      const modelMode = (params.modelMode ??
-        (researchMode === "quick" ? "cheap" : "auto")) as ModelMode;
 
       if (!hasQuery && !hasUrls) {
         return {
@@ -384,7 +361,6 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           details: {
             status: "error",
             model: DEFAULT_WEB_RESEARCH_MODEL,
-            modelMode,
             researchMode,
             error: "missing_input",
           } as WebResearchDetails,
@@ -412,14 +388,9 @@ export default function webResearchExtension(pi: ExtensionAPI) {
 
       const resolution = await resolveResearchModel({
         explicitModel: params.model,
-        modelMode,
+        mode: researchMode,
         provider: ctx.model?.provider ?? lastProvider,
         currentModelId: ctx.model?.id ?? lastModelId,
-        task: params.task,
-        query,
-        maxResults,
-        maxActions,
-        maxCharsPerPage,
         cwd: ctx.cwd,
       });
       const model = resolution.model;
@@ -468,8 +439,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           details: {
             status: "running",
             model,
-            modelMode: resolution.mode,
-            researchMode,
+            researchMode: resolution.mode,
             modelReason: resolution.reason,
             provider: resolution.provider,
             task: params.task,
@@ -521,8 +491,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             details: {
               status: "error",
               model,
-              modelMode: resolution.mode,
-              researchMode,
+              researchMode: resolution.mode,
               modelReason: resolution.reason,
               provider: resolution.provider,
               task: params.task,
@@ -547,8 +516,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             details: {
               status: "error",
               model,
-              modelMode: resolution.mode,
-              researchMode,
+              researchMode: resolution.mode,
               modelReason: resolution.reason,
               provider: resolution.provider,
               task: params.task,
@@ -575,8 +543,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           details: {
             status: "done",
             model: run.usage.model ?? model,
-            modelMode: resolution.mode,
-            researchMode,
+            researchMode: resolution.mode,
             modelReason: resolution.reason,
             provider: resolution.provider,
             task: params.task,
