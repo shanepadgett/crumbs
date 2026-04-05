@@ -18,7 +18,7 @@ export const WEBTOOLS_MAX_TIMEOUT = 600;
  */
 export function shouldRegisterRawWebTools(): boolean {
   return (
-    process.env.CRUMBS_PATHFINDER_CHILD === "1" || process.env.CRUMBS_ENABLE_RAW_WEB_TOOLS === "1"
+    process.env.CRUMBS_WEBRESEARCH_CHILD === "1" || process.env.CRUMBS_ENABLE_RAW_WEB_TOOLS === "1"
   );
 }
 

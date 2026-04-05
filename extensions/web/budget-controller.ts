@@ -3,7 +3,7 @@
  *
  * What it does:
  * - Runs only inside the isolated `webresearch` child process.
- * - Tracks separate websearch/webfetch budgets and steers the child from searching to fetching before final synthesis.
+ * - Tracks search-class (websearch + codesearch) and webfetch budgets, then steers the child from discovery to fetching before final synthesis.
  *
  * How to use it:
  * - Loaded automatically by `webresearch`; not intended for direct invocation.
@@ -18,21 +18,21 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { readResearchBudgetEnv } from "./shared/research-budget.js";
 
 const BLOCK_REASON =
-  "Web research budget exhausted. Do not call websearch or webfetch again. Produce the final answer from gathered evidence only.";
+  "Web research budget exhausted. Do not call websearch, codesearch, or webfetch again. Produce the final answer from gathered evidence only.";
 const SEARCH_BLOCK_REASON =
-  "Search budget exhausted. Do not call websearch again. Use the remaining budget on webfetch or finalize from gathered evidence.";
+  "Search budget exhausted. Do not call websearch or codesearch again. Use the remaining budget on webfetch or finalize from gathered evidence.";
 const FETCH_BLOCK_REASON =
   "Fetch budget exhausted. Do not call webfetch again. Finalize from gathered evidence or use any remaining search budget only if absolutely necessary.";
 const FINALIZE_MESSAGE = [
   "Stop searching and fetching now.",
   "Using only the information already gathered, produce the best possible final answer in the required response shape.",
-  "Do not call websearch or webfetch again.",
+  "Do not call websearch, codesearch, or webfetch again.",
   "Clearly note uncertainty or missing evidence where needed.",
 ].join(" ");
 const SWITCH_TO_FETCH_MESSAGE = [
   "Stop searching now.",
   "Use the remaining budget on webfetch for the strongest candidate pages.",
-  "Do not call websearch again unless explicitly re-directed.",
+  "Do not call websearch or codesearch again unless explicitly re-directed.",
 ].join(" ");
 const SWITCH_TO_FINALIZE_MESSAGE = [
   "Stop fetching now.",
@@ -41,7 +41,7 @@ const SWITCH_TO_FINALIZE_MESSAGE = [
 ].join(" ");
 
 export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
-  if (process.env.CRUMBS_PATHFINDER_CHILD !== "1") return;
+  if (process.env.CRUMBS_WEBRESEARCH_CHILD !== "1") return;
 
   const budget = readResearchBudgetEnv();
   const budgetEnabled = Object.values(budget).some((value) => value !== undefined);
@@ -89,7 +89,9 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
   };
 
   pi.on("tool_call", async (event) => {
-    if (event.toolName !== "websearch" && event.toolName !== "webfetch") {
+    const isSearchTool = event.toolName === "websearch" || event.toolName === "codesearch";
+    const isFetchTool = event.toolName === "webfetch";
+    if (!isSearchTool && !isFetchTool) {
       return undefined;
     }
 
@@ -98,12 +100,12 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
       return { block: true, reason: BLOCK_REASON };
     }
 
-    if (event.toolName === "websearch" && searchBudgetSpent()) {
+    if (isSearchTool && searchBudgetSpent()) {
       queueSearchRedirect(`max search calls reached (${budget.maxSearches})`);
       return { block: true, reason: SEARCH_BLOCK_REASON };
     }
 
-    if (event.toolName === "webfetch" && fetchBudgetSpent()) {
+    if (isFetchTool && fetchBudgetSpent()) {
       if (allBudgetsSpent() || totalBudgetSpent()) {
         queueFinalize("web research budget fully used");
         return { block: true, reason: BLOCK_REASON };
@@ -112,7 +114,7 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
       return { block: true, reason: FETCH_BLOCK_REASON };
     }
 
-    if (event.toolName === "websearch") searches += 1;
+    if (isSearchTool) searches += 1;
     else fetches += 1;
 
     if (totalBudgetSpent()) {
@@ -125,11 +127,11 @@ export default function webResearchBudgetControllerExtension(pi: ExtensionAPI) {
       return undefined;
     }
 
-    if (event.toolName === "websearch" && searchBudgetSpent()) {
+    if (isSearchTool && searchBudgetSpent()) {
       queueSearchRedirect("search budget fully used; switch to fetching best pages");
     }
 
-    if (event.toolName === "webfetch" && fetchBudgetSpent()) {
+    if (isFetchTool && fetchBudgetSpent()) {
       queueFetchRedirect("fetch budget fully used; finalize from gathered evidence");
     }
 

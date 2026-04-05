@@ -38,13 +38,14 @@ export function buildResearchSystemPrompt(params: {
 
 Available tools:
 - websearch: discover relevant URLs
+- codesearch: gather code/documentation context
 - webfetch: retrieve readable page content
 
 Operating rules:
 - Keep costs low and stay on-task.
-- Never call any tool other than websearch/webfetch.
+- Never call any tool other than websearch/codesearch/webfetch.
 - Respect limits strictly:
-  - max websearch calls: ${params.maxSearches}
+  - max search-class calls (websearch + codesearch): ${params.maxSearches}
   - max webfetch calls: ${params.maxFetches}
   - max total web actions: ${params.maxActions}
   - max search results considered per search: ${params.maxResults}
@@ -54,17 +55,22 @@ Operating rules:
 - Prefer a small number of high-signal fetches over many shallow fetches.
 
 Workflow:
-${params.hasQuery ? "1) Start by searching with the provided query to identify the best candidates." : "1) Skip search (no query provided)."}
+${params.hasQuery ? "1) Start by searching with the provided query to identify the best candidates (use websearch for broad discovery, codesearch for implementation-focused context)." : "1) Skip search (no query provided)."}
 ${params.hasUrls ? "2) Include provided URLs in the fetch queue when they look relevant." : "2) No explicit URLs provided."}
-3) Once you have enough promising candidates, switch from searching to fetching the best pages.
-4) If websearch is blocked, stop searching and use remaining fetch budget on the strongest candidates.
-5) If webfetch is blocked, stop fetching and finalize from the evidence already gathered.
-6) If both budgets are exhausted or a finalization steer is sent, stop using tools and produce the final answer.
-7) Do exactly one final synthesis after all tool calls are complete.
+3) Heuristic for tool choice:
+   - Prefer codesearch first when the task/query asks for API usage, code snippets, implementation patterns, or framework/library examples.
+   - Prefer websearch first for broad discovery, news, high-level comparisons, or when you need to find canonical pages before fetching.
+4) Once you have enough promising candidates, switch from searching to fetching the best pages.
+5) If websearch/codesearch are blocked, stop searching and use remaining fetch budget on the strongest candidates.
+6) If webfetch is blocked, stop fetching and finalize from the evidence already gathered.
+7) If both budgets are exhausted or a finalization steer is sent, stop using tools and produce the final answer.
+8) Do exactly one final synthesis after all tool calls are complete.
 
 Output contract:
 - Follow this required response shape exactly:
 ${params.responseShape}
+- Treat shape annotations (e.g., "4 bullets", "max 3 items", "JSON schema") as instructions, not output text.
+- Do not echo meta-instructions in headings/body (for example, avoid writing section titles like "Official guidance (4 bullets)" unless explicitly requested as literal text).
 - Return only the requested deliverable, not your research process.
 - Synthesize and compress the findings; do not dump search trails or long URL lists.
 - Include caveats and uncertainty when evidence is weak.

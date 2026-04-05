@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "type": "module",
   "pi": {
-    "extensions": ["./fetch.ts", "./search.ts", "./research.ts"]
+    "extensions": ["./fetch.ts", "./search.ts", "./code-search.ts", "./research.ts"]
   }
 }

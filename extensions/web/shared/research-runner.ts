@@ -1,8 +1,14 @@
 import { spawn } from "node:child_process";
 
-export type PathfinderPhase = "starting" | "searching" | "reading" | "synthesizing";
+export type ResearchPhase = "starting" | "searching" | "reading" | "synthesizing";
+export type ResearchActivity =
+  | "starting"
+  | "websearch"
+  | "codesearch"
+  | "webfetch"
+  | "synthesizing";
 
-export interface PathfinderUsage {
+export interface ResearchUsage {
   input: number;
   output: number;
   cost: number;
@@ -10,14 +16,16 @@ export interface PathfinderUsage {
   model?: string;
 }
 
-export interface PathfinderProgress {
-  phase: PathfinderPhase;
+export interface ResearchProgress {
+  phase: ResearchPhase;
+  activity: ResearchActivity;
   note?: string;
   searches: number;
+  codeSearches: number;
   fetches: number;
 }
 
-export interface RunPathfinderOptions {
+export interface RunResearchAgentOptions {
   cwd: string;
   task: string;
   systemPrompt: string;
@@ -25,15 +33,16 @@ export interface RunPathfinderOptions {
   extensionPaths: string[];
   signal?: AbortSignal;
   env?: Record<string, string | undefined>;
-  onProgress?: (progress: PathfinderProgress) => void;
+  onProgress?: (progress: ResearchProgress) => void;
 }
 
-export interface RunPathfinderResult {
+export interface RunResearchAgentResult {
   exitCode: number;
   output: string;
   stderr: string;
-  usage: PathfinderUsage;
+  usage: ResearchUsage;
   searches: number;
+  codeSearches: number;
   fetches: number;
   elapsedMs: number;
   abortedBy?: "signal";
@@ -96,7 +105,7 @@ function assistantText(message: JsonEvent["message"]): string {
   return messageText(message);
 }
 
-function usageFromMessage(message: JsonEvent["message"]): PathfinderUsage {
+function usageFromMessage(message: JsonEvent["message"]): ResearchUsage {
   return {
     input: message?.usage?.input ?? 0,
     output: message?.usage?.output ?? 0,
@@ -133,7 +142,9 @@ function extractToolArg(event: JsonEvent, key: "query" | "url"): string | undefi
   return undefined;
 }
 
-export async function runPathfinder(options: RunPathfinderOptions): Promise<RunPathfinderResult> {
+export async function runResearchAgent(
+  options: RunResearchAgentOptions,
+): Promise<RunResearchAgentResult> {
   const args: string[] = [
     "--mode",
     "json",
@@ -151,7 +162,7 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
 
   args.push("--append-system-prompt", options.systemPrompt, options.task);
 
-  const usage: PathfinderUsage = {
+  const usage: ResearchUsage = {
     input: 0,
     output: 0,
     cost: 0,
@@ -163,11 +174,19 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
   let finalOutput = "";
   let stderr = "";
   let searches = 0;
+  let codeSearches = 0;
   let fetches = 0;
   let abortedBy: "signal" | undefined;
   let budgetExhausted: true | undefined;
 
-  options.onProgress?.({ phase: "starting", searches, fetches, note: "launching process" });
+  options.onProgress?.({
+    phase: "starting",
+    activity: "starting",
+    searches,
+    codeSearches,
+    fetches,
+    note: "launching process",
+  });
 
   const exitCode = await new Promise<number>((resolve) => {
     const proc = spawn("pi", args, {
@@ -177,13 +196,13 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
       env: {
         ...process.env,
         ...options.env,
-        CRUMBS_PATHFINDER_CHILD: "1",
+        CRUMBS_WEBRESEARCH_CHILD: "1",
       },
     });
 
     let stdoutBuffer = "";
 
-    const emitProgress = (progress: PathfinderProgress) => {
+    const emitProgress = (progress: ResearchProgress) => {
       options.onProgress?.(progress);
     };
 
@@ -197,7 +216,23 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
           const query = extractToolArg(event, "query");
           emitProgress({
             phase: "searching",
+            activity: "websearch",
             searches,
+            codeSearches,
+            fetches,
+            note: query?.trim() || "",
+          });
+          return;
+        }
+
+        if (event.toolName === "codesearch") {
+          codeSearches++;
+          const query = extractToolArg(event, "query");
+          emitProgress({
+            phase: "searching",
+            activity: "codesearch",
+            searches,
+            codeSearches,
             fetches,
             note: query?.trim() || "",
           });
@@ -209,7 +244,9 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
           const url = extractToolArg(event, "url");
           emitProgress({
             phase: "reading",
+            activity: "webfetch",
             searches,
+            codeSearches,
             fetches,
             note: url?.trim() || "",
           });
@@ -218,10 +255,15 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
       }
 
       if (event.type === "message_update" && event.message?.role === "assistant") {
-        if ((searches > 0 || fetches > 0) && event.assistantMessageEvent?.type === "text_delta") {
+        if (
+          (searches > 0 || codeSearches > 0 || fetches > 0) &&
+          event.assistantMessageEvent?.type === "text_delta"
+        ) {
           emitProgress({
             phase: "synthesizing",
+            activity: "synthesizing",
             searches,
+            codeSearches,
             fetches,
             note: "",
           });
@@ -235,7 +277,9 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
           budgetExhausted = true;
           emitProgress({
             phase: "synthesizing",
+            activity: "synthesizing",
             searches,
+            codeSearches,
             fetches,
             note: "",
           });
@@ -301,6 +345,7 @@ export async function runPathfinder(options: RunPathfinderOptions): Promise<RunP
     stderr,
     usage,
     searches,
+    codeSearches,
     fetches,
     elapsedMs: Date.now() - startedAt,
     abortedBy,

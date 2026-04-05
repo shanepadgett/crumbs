@@ -3,12 +3,12 @@
  *
  * What it does:
  * - Reads per-run webresearch budget limits from child-process environment variables.
- * - Tracks separate websearch and webfetch budgets, plus an optional total action cap.
+ * - Tracks search-class (websearch/codesearch) and webfetch budgets, plus an optional total action cap.
  * - Provides optional per-page character cap for fetched content.
  *
  * How to use it:
- * - webresearch sets env vars when spawning Pathfinder.
- * - websearch/webfetch call claimSearch/claimFetch before executing network work.
+ * - webresearch sets env vars when spawning the web research child agent.
+ * - websearch/codesearch/webfetch call claimSearch/claimFetch before executing network work.
  * - webfetch reads maxCharsPerPage() to trim oversized page content.
  *
  * Example:

@@ -3,7 +3,7 @@
  *
  * What it does:
  * - Adds a `webresearch` tool that launches an isolated web research subagent.
- * - The subagent searches/fetches pages in disposable context and returns targeted findings.
+ * - The subagent can web-search, code-search, and fetch pages in disposable context, then return targeted findings.
  *
  * How to use it:
  * - Provide `task` plus `query`, `urls`, or both.
@@ -23,14 +23,16 @@ import { truncateInline } from "./shared/common.js";
 import { resolveResearchModel, type ResearchMode } from "./shared/research-model-selection.js";
 import { buildResearchSystemPrompt, buildResearchTask } from "./shared/research-prompts.js";
 import {
-  runPathfinder,
-  type PathfinderPhase,
-  type PathfinderUsage,
+  runResearchAgent,
+  type ResearchActivity,
+  type ResearchPhase,
+  type ResearchUsage,
 } from "./shared/research-runner.js";
 
 const WEB_RESEARCH_LABEL = "webresearch";
 const CHILD_AGENT_NAME = "Web Research Specialist";
 const SEARCH_ICON = "⌕";
+const CODE_SEARCH_ICON = "⚙";
 const FETCH_ICON = "⎘";
 
 type ResearchModeAlias = "simple" | "cheap" | "expensive" | "quick" | "thorough";
@@ -116,7 +118,7 @@ const WEBRESEARCH_PARAMS = Type.Object({
   maxSearches: Type.Optional(
     Type.Number({
       description:
-        "Max websearch calls allowed before the agent should stop searching and switch to fetching (defaults vary by researchMode; balanced defaults to 10).",
+        "Max search-class calls allowed before the agent should stop searching and switch to fetching (shared across websearch + codesearch; defaults vary by researchMode; balanced defaults to 10).",
     }),
   ),
   maxFetches: Type.Optional(
@@ -158,11 +160,13 @@ interface WebResearchDetails {
   responseShape?: string;
   query?: string;
   urls?: string[];
-  phase?: PathfinderPhase;
+  phase?: ResearchPhase;
   note?: string;
+  activity?: ResearchActivity;
   searches?: number;
+  codeSearches?: number;
   fetches?: number;
-  usage?: PathfinderUsage;
+  usage?: ResearchUsage;
   usageSummary?: string;
   elapsedMs?: number;
   error?: string;
@@ -175,19 +179,21 @@ function toLimit(value: number | undefined, fallback: number, min: number, max: 
 }
 
 function phaseSummary(
-  phase: PathfinderPhase,
+  phase: ResearchPhase,
+  activity: ResearchActivity,
   _searches: number,
+  _codeSearches: number,
   _fetches: number,
   note?: string,
 ): string {
   const trimmed = (note ?? "").trim();
+  const q = trimmed ? ` "${truncateInline(trimmed, 86)}"` : "";
+
+  if (activity === "websearch") return `web search${q}`;
+  if (activity === "codesearch") return `code search${q}`;
+  if (activity === "webfetch") return `fetch${q}`;
+  if (activity === "synthesizing") return "synthesizing";
   if (phase === "starting") return trimmed ? `starting — ${trimmed}` : "starting";
-  if (phase === "searching") {
-    return trimmed ? `searching "${truncateInline(trimmed, 86)}"` : "searching";
-  }
-  if (phase === "reading") {
-    return trimmed ? `fetching "${truncateInline(trimmed, 86)}"` : "fetching";
-  }
   return "synthesizing";
 }
 
@@ -205,17 +211,14 @@ function activityLine(details: Partial<WebResearchDetails>, fallback?: string): 
   if (fallback && fallback.trim()) return truncateInline(fallback.trim(), 110);
 
   const phase = details.phase ?? "starting";
+  const activity = details.activity ?? "starting";
   const note = (details.note ?? "").trim();
+  const q = note ? ` "${truncateInline(note, 86)}"` : "";
 
-  if (phase === "searching") {
-    return note ? `searching "${truncateInline(note, 86)}"` : "searching";
-  }
-
-  if (phase === "reading") {
-    return note ? `fetching "${truncateInline(note, 86)}"` : "fetching";
-  }
-
-  if (phase === "synthesizing") return "synthesizing";
+  if (activity === "websearch") return `web search${q}`;
+  if (activity === "codesearch") return `code search${q}`;
+  if (activity === "webfetch") return `fetch${q}`;
+  if (activity === "synthesizing" || phase === "synthesizing") return "synthesizing";
   return "starting";
 }
 
@@ -227,7 +230,7 @@ function formatElapsedShort(elapsedMs: number): string {
   return `${minutes}m${seconds}s`;
 }
 
-function usageSummary(usage: PathfinderUsage): string {
+function usageSummary(usage: ResearchUsage): string {
   return [
     `↑${usage.input} ↓${usage.output}`,
     `$${usage.cost.toFixed(4)}`,
@@ -239,12 +242,12 @@ function actionSummary(
   details: Partial<WebResearchDetails>,
   fg: (color: "error" | "muted", text: string) => string,
 ): string {
-  const text = `${SEARCH_ICON}${details.searches ?? 0} ${FETCH_ICON}${details.fetches ?? 0}`;
+  const text = `${SEARCH_ICON}${details.searches ?? 0} ${CODE_SEARCH_ICON}${details.codeSearches ?? 0} ${FETCH_ICON}${details.fetches ?? 0}`;
   return details.budgetExhausted ? fg("error", text) : fg("muted", text);
 }
 
 export default function webResearchExtension(pi: ExtensionAPI) {
-  if (process.env.CRUMBS_PATHFINDER_CHILD === "1") {
+  if (process.env.CRUMBS_WEBRESEARCH_CHILD === "1") {
     return;
   }
 
@@ -261,7 +264,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
     name: "webresearch",
     label: "Web Research",
     description:
-      "Research a task with an isolated web research subagent. It can search + fetch pages and return targeted findings.",
+      "Research a task with an isolated web research subagent. It can web-search, code-search, fetch pages, and return targeted findings.",
     promptSnippet: "Run isolated web research and return targeted findings",
     promptGuidelines: [
       "Prefer webresearch for all web information gathering, including single URLs.",
@@ -423,17 +426,20 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       const extensionPaths = [
         path.resolve(extensionDir, "budget-controller.ts"),
         path.resolve(extensionDir, "search.ts"),
+        path.resolve(extensionDir, "code-search.ts"),
         path.resolve(extensionDir, "fetch.ts"),
       ];
 
-      let phase: PathfinderPhase = "starting";
+      let phase: ResearchPhase = "starting";
+      let activity: ResearchActivity = "starting";
       let note = "";
       let searches = 0;
+      let codeSearches = 0;
       let fetches = 0;
       const startedAt = Date.now();
 
       const emitProgress = () => {
-        const text = phaseSummary(phase, searches, fetches, note);
+        const text = phaseSummary(phase, activity, searches, codeSearches, fetches, note);
         onUpdate?.({
           content: [{ type: "text", text }],
           details: {
@@ -447,8 +453,10 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             query,
             urls,
             phase,
+            activity,
             note,
             searches,
+            codeSearches,
             fetches,
             elapsedMs: Date.now() - startedAt,
           } as WebResearchDetails,
@@ -462,7 +470,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
       emitProgress();
 
       try {
-        const run = await runPathfinder({
+        const run = await runResearchAgent({
           cwd: ctx.cwd,
           task,
           systemPrompt,
@@ -478,8 +486,10 @@ export default function webResearchExtension(pi: ExtensionAPI) {
           },
           onProgress: (progress) => {
             phase = progress.phase;
+            activity = progress.activity;
             note = progress.note ?? "";
             searches = progress.searches;
+            codeSearches = progress.codeSearches;
             fetches = progress.fetches;
             emitProgress();
           },
@@ -500,6 +510,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
               urls,
               phase,
               searches: run.searches,
+              codeSearches: run.codeSearches,
               fetches: run.fetches,
               elapsedMs: run.elapsedMs,
               error: "canceled",
@@ -525,6 +536,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
               urls,
               phase,
               searches: run.searches,
+              codeSearches: run.codeSearches,
               fetches: run.fetches,
               usage: run.usage,
               elapsedMs: run.elapsedMs,
@@ -552,6 +564,7 @@ export default function webResearchExtension(pi: ExtensionAPI) {
             urls,
             phase: "synthesizing",
             searches: run.searches,
+            codeSearches: run.codeSearches,
             fetches: run.fetches,
             usage: run.usage,
             usageSummary: summary,
