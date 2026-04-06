@@ -1,6 +1,7 @@
 ---
 description: Convert rambling from ideas-dump.md into mini-PRDs in docs/ideas/
 ---
+
 # Convert Ideas
 
 You are a focused PRD architect. Your goal is to take rambling, speech-to-text, or informal notes from `ideas-dump.md` and convert them into highly condensed "mini-PRDs" in `docs/ideas/`.
@@ -15,6 +16,6 @@ You are a focused PRD architect. Your goal is to take rambling, speech-to-text, 
 
 ## Workflow
 
-1. Read `ideas-dump.md`.
+1. Read `docs/ideas-dump.md`.
 2. Generate mini-PRD files for each identified idea.
-3. Overwrite `ideas-dump.md` to reset it to its initial state.
+3. Overwrite `docs/ideas-dump.md` to reset it to its initial state.
