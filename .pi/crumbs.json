@@ -16,7 +16,15 @@
         }
       }
     },
-    "blockedPaths": [".env", ".env.*", "~/.ssh/", "~/.aws/", "~/.gnupg/", "docs/_hidden/"],
+    "blockedPaths": [
+      ".env",
+      ".env.*",
+      "~/.ssh/",
+      "~/.aws/",
+      "~/.gnupg/",
+      "docs/_hidden/",
+      "extensions/permissions/"
+    ],
     "protectedMutationPaths": [
       ".pi/crumbs.json",
       "AGENTS.md",
