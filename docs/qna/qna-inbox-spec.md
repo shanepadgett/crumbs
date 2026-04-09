@@ -1,0 +1,64 @@
+# QnA Inbox Specification
+
+## Product boundary
+
+- The system shall treat `/qna` as a simple current-branch question inbox.
+- The system shall treat `/qna` as opportunistic capture for the current chat branch rather than as a repo-scoped planning system.
+- The system shall provide `/qna-ledger` as the browsing and editing view for ordinary QnA items.
+- `/qna` and `/qna-ledger` shall not display or manage Grill Me interview sessions.
+
+## Entry and loop behavior
+
+- `/qna` shall be user initiated.
+- `/qna` shall run in smart merged mode without a mode picker.
+- When the user starts `/qna`, the system shall activate the agent-facing `qna` tool only for the current QnA loop.
+- While the agent-facing `qna` tool is active for `/qna`, the system shall still allow the agent to ask ordinary clarifying questions in chat when structured capture is unnecessary.
+- When the current `/qna` loop settles, the system shall deactivate the agent-facing `qna` tool.
+- When the current chat is attached to a Grill Me interview session, the system shall block `/qna` and direct the user back to Grill Me instead of mixing the two systems in one chat.
+
+## Branch-local state
+
+- The system shall maintain a hidden branch-local QnA ledger in session state.
+- The branch-local QnA ledger shall track ordinary QnA question records, answer states, notes, unsent edits, and send state.
+- The system shall maintain a branch-local durable scan boundary so repeated `/qna` runs do not rescan the full session.
+- When the user forks a pi session, the ordinary QnA ledger, durable scan boundary, and unsent edits shall fork with that branch.
+
+## Transcript extraction and reconciliation
+
+- When `/qna` runs, the system shall inspect only assistant and user transcript content plus branch-local ordinary QnA ledger state.
+- When `/qna` runs, the system shall stop transcript scanning at the most recent durable boundary.
+- When QnA processing completes successfully, including the no-unresolved case, the system shall advance the durable boundary.
+- When extraction is cancelled or fails before completion, the system shall not advance the durable boundary.
+- When the model determines that an unresolved ordinary QnA question has already been answered naturally in chat, the system shall close that question silently in the branch-local ledger.
+- When newer chat has replaced an older open ordinary QnA question with a meaningfully different decision, the system shall close the old question and track the newer one as a separate question.
+- When `/qna` reconciles ledger state, the system shall give the model existing unresolved question IDs to update.
+- When `/qna` reconciles ledger state, the system shall ask the model to extract net-new questions separately from unresolved question updates.
+
+## Submit and loop completion behavior
+
+- When a visible ordinary QnA question is left untouched on submit, the system shall keep that question `open` in the branch-local ledger.
+- When the form is submitted with no explicit outcomes in manual `/qna`, the system shall persist ledger state and notify the user without fabricating an agent response.
+- When the agent signals completion for the current `/qna` loop, the system shall be allowed to end that loop even if older open ordinary QnA items remain in the ledger.
+- When a `/qna` loop ends while older open ordinary QnA items remain, the system shall leave those items for future `/qna` or `/qna-ledger` work.
+
+## No-results behavior
+
+- When `/qna` finds no unresolved ordinary QnA questions, the system shall not open an empty review popup.
+- When `/qna` finds no unresolved ordinary QnA questions, the system shall record the successful scan boundary update and show a notification.
+
+## QnA ledger browser
+
+- When the user runs `/qna-ledger`, the system shall open a simple ordinary-QnA ledger overlay for the current branch.
+- The `/qna-ledger` overlay shall prioritize browsing and filtering ordinary QnA questions rather than cross-session planning.
+- The `/qna-ledger` overlay shall allow filtering by question state.
+- The `/qna-ledger` overlay shall allow answering, skipping, marking `needs_clarification`, reopening, and editing previously closed ordinary QnA questions.
+- When the user edits an ordinary QnA question from `/qna-ledger`, the system shall update the branch-local ledger immediately.
+- The `/qna-ledger` overlay shall provide a manual `Send updates` action.
+- When `/qna-ledger` sends updates, the system shall batch all unsent changed ordinary QnA items into one structured payload.
+- When `/qna-ledger` sends updates, the system shall send only items changed since the last send.
+- When `/qna-ledger` sends updates and any item is `needs_clarification`, the system shall reactivate the loop-scoped `qna` tool.
+
+## Export
+
+- The `/qna-ledger` overlay shall provide an export action.
+- When the user exports ordinary QnA state, the system shall write a timestamped Markdown snapshot under `docs/qna/`.
