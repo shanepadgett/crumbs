@@ -35,6 +35,8 @@
 - Once the objective is confirmed and the interview is active, the agent shall route substantive interview turns through the dedicated interview tool and use normal chat only for brief setup, status, or error text.
 - Interview question batches shall use explicit `screen: "question_batch" | "final_resolution"` semantics.
 - A `screen: "question_batch"` payload shall compile into one shared question-runtime request rather than redefining the low-level runtime protocol.
+- When a `screen: "question_batch"` form is submitted, the interview system shall consume the shared runtime's structured `question_outcomes` or `no_user_response` result rather than parsing freeform text.
+- When a `screen: "question_batch"` form closes or submits, the interview system shall preserve the returned `draftSnapshot` separately from committed submitted state.
 - A `screen: "final_resolution"` payload shall bypass the shared question runtime and use the dedicated interview final-resolution confirm screen.
 - A `screen: "final_resolution"` payload shall mean the agent wants to try to finish, but the interview shall complete only if the user accepts.
 - Each `screen: "question_batch"` payload shall contain the full current renderable question snapshot for that step rather than incremental patches.
@@ -60,6 +62,8 @@
 - `questions.json` shall store only each question's current shared state and latest submitted answer or note.
 - `questions.json` shall not store transition history, rejected drafts, or intermediate edit history.
 - `questions.json` shall keep enough structural data for deterministic resume without an LLM pass, including prompt, kind, option IDs, dependencies, question-graph activation rules, current shared state, and linked note fields.
+- `questions.json` shall keep canonical question definitions separate from normalized follow-up relationship metadata so repeated authored occurrences of the same `questionId` do not duplicate committed question records.
+- When follow-up relationships are stored for deterministic resume, `anyOfSelectedOptionIds` and `allOfSelectedOptionIds` shall be stored as occurrence-owned edge metadata rather than canonical question-definition fields.
 - `questions.json` shall store question records as an ordered array with explicit `questionId` fields.
 - Each committed interview question record shall use one normalized `currentState` object.
 - Topic grouping shall not be stored on question records and shall instead be derived by the agent during spec compilation.
@@ -79,6 +83,7 @@
 - The system shall maintain local runtime state under `.pi/local/interviews/<interviewSessionId>.json`.
 - `.pi/local/` shall be a git-ignored repo-local scratch area.
 - The local runtime file shall store current chat attachment, interview-owned persisted copies of unsent shared-runtime drafts keyed by `questionId`, and local stale flags.
+- The local runtime file shall store the latest shared-runtime `draftSnapshot` keyed by `questionId`, including hidden inactive branch drafts for currently inactive follow-up branches.
 - Unsent interview form drafts shall remain local-only runtime state.
 - The interview system shall own durable storage of interview drafts outside the live shared runtime form.
 - When the user pauses an interview with in-progress unsent edits, the system shall preserve those drafts for restoration on resume.
@@ -98,6 +103,7 @@
 - When the user resumes an interview session from a clean chat, the system shall continue it by importing the latest canonical state instead of reopening the original long-context chat.
 - When the system seeds a clean chat for interview start or resume, it shall inject only the interview objective plus a compact canonical summary derived from `questions.json` and `spec.json` rather than raw old transcript excerpts.
 - When an interview resumes in a fresh chat, the first visible interaction after seeding shall be the next unanswered or `needs_clarification` question form rather than an extra agent prose catch-up message.
+- When a paused or interrupted interview resumes, the system shall rehydrate the next compatible shared-runtime question batch from the latest saved local `draftSnapshot` for that session.
 - When the user resumes an interview session, the chooser shall list each saved session with its objective, status, last updated time, and stale-packet indicator.
 - The system should surface paused or interrupted interview sessions in the status line so they are easy to rediscover.
 - When an older chat tries to continue an interview session after another chat has already advanced the same `interviewSessionId`, the older chat shall have to refresh from the latest canonical state before it can continue asking new interview questions.

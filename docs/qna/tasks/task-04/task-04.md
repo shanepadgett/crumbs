@@ -26,6 +26,7 @@ Everything here is specific to ordinary QnA state discovery and reconciliation w
 - The system shall treat `/qna` as opportunistic capture for the current chat branch rather than as a repo-scoped planning system.
 - The system shall maintain a hidden branch-local QnA ledger in session state.
 - The branch-local QnA ledger shall track ordinary QnA question records, answer states, notes, unsent edits, and send state.
+- `/qna` shall persist the shared runtime's latest `draftSnapshot` keyed by `questionId` so cancelled edits and hidden inactive branch drafts can be restored later.
 - The system shall maintain a branch-local durable scan boundary so repeated `/qna` runs do not rescan the full session.
 - When the user forks a pi session, the ordinary QnA ledger, durable scan boundary, and unsent edits shall fork with that branch.
 - When `/qna` runs, the system shall inspect only assistant and user transcript content plus branch-local ordinary QnA ledger state.
@@ -40,6 +41,7 @@ Everything here is specific to ordinary QnA state discovery and reconciliation w
 ## Expected end-to-end outcome
 
 - `/qna` can incrementally discover and reconcile ordinary questions for the current branch without rescanning the entire transcript every time.
+- The branch-local ledger is ready to persist full shared-runtime `draftSnapshot` state for later restore without mixing it into transcript extraction.
 - Existing unresolved questions can be updated, silently closed, or replaced when newer chat changes the underlying decision.
 - Forked chats inherit the current ordinary QnA work instead of starting from nothing.
 

@@ -22,6 +22,7 @@
 - The system shall maintain a hidden branch-local QnA ledger in session state.
 - The branch-local QnA ledger shall track ordinary QnA question records, answer states, notes, unsent edits, and send state.
 - `/qna` shall own durable storage of ordinary QnA drafts and unsent edits outside the live shared runtime form.
+- `/qna` shall persist the shared runtime's latest `draftSnapshot` keyed by `questionId` so cancelled edits and hidden inactive branch drafts can be restored later.
 - The system shall maintain a branch-local durable scan boundary so repeated `/qna` runs do not rescan the full session.
 - When the user forks a pi session, the ordinary QnA ledger, durable scan boundary, and unsent edits shall fork with that branch.
 
@@ -38,6 +39,8 @@
 
 ## Submit and loop completion behavior
 
+- `/qna` shall consume the shared runtime's structured submit result (`question_outcomes` or `no_user_response`) rather than parsing freeform text.
+- When a shared runtime form closes or cancels during `/qna`, the system shall preserve the returned `draftSnapshot` in branch-local state without treating it as a send.
 - When a visible ordinary QnA question is left untouched on submit, the system shall keep that question `open` in the branch-local ledger.
 - When the form is submitted with no explicit outcomes in manual `/qna`, the system shall persist ledger state and notify the user without fabricating an agent response.
 - When the agent signals completion for the current `/qna` loop, the system shall be allowed to end that loop even if older open ordinary QnA items remain in the ledger.

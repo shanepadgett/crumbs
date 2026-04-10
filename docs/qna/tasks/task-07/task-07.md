@@ -38,6 +38,8 @@ Everything here is persistence and serialization. It is one committable and test
 - `questions.json` shall store only each question's current shared state and latest submitted answer or note.
 - `questions.json` shall not store transition history, rejected drafts, or intermediate edit history.
 - `questions.json` shall keep enough structural data for deterministic resume without an LLM pass, including prompt, kind, option IDs, dependencies, question-graph activation rules, current shared state, and linked note fields.
+- `questions.json` shall keep canonical question definitions separate from normalized follow-up relationship metadata so repeated authored occurrences of the same `questionId` do not duplicate committed question records.
+- When follow-up relationships are stored for deterministic resume, `anyOfSelectedOptionIds` and `allOfSelectedOptionIds` shall be stored as occurrence-owned edge metadata rather than canonical question-definition fields.
 - `questions.json` shall store question records as an ordered array with explicit `questionId` fields.
 - Each committed interview question record shall use one normalized `currentState` object.
 - Topic grouping shall not be stored on question records and shall instead be derived by the agent during spec compilation.
@@ -51,13 +53,14 @@ Everything here is persistence and serialization. It is one committable and test
 - The system shall maintain local runtime state under `.pi/local/interviews/<interviewSessionId>.json`.
 - `.pi/local/` shall be a git-ignored repo-local scratch area.
 - The local runtime file shall store current chat attachment, interview-owned persisted copies of unsent shared-runtime drafts keyed by `questionId`, and local stale flags.
+- The local runtime file shall store the latest shared-runtime `draftSnapshot` keyed by `questionId`, including hidden inactive branch drafts for currently inactive follow-up branches.
 - Unsent interview form drafts shall remain local-only runtime state.
 - The interview system shall own durable storage of interview drafts outside the live shared runtime form.
 
 ## Expected end-to-end outcome
 
 - Interview sessions have a stable on-disk shape that can be created, discovered, read, and regenerated deterministically.
-- Canonical committed state lives in `questions.json`, while local-only chat attachment and interview-owned draft state stay outside versioned interview files.
+- Canonical committed state lives in `questions.json`, while local-only chat attachment and the latest shared-runtime `draftSnapshot` stay outside versioned interview files.
 - `spec.json` and `resume-packet.json` can be regenerated from canonical question state instead of becoming independent sources of truth.
 
 ## User test at exit

@@ -72,21 +72,30 @@
 
 - The system shall support dormant follow-up questions in a question graph.
 - The system may accept follow-up relationships authored inline, but it shall normalize active questions by `questionId`.
+- When follow-up relationships are authored inline, `anyOfSelectedOptionIds` and `allOfSelectedOptionIds` shall be treated as occurrence-level activation metadata rather than canonical question-definition fields.
+- Root questions shall not declare `anyOfSelectedOptionIds` or `allOfSelectedOptionIds`.
 - The system shall allow follow-up activation from `yes_no` answers.
 - The system shall allow follow-up activation from specific `multiple_choice` options.
 - The system shall not allow follow-up activation from `freeform` inputs.
+- The system shall reject `followUps` under `freeform` questions because freeform inputs never activate follow-ups.
 - The system shall support simple activation rules based on `anyOfSelectedOptionIds` and `allOfSelectedOptionIds`.
+- When a follow-up occurrence under a `yes_no` or `multiple_choice` parent omits both activation arrays, the system shall activate it whenever the parent's current state is `answered`.
+- When evaluating follow-up activation, the system shall use only the parent's current `answered` state and current selected option IDs.
 - The system shall support recursive follow-up chains.
+- Root questions shall count as activation depth `0`.
 - The system shall enforce a maximum active follow-up depth of 3.
 - When a follow-up graph contains a cycle, the system shall prevent that cycle from activating.
 - The system shall render active questions as a dynamic flattened view of the active question graph.
 - When the active question set changes, the system shall recompute visible numbering from the active view instead of storing question numbers.
 - When two activation paths surface the same `questionId`, the system shall show that question only once.
 - When the same `questionId` is activated by multiple current paths, the system shall preserve combined activation provenance so the UI can explain why that question is visible.
+- When the same `questionId` is authored inline more than once, the canonical question definition shall match across occurrences after excluding nested follow-up lists and occurrence-level activation metadata.
+- When matching repeated occurrences of the same `questionId` declare different outgoing follow-up relationships, the normalized graph shall merge those outgoing relationships.
 - When a question declares `dependsOnQuestionIds`, the system shall order surfaced questions dependency-first.
 - A dependency shall count as resolved only when its current state is `answered`.
 - A dependency in state `open`, `skipped`, or `needs_clarification` shall not unlock dependent questions.
 - When a candidate question depends on an unresolved prerequisite in the same active view, the system shall suppress the dependent question until the prerequisite is resolved.
+- When an active candidate set contains a dependency cycle, the system shall suppress that cycle instead of surfacing an unstable order.
 - When a user answer change deactivates a follow-up branch, the system shall preserve that branch's unsent drafts as hidden branch state.
 - When a previously answered or closed follow-up branch becomes inactive, the system shall keep its prior result available for reactivation without treating it as currently active.
 
@@ -106,6 +115,8 @@
 ## Submission and payload rules
 
 - The system shall send structured payloads back to the agent rather than freeform `Q:` and `A:` text.
+- When a form is submitted, the shared runtime shall return the latest `draftSnapshot` alongside the structured submit envelope.
+- When a form is cancelled, the shared runtime shall return the latest `draftSnapshot` and no synthetic submit payload.
 - The system shall use a turn-level `requiresClarification` flag when any submitted question is in `needs_clarification` state.
 - When a form is submitted, the system shall include `answered`, `skipped`, and `needs_clarification` items in the payload.
 - When a form is submitted, the system shall omit untouched `open` items from the payload.

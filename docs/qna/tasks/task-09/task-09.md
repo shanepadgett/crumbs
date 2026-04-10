@@ -29,6 +29,8 @@ This is one committable and testable unit because it completes the active in-cha
 - Once the objective is confirmed and the interview is active, the agent shall route substantive interview turns through the dedicated interview tool and use normal chat only for brief setup, status, or error text.
 - Interview question batches shall use explicit `screen: "question_batch" | "final_resolution"` semantics.
 - A `screen: "question_batch"` payload shall compile into one shared question-runtime request rather than redefining the low-level runtime protocol.
+- When a `screen: "question_batch"` form is submitted, the interview system shall consume the shared runtime's structured `question_outcomes` or `no_user_response` result rather than parsing freeform text.
+- When a `screen: "question_batch"` form closes or submits, the interview system shall preserve the returned `draftSnapshot` separately from committed submitted state.
 - A `screen: "final_resolution"` payload shall bypass the shared question runtime and use the dedicated interview final-resolution confirm screen.
 - A `screen: "final_resolution"` payload shall mean the agent wants to try to finish, but the interview shall complete only if the user accepts.
 - Each `screen: "question_batch"` payload shall contain the full current renderable question snapshot for that step rather than incremental patches.
@@ -41,7 +43,7 @@ This is one committable and testable unit because it completes the active in-cha
 
 ## Expected end-to-end outcome
 
-- After objective confirmation, The interview system can conduct a real interview through its dedicated tool using small, objective-scoped batches that render through the shared runtime.
+- After objective confirmation, the interview system can conduct a real interview through its dedicated tool using small, objective-scoped batches that render through the shared runtime and return structured outcomes plus the latest `draftSnapshot`.
 - Final-resolution attempts bypass the shared runtime and use the dedicated confirm screen.
 - Pausing produces or reuses a resume packet correctly, while closing without Pause leaves the session interrupted with drafts intact.
 
