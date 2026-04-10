@@ -16,9 +16,10 @@
 - Each question shall expose a short primary `prompt`.
 - Each question may expose an optional `context` block.
 - The system shall allow per-run presentation fields to change without changing the stable `questionId`.
-- When a question can be reduced to a true yes or no decision, the system shall prefer `yes_no`.
-- When a question can be reduced to a finite set of options, the system shall prefer `multiple_choice`.
-- When a question cannot be reduced to `yes_no` or `multiple_choice` without losing essential nuance, the system shall use `freeform`.
+- When authoring a question payload, the agent shall prefer `yes_no` for decisions that are truly binary.
+- When authoring a question payload, the agent shall prefer `multiple_choice` when the decision can be reduced to a finite authored option set.
+- When authoring a question payload, the agent shall use `freeform` only when reducing the question to `yes_no` or `multiple_choice` would lose essential nuance.
+- The validator may emit best-effort authoring guidance when a chosen question kind appears obviously mismatched, but kind selection remains agent-authored rather than runtime-inferred.
 
 ## Recommendations and justification
 

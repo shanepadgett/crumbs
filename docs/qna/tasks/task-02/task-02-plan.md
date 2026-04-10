@@ -29,20 +29,20 @@ The cleanest architecture is to keep the task-01 request pipeline unchanged and 
    - **Current:** No `context` field exists in the schema or UI.
    - **Planned implementation move:** Add `context?: string`, validate it as a non-empty string when present, and keep expansion state shell-local in `form-shell.ts` so reusable draft state stays UI-agnostic.
 
-4. **Requirement:** `When a question can be reduced to a true yes or no decision, the system shall prefer yes_no.`
-   - **Status:** `partially satisfied`
-   - **Current:** The runtime supports `yes_no`, but cannot deterministically infer author intent.
-   - **Planned implementation move:** Treat this as caller-authoring guidance only; no runtime heuristic or rejection rule.
+4. **Requirement:** `When authoring a question payload, the agent shall prefer yes_no for decisions that are truly binary.`
+   - **Status:** `implemented`
+   - **Current:** Kind selection remains agent-authored, and the validator now emits best-effort authoring guidance for obvious yes/no mismatches.
+   - **Planned implementation move:** Keep enforcement at the authoring-guidance level rather than trying to make the runtime infer intent semantically.
 
-5. **Requirement:** `When a question can be reduced to a finite set of options, the system shall prefer multiple_choice.`
-   - **Status:** `partially satisfied`
-   - **Current:** The runtime supports `multiple_choice`, but cannot deterministically infer reducibility.
-   - **Planned implementation move:** Treat this as caller-authoring guidance only; no runtime heuristic or rejection rule.
+5. **Requirement:** `When authoring a question payload, the agent shall prefer multiple_choice when the decision can be reduced to a finite authored option set.`
+   - **Status:** `implemented`
+   - **Current:** The validator emits best-effort authoring guidance when a freeform suggested answer already enumerates a finite option set.
+   - **Planned implementation move:** Keep this as authoring guidance backed by validator hints rather than hard semantic rejection.
 
-6. **Requirement:** `When a question cannot be reduced to yes_no or multiple_choice without losing essential nuance, the system shall use freeform.`
-   - **Status:** `partially satisfied`
-   - **Current:** The runtime supports `freeform`, but cannot deterministically infer when nuance requires it.
-   - **Planned implementation move:** Treat this as caller-authoring guidance only; no runtime heuristic or rejection rule.
+6. **Requirement:** `When authoring a question payload, the agent shall use freeform only when reducing the question to yes_no or multiple_choice would lose essential nuance.`
+   - **Status:** `implemented`
+   - **Current:** Freeform remains agent-authored, and the validator now requires justification plus emits authoring guidance when a freeform choice looks reducible.
+   - **Planned implementation move:** Keep nuance judgment author-owned while using validator guidance to catch obvious misclassification.
 
 7. **Requirement:** `Every surfaced question shall include recommendation data.`
    - **Status:** `needs implementation`

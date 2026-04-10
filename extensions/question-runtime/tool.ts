@@ -28,6 +28,8 @@ function buildTemplate(): Record<string, unknown> {
         questionId: "q_scope_01",
         kind: "freeform",
         prompt: "What scope do you want to lock first?",
+        justification: "The runtime requires a justification block for every surfaced question.",
+        suggestedAnswer: "Lock the smallest high-confidence slice that can be reviewed end to end.",
       },
     ],
   };
