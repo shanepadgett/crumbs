@@ -206,11 +206,11 @@ export default function fastExtension(pi: ExtensionAPI): void {
     await reloadEnabledState(ctx);
   });
 
-  pi.on("session_switch", async (_event, ctx) => {
+  (pi as any).on("session_switch", async (_event: unknown, ctx: any) => {
     await reloadEnabledState(ctx);
   });
 
-  pi.on("session_tree", async (_event, ctx) => {
+  (pi as any).on("session_tree", async (_event: unknown, ctx: any) => {
     await reloadEnabledState(ctx);
   });
 

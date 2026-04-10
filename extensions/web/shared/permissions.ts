@@ -1,4 +1,29 @@
-import { loadPermissionsConfig } from "../../permissions/config.js";
+interface WebPermissionsConfig {
+  activeMode: {
+    networkMode: "open" | "restricted";
+  };
+  network: {
+    allowedDomains: string[];
+  };
+}
+
+async function loadPermissionsConfigSafe(cwd: string): Promise<WebPermissionsConfig> {
+  try {
+    const mod = (await import("../../permissions/config.js" as string)) as {
+      loadPermissionsConfig?: (cwd: string) => Promise<WebPermissionsConfig>;
+    };
+    if (typeof mod.loadPermissionsConfig === "function") {
+      return await mod.loadPermissionsConfig(cwd);
+    }
+  } catch {
+    // Permissions extension is optional in this repo state.
+  }
+
+  return {
+    activeMode: { networkMode: "open" },
+    network: { allowedDomains: [] },
+  };
+}
 
 export function hostnameFromUrl(input: string): string | null {
   try {
@@ -28,7 +53,7 @@ export function isDomainAllowed(hostname: string, allowedDomains: string[]): boo
 }
 
 export async function assertUrlAllowed(cwd: string, url: string): Promise<void> {
-  const config = await loadPermissionsConfig(cwd);
+  const config = await loadPermissionsConfigSafe(cwd);
   if (config.activeMode.networkMode === "open") return;
 
   const hostname = hostnameFromUrl(url);

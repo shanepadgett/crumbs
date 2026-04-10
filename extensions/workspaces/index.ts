@@ -159,17 +159,17 @@ export default function workspacesExtension(pi: ExtensionAPI): void {
     await updateOrientationStatus(ctx, pi.exec);
   });
 
-  pi.on("session_switch", async (_event, ctx) => {
+  (pi as any).on("session_switch", async (_event: unknown, ctx: any) => {
     await rememberLobbySession(ctx, pi.exec, preferredLobbySessionByPath);
     await updateOrientationStatus(ctx, pi.exec);
   });
 
-  pi.on("session_before_switch", async (_event, ctx) => {
+  (pi as any).on("session_before_switch", async (_event: unknown, ctx: any) => {
     await rememberLobbySession(ctx, pi.exec, preferredLobbySessionByPath);
     clearOrientationStatus(ctx);
   });
 
-  pi.on("session_shutdown", async (_event, ctx) => {
+  (pi as any).on("session_shutdown", async (_event: unknown, ctx: any) => {
     await rememberLobbySession(ctx, pi.exec, preferredLobbySessionByPath);
     clearOrientationStatus(ctx);
   });

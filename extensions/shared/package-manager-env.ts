@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { PermissionScratchSpace } from "../permissions/types.js";
+
+interface PermissionScratchSpace {
+  root: string;
+  home: string;
+  tmp: string;
+  cache: string;
+  state: string;
+  data: string;
+}
 
 const DEFAULT_SANDBOX_TMPDIR = "/tmp/claude";
 
