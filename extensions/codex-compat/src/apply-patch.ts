@@ -8,6 +8,19 @@ export interface ApplyPatchSummary {
   updated: string[];
   deleted: string[];
   moved: Array<{ from: string; to: string }>;
+  linesAdded: number;
+  linesRemoved: number;
+  changes: ApplyPatchChange[];
+  completedOperations: number;
+  totalOperations: number;
+}
+
+export interface ApplyPatchChange {
+  kind: "add" | "update" | "delete";
+  path: string;
+  move?: { from: string; to: string };
+  linesAdded: number;
+  linesRemoved: number;
 }
 
 type PatchOperation =
@@ -15,6 +28,7 @@ type PatchOperation =
       type: "add";
       path: string;
       content: string;
+      linesAdded: number;
     }
   | {
       type: "delete";
@@ -25,6 +39,8 @@ type PatchOperation =
       path: string;
       movePath?: string;
       chunks: UpdateFileChunk[];
+      linesAdded: number;
+      linesRemoved: number;
     };
 
 interface UpdateFileChunk {
@@ -100,7 +116,10 @@ function parseChunkLine(rawLine: string): { prefix: " " | "+" | "-"; text: strin
   return { prefix, text: rawLine.slice(1) };
 }
 
-function parseAddBody(lines: string[], startIndex: number): { content: string; nextIndex: number } {
+function parseAddBody(
+  lines: string[],
+  startIndex: number,
+): { content: string; lineCount: number; nextIndex: number } {
   const body: string[] = [];
   let index = startIndex;
 
@@ -116,6 +135,7 @@ function parseAddBody(lines: string[], startIndex: number): { content: string; n
 
   return {
     content: body.length === 0 ? "" : `${body.join("\n")}\n`,
+    lineCount: body.length,
     nextIndex: index,
   };
 }
@@ -124,12 +144,20 @@ function parseUpdateBody(
   lines: string[],
   startIndex: number,
   operationPath: string,
-): { movePath?: string; chunks: UpdateFileChunk[]; nextIndex: number } {
+): {
+  movePath?: string;
+  chunks: UpdateFileChunk[];
+  linesAdded: number;
+  linesRemoved: number;
+  nextIndex: number;
+} {
   const chunks: UpdateFileChunk[] = [];
   let index = startIndex;
   let movePath: string | undefined;
   let current: MutableChunk | undefined;
   let sawAnyChunk = false;
+  let linesAdded = 0;
+  let linesRemoved = 0;
 
   while (index < lines.length) {
     const line = lines[index];
@@ -173,6 +201,9 @@ function parseUpdateBody(
     const parsedLine = parseChunkLine(line);
     current.hasLines = true;
 
+    if (parsedLine.prefix === "+") linesAdded += 1;
+    if (parsedLine.prefix === "-") linesRemoved += 1;
+
     if (parsedLine.prefix === " " || parsedLine.prefix === "-") {
       current.oldLines.push(parsedLine.text);
     }
@@ -188,7 +219,7 @@ function parseUpdateBody(
     throw new Error(`Update file patch is missing chunk content: ${operationPath}`);
   }
 
-  return { movePath, chunks, nextIndex: index };
+  return { movePath, chunks, linesAdded, linesRemoved, nextIndex: index };
 }
 
 export function extractPatchPaths(input: string): string[] {
@@ -234,7 +265,7 @@ export function parsePatch(input: string): ParsedPatch {
     if (line.startsWith("*** Add File: ")) {
       const path = requirePath(line, "*** Add File: ");
       const body = parseAddBody(lines, index + 1);
-      operations.push({ type: "add", path, content: body.content });
+      operations.push({ type: "add", path, content: body.content, linesAdded: body.lineCount });
       index = body.nextIndex;
       continue;
     }
@@ -254,6 +285,8 @@ export function parsePatch(input: string): ParsedPatch {
         path,
         movePath: updateBody.movePath,
         chunks: updateBody.chunks,
+        linesAdded: updateBody.linesAdded,
+        linesRemoved: updateBody.linesRemoved,
       });
       index = updateBody.nextIndex;
       continue;
@@ -272,6 +305,10 @@ function splitLogicalLines(content: string): string[] {
     lines.pop();
   }
   return lines;
+}
+
+function countLogicalLines(content: string): number {
+  return splitLogicalLines(content).length;
 }
 
 function serializeLinesWithTrailingNewline(lines: string[]): string {
@@ -411,8 +448,12 @@ async function applyAdd(cwd: string, operation: Extract<PatchOperation, { type: 
 
 async function applyDelete(cwd: string, operation: Extract<PatchOperation, { type: "delete" }>) {
   const target = await resolveExistingPath(cwd, operation.path, "file");
+  const current = await readFile(target.canonicalPath, "utf8");
   await unlink(target.canonicalPath);
-  return target.inputPath;
+  return {
+    deleted: target.inputPath,
+    linesRemoved: countLogicalLines(current),
+  };
 }
 
 async function applyUpdate(cwd: string, operation: Extract<PatchOperation, { type: "update" }>) {
@@ -437,7 +478,36 @@ async function applyUpdate(cwd: string, operation: Extract<PatchOperation, { typ
   };
 }
 
-export async function applyPatch(cwd: string, input: string): Promise<ApplyPatchSummary> {
+function cloneApplyPatchSummary(summary: ApplyPatchSummary): ApplyPatchSummary {
+  return {
+    added: [...summary.added],
+    updated: [...summary.updated],
+    deleted: [...summary.deleted],
+    moved: summary.moved.map((move) => ({ ...move })),
+    linesAdded: summary.linesAdded,
+    linesRemoved: summary.linesRemoved,
+    changes: summary.changes.map((change) => ({
+      ...change,
+      move: change.move ? { ...change.move } : undefined,
+    })),
+    completedOperations: summary.completedOperations,
+    totalOperations: summary.totalOperations,
+  };
+}
+
+async function notifyProgress(
+  onProgress: ((summary: ApplyPatchSummary) => void | Promise<void>) | undefined,
+  summary: ApplyPatchSummary,
+) {
+  if (!onProgress) return;
+  await onProgress(cloneApplyPatchSummary(summary));
+}
+
+export async function applyPatch(
+  cwd: string,
+  input: string,
+  onProgress?: (summary: ApplyPatchSummary) => void | Promise<void>,
+): Promise<ApplyPatchSummary> {
   const parsed = parsePatch(input);
   if (parsed.operations.length === 0) {
     throw new Error("No files were modified.");
@@ -456,22 +526,58 @@ export async function applyPatch(cwd: string, input: string): Promise<ApplyPatch
       updated: [],
       deleted: [],
       moved: [],
+      linesAdded: 0,
+      linesRemoved: 0,
+      changes: [],
+      completedOperations: 0,
+      totalOperations: parsed.operations.length,
     };
 
     for (const operation of parsed.operations) {
       if (operation.type === "add") {
-        summary.added.push(await applyAdd(cwd, operation));
+        const added = await applyAdd(cwd, operation);
+        summary.added.push(added);
+        summary.linesAdded += operation.linesAdded;
+        summary.changes.push({
+          kind: "add",
+          path: added,
+          linesAdded: operation.linesAdded,
+          linesRemoved: 0,
+        });
+        summary.completedOperations += 1;
+        await notifyProgress(onProgress, summary);
         continue;
       }
 
       if (operation.type === "delete") {
-        summary.deleted.push(await applyDelete(cwd, operation));
+        const result = await applyDelete(cwd, operation);
+        summary.deleted.push(result.deleted);
+        summary.linesRemoved += result.linesRemoved;
+        summary.changes.push({
+          kind: "delete",
+          path: result.deleted,
+          linesAdded: 0,
+          linesRemoved: result.linesRemoved,
+        });
+        summary.completedOperations += 1;
+        await notifyProgress(onProgress, summary);
         continue;
       }
 
       const result = await applyUpdate(cwd, operation);
       summary.updated.push(result.updated);
       if (result.moved) summary.moved.push(result.moved);
+      summary.linesAdded += operation.linesAdded;
+      summary.linesRemoved += operation.linesRemoved;
+      summary.changes.push({
+        kind: "update",
+        path: result.moved?.to ?? result.updated,
+        move: result.moved,
+        linesAdded: operation.linesAdded,
+        linesRemoved: operation.linesRemoved,
+      });
+      summary.completedOperations += 1;
+      await notifyProgress(onProgress, summary);
     }
 
     return summary;

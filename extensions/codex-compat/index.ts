@@ -20,7 +20,7 @@ import type { Model } from "@mariozechner/pi-ai";
 import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { applyPatch, type ApplyPatchSummary } from "./src/apply-patch.js";
+import { applyPatch, type ApplyPatchChange, type ApplyPatchSummary } from "./src/apply-patch.js";
 import { parseApplyPatchInvocation } from "./src/apply-patch-invocation.js";
 import { type CodexCompatCapabilities, getCodexCompatCapabilities } from "./src/capabilities.js";
 import { loadImageFile } from "./src/view-image.js";
@@ -71,35 +71,65 @@ function renderApplyPatchCall(args: any, theme: any) {
   );
 }
 
-function renderApplyPatchResult(result: any, options: { expanded: boolean }, theme: any) {
-  const details = result.details as
-    | {
-        added: string[];
-        updated: string[];
-        deleted: string[];
-        moved: Array<{ from: string; to: string }>;
-      }
-    | undefined;
+function formatApplyPatchProgress(summary: ApplyPatchSummary): string {
+  const noun = summary.totalOperations === 1 ? "file" : "files";
+  return `${summary.completedOperations}/${summary.totalOperations} ${noun}`;
+}
 
-  if (!details) return new Text("", 0, 0);
-
-  const summary = [
-    details.added.length > 0 ? `+${details.added.length}` : "",
-    details.updated.length > 0 ? `~${details.updated.length}` : "",
-    details.deleted.length > 0 ? `-${details.deleted.length}` : "",
-    details.moved.length > 0 ? `>${details.moved.length}` : "",
+function formatApplyPatchBadge(summary: ApplyPatchSummary): string {
+  return [
+    summary.linesAdded > 0 ? `+${summary.linesAdded}` : "",
+    summary.linesRemoved > 0 ? `-${summary.linesRemoved}` : "",
+    summary.updated.length > 0 ? `~${summary.updated.length}` : "",
+    summary.moved.length > 0 ? `>${summary.moved.length}` : "",
   ]
     .filter(Boolean)
     .join(" ");
-  const lines: string[] = [];
-  for (const path of details.added) lines.push(`+ ${path}`);
-  for (const path of details.updated) lines.push(`~ ${path}`);
-  for (const path of details.deleted) lines.push(`- ${path}`);
-  for (const move of details.moved) lines.push(`> ${move.from} -> ${move.to}`);
+}
+
+function formatApplyPatchDelta(change: ApplyPatchChange): string {
+  const parts = [
+    change.linesAdded > 0 ? `+${change.linesAdded}` : "",
+    change.linesRemoved > 0 ? `-${change.linesRemoved}` : "",
+  ].filter(Boolean);
+
+  return parts.length > 0 ? ` (${parts.join(" ")})` : "";
+}
+
+function formatApplyPatchChange(change: ApplyPatchChange): string {
+  if (change.move) {
+    return `> ${change.move.from} -> ${change.move.to}${formatApplyPatchDelta(change)}`;
+  }
+
+  const prefix = change.kind === "add" ? "+" : change.kind === "delete" ? "-" : "~";
+  return `${prefix} ${change.path}${formatApplyPatchDelta(change)}`;
+}
+
+function formatApplyPatchProgressContent(summary: ApplyPatchSummary): string {
+  return `Applying patch (${formatApplyPatchProgress(summary)})...`;
+}
+
+function renderApplyPatchResult(
+  result: any,
+  options: { expanded: boolean; isPartial?: boolean },
+  theme: any,
+) {
+  const details = result.details as ApplyPatchSummary | undefined;
+
+  if (!details) return new Text("", 0, 0);
+
+  const progress = options.isPartial ? formatApplyPatchProgress(details) : "";
+  const summary = formatApplyPatchBadge(details);
+  const lines = details.changes.map((change) => formatApplyPatchChange(change));
   const hasExpandableContent = lines.length > 0;
 
   if (!options.expanded) {
-    const compact = summary ? theme.fg("muted", `[${summary}]`) : "";
+    const compact = [
+      progress ? theme.fg("muted", progress) : "",
+      summary ? theme.fg("muted", `[${summary}]`) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     const hint = hasExpandableContent
       ? theme.fg("muted", `(${keyHint("app.tools.expand", "to expand")})`)
       : "";
@@ -112,7 +142,11 @@ function renderApplyPatchResult(result: any, options: { expanded: boolean }, the
   const expandedHint = hasExpandableContent
     ? theme.fg("muted", `(${keyHint("app.tools.expand", "to collapse")})`)
     : "";
-  const footer = [summary ? theme.fg("muted", `[${summary}]`) : "", expandedHint]
+  const footer = [
+    progress ? theme.fg("muted", progress) : "",
+    summary ? theme.fg("muted", `[${summary}]`) : "",
+    expandedHint,
+  ]
     .filter(Boolean)
     .join(" ");
   const withSummary = footer ? `${body}\n${footer}` : body;
@@ -272,9 +306,22 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     renderResult(result, options, theme) {
       return renderApplyPatchResult(result, options, theme);
     },
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, onUpdate, ctx) {
       const parsedInput = await parseApplyPatchInvocation(ctx.cwd, params.input);
-      const summary = await applyPatch(parsedInput.effectiveCwd, parsedInput.patch);
+      const summary = await applyPatch(
+        parsedInput.effectiveCwd,
+        parsedInput.patch,
+        async (partial) => {
+          await onUpdate?.({
+            content: plainTextResult(formatApplyPatchProgressContent(partial)),
+            details: {
+              ...partial,
+              invocationKind: parsedInput.kind,
+              effectiveCwd: parsedInput.effectiveCwd,
+            },
+          });
+        },
+      );
       return {
         content: plainTextResult(formatApplyPatchContent(summary)),
         details: {
