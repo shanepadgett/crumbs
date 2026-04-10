@@ -12,6 +12,7 @@
 - `/qna` shall be user initiated.
 - `/qna` shall run in smart merged mode without a mode picker.
 - When the user starts `/qna`, the system shall activate the agent-facing `qna` tool only for the current QnA loop.
+- The agent-facing `qna` tool shall remain distinct from the low-level shared question-runtime request tool and shall use that runtime only when structured forms are needed.
 - While the agent-facing `qna` tool is active for `/qna`, the system shall still allow the agent to ask ordinary clarifying questions in chat when structured capture is unnecessary.
 - When the current `/qna` loop settles, the system shall deactivate the agent-facing `qna` tool.
 - When the current chat is attached to a Grill Me interview session, the system shall block `/qna` and direct the user back to Grill Me instead of mixing the two systems in one chat.
@@ -20,6 +21,7 @@
 
 - The system shall maintain a hidden branch-local QnA ledger in session state.
 - The branch-local QnA ledger shall track ordinary QnA question records, answer states, notes, unsent edits, and send state.
+- `/qna` shall own durable storage of ordinary QnA drafts and unsent edits outside the live shared runtime form.
 - The system shall maintain a branch-local durable scan boundary so repeated `/qna` runs do not rescan the full session.
 - When the user forks a pi session, the ordinary QnA ledger, durable scan boundary, and unsent edits shall fork with that branch.
 

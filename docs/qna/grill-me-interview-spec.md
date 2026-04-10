@@ -26,13 +26,16 @@
 
 - Grill Me shall create a distinct interview session with its own stable `grillSessionId`.
 - Grill Me shall use its own dedicated agent-facing tool after objective confirmation.
+- The Grill Me dedicated agent tool shall remain distinct from the low-level shared question-runtime tool.
 - Objective exploration shall happen before that dedicated Grill Me tool is active.
 - While Grill Me is running, the system shall scope questions to the interview objective.
 - While Grill Me is running, the system shall ignore unrelated open questions instead of mixing them into the interview.
 - While Grill Me is running, the system shall instruct the agent to ask the smallest semantically valid batch of questions and shall cap each batch at 3 questions.
 - When Grill Me can resolve a decision with a smaller batch, the system shall prefer 1 question over 2 or 3.
 - Once the objective is confirmed and Grill Me is active, the agent shall route substantive interview turns through the dedicated Grill Me tool and use normal chat only for brief setup, status, or error text.
-- Grill Me question batches shall use explicit `screen: "question_batch" | "final_resolution"` semantics rather than `loopAction`.
+- Grill Me question batches shall use explicit `screen: "question_batch" | "final_resolution"` semantics.
+- A `screen: "question_batch"` payload shall compile into one shared question-runtime request rather than redefining the low-level runtime protocol.
+- A `screen: "final_resolution"` payload shall bypass the shared question runtime and use the dedicated Grill Me final-resolution confirm screen.
 - A `screen: "final_resolution"` payload shall mean the agent wants to try to finish, but the interview shall complete only if the user accepts.
 - Each `screen: "question_batch"` payload shall contain the full current renderable question snapshot for that step rather than incremental patches.
 
@@ -56,7 +59,7 @@
 - `questions.json` shall keep all linked Grill Me question records in their current shared state, including answered and skipped questions, instead of only unresolved questions.
 - `questions.json` shall store only each question's current shared state and latest submitted answer or note.
 - `questions.json` shall not store transition history, rejected drafts, or intermediate edit history.
-- `questions.json` shall keep enough structural data for deterministic resume without an LLM pass, including prompt, kind, option IDs, dependencies, follow-up activation rules, current shared state, and linked note fields.
+- `questions.json` shall keep enough structural data for deterministic resume without an LLM pass, including prompt, kind, option IDs, dependencies, question-graph activation rules, current shared state, and linked note fields.
 - `questions.json` shall store question records as an ordered array with explicit `questionId` fields.
 - Each committed Grill Me question record shall use one normalized `currentState` object.
 - Topic grouping shall not be stored on question records and shall instead be derived by the agent during spec compilation.
@@ -75,8 +78,9 @@
 
 - The system shall maintain local runtime state under `.pi/local/interviews/<grillSessionId>.json`.
 - `.pi/local/` shall be a git-ignored repo-local scratch area.
-- The local runtime file shall store current chat attachment, unsent drafts keyed by `questionId`, and local stale flags.
+- The local runtime file shall store current chat attachment, Grill Me-owned persisted copies of unsent shared-runtime drafts keyed by `questionId`, and local stale flags.
 - Unsent Grill Me form drafts shall remain local-only runtime state.
+- Grill Me shall own durable storage of interview drafts outside the live shared runtime form.
 - When the user pauses Grill Me with in-progress unsent edits, the system shall preserve those drafts for restoration on resume.
 
 ## Pause and interruption
