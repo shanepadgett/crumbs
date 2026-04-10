@@ -9,10 +9,17 @@
         "networkMode": "open",
         "direct": {
           "mutation": "paths",
-          "allowPaths": ["docs/research/**/*.md", "docs/notes/**/*.md", "docs/plans/**/*.md"]
+          "allowPaths": [
+            "docs/research/**/*.md",
+            "docs/notes/**/*.md",
+            "docs/plans/**/*.md"
+          ]
         },
         "shell": {
-          "writeRoots": [".git/", "/tmp"]
+          "writeRoots": [
+            ".git/",
+            "/tmp"
+          ]
         }
       }
     },
