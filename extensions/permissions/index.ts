@@ -34,6 +34,7 @@ import {
   type ExtensionCommandContext,
   type ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
+import { clearPermissionsModeSetter, registerPermissionsModeSetter } from "./bridge.js";
 import { loadPermissionsConfig, withSelectedMode } from "./config.js";
 import { evaluateMutationPath, evaluateReadPath } from "./direct-tools.js";
 import { findInterlockMatch } from "./interlock.js";
@@ -162,6 +163,16 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     syncStatus(ctx, runtime, currentConfig.ui.showFooterStatus);
   }
 
+  const applyMode = async (modeKey: string, ctx: ExtensionContext): Promise<boolean> => {
+    const config = await ensureConfig(ctx.cwd);
+    if (!config.modes[modeKey]) return false;
+
+    await switchMode(modeKey, ctx, { persist: true });
+    return true;
+  };
+
+  registerPermissionsModeSetter(applyMode);
+
   pi.registerTool({
     ...baseBashTool,
     label: "bash (permissions)",
@@ -188,11 +199,12 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     }
   });
 
-  pi.on("session_switch", async (_event, ctx) => {
+  (pi as any).on("session_switch", async (_event: unknown, ctx: ExtensionContext) => {
     await initializeSessionPermissions(ctx);
   });
 
   pi.on("session_shutdown", async () => {
+    clearPermissionsModeSetter(applyMode);
     await resetSandbox();
   });
 
@@ -389,6 +401,18 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     description: "Choose permissions mode",
     handler: async (_args, ctx: ExtensionCommandContext) => {
       const config = await ensureConfig(ctx.cwd);
+      const requestedMode = _args.trim();
+
+      if (requestedMode.length > 0) {
+        if (!config.modes[requestedMode]) {
+          ctx.ui.notify(`permissions: unknown mode ${requestedMode}`, "warning");
+          return;
+        }
+
+        await setModeWithConfirmation(requestedMode, ctx);
+        return;
+      }
+
       const choices = config.modeOrder.map((modeKey) => {
         const mode = config.modes[modeKey];
         const parts = [mode.label];
