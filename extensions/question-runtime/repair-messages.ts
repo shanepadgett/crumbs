@@ -1,6 +1,10 @@
-import type { ValidationIssue } from "./types.js";
+import type {
+  QuestionRuntimeQuestionDraft,
+  QuestionRuntimeStructuredSubmitResult,
+  ValidationIssue,
+} from "./types.js";
 
-const CUSTOM_TYPE = "question-runtime.control";
+export const QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE = "question-runtime.control";
 
 function formatIssue(issue: ValidationIssue): string {
   const parts = [`- ${issue.path}: ${issue.message}`];
@@ -34,7 +38,7 @@ export function buildValidationFailureMessage(input: {
   ].join("\n");
 
   return {
-    customType: CUSTOM_TYPE,
+    customType: QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE,
     content,
     display: false,
     details: {
@@ -57,14 +61,8 @@ export function buildRetryGrantedMessage(input: {
   allowedFailures: number;
 }) {
   return {
-    customType: CUSTOM_TYPE,
-    content: [
-      "Retry block granted for authorized request.",
-      `requestId: ${input.requestId}`,
-      `path: @${input.path}`,
-      `projectRelativePath: ${input.projectRelativePath}`,
-      `allowedFailures: ${input.allowedFailures}`,
-    ].join("\n"),
+    customType: QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE,
+    content: `Question runtime retry granted for ${input.requestId}`,
     display: false,
     details: {
       type: "retry_granted",
@@ -82,19 +80,56 @@ export function buildAbortMessage(input: {
   projectRelativePath: string;
 }) {
   return {
-    customType: CUSTOM_TYPE,
-    content: [
-      "Authorized request aborted by user decision.",
-      `requestId: ${input.requestId}`,
-      `path: @${input.path}`,
-      `projectRelativePath: ${input.projectRelativePath}`,
-    ].join("\n"),
+    customType: QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE,
+    content: `Question runtime request aborted: ${input.requestId}`,
     display: false,
     details: {
       type: "aborted",
       requestId: input.requestId,
       path: `@${input.path}`,
       projectRelativePath: input.projectRelativePath,
+    },
+  };
+}
+
+export function buildFormSubmittedMessage(input: {
+  requestId: string;
+  path: string;
+  projectRelativePath: string;
+  draftSnapshot: QuestionRuntimeQuestionDraft[];
+  submitResult: QuestionRuntimeStructuredSubmitResult;
+}) {
+  return {
+    customType: QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE,
+    content: `Question runtime form submitted: ${input.requestId}`,
+    display: false,
+    details: {
+      type: "form_submitted",
+      requestId: input.requestId,
+      path: `@${input.path}`,
+      projectRelativePath: input.projectRelativePath,
+      draftSnapshot: input.draftSnapshot,
+      submitResult: input.submitResult,
+    },
+  };
+}
+
+export function buildFormCancelledMessage(input: {
+  requestId: string;
+  path: string;
+  projectRelativePath: string;
+  draftSnapshot: QuestionRuntimeQuestionDraft[];
+}) {
+  return {
+    customType: QUESTION_RUNTIME_CONTROL_CUSTOM_TYPE,
+    content: `Question runtime form cancelled: ${input.requestId}`,
+    display: false,
+    details: {
+      type: "form_cancelled",
+      requestId: input.requestId,
+      path: `@${input.path}`,
+      projectRelativePath: input.projectRelativePath,
+      draftSnapshot: input.draftSnapshot,
     },
   };
 }

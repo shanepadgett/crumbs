@@ -3,7 +3,7 @@
  *
  * What it does:
  * - Adds shared low-level question request plumbing for authorized JSON files.
- * - Validates request payloads, sends hidden repair messages, enforces retry prompts, and launches a read-only form shell.
+ * - Validates request payloads, sends hidden repair messages, enforces retry prompts, and launches an interactive form shell.
  *
  * How to use it:
  * - Call `question_runtime_request`, write JSON to the issued path, and keep repairing in place until valid.
@@ -18,6 +18,8 @@ import { showOptionPicker } from "../shared/option-picker.js";
 import { showQuestionRuntimeFormShell } from "./form-shell.js";
 import {
   buildAbortMessage,
+  buildFormCancelledMessage,
+  buildFormSubmittedMessage,
   buildRetryGrantedMessage,
   buildValidationFailureMessage,
 } from "./repair-messages.js";
@@ -38,7 +40,9 @@ interface ReadyQueueItem {
 type ControlMessage =
   | ReturnType<typeof buildValidationFailureMessage>
   | ReturnType<typeof buildRetryGrantedMessage>
-  | ReturnType<typeof buildAbortMessage>;
+  | ReturnType<typeof buildAbortMessage>
+  | ReturnType<typeof buildFormSubmittedMessage>
+  | ReturnType<typeof buildFormCancelledMessage>;
 
 export default function questionRuntimeExtension(pi: ExtensionAPI): void {
   const store = new QuestionRuntimeRequestStore(pi);
@@ -168,11 +172,33 @@ export default function questionRuntimeExtension(pi: ExtensionAPI): void {
     const locked = store.lockRequest(item.requestId);
     if (!locked) return;
 
-    await showQuestionRuntimeFormShell(ctxRef, {
+    const result = await showQuestionRuntimeFormShell(ctxRef, {
       requestId: item.requestId,
       projectRelativePath: locked.projectRelativePath,
       request: item.request,
     });
+
+    if (result.action === "submit") {
+      sendHiddenMessage(
+        buildFormSubmittedMessage({
+          requestId: item.requestId,
+          path: locked.path,
+          projectRelativePath: locked.projectRelativePath,
+          draftSnapshot: result.draftSnapshot,
+          submitResult: result.submitResult,
+        }),
+      );
+      return;
+    }
+
+    sendHiddenMessage(
+      buildFormCancelledMessage({
+        requestId: item.requestId,
+        path: locked.path,
+        projectRelativePath: locked.projectRelativePath,
+        draftSnapshot: result.draftSnapshot,
+      }),
+    );
   }
 
   async function flushVisibleQueue(): Promise<void> {

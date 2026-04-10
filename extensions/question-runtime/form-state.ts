@@ -1,4 +1,5 @@
-import type { FlattenedQuestion } from "./question-model.js";
+import { getSelectableOptionIds } from "./question-model.js";
+import type { ActiveQuestionView, NormalizedQuestionGraph } from "./question-graph.js";
 import type {
   AuthorizedQuestionNode,
   QuestionClosureState,
@@ -6,6 +7,7 @@ import type {
   QuestionRuntimeFormResult,
   QuestionRuntimeQuestionDraft,
   QuestionRuntimeQuestionOutcome,
+  QuestionRuntimeStructuredSubmitResult,
   YesNoOptionId,
 } from "./types.js";
 
@@ -73,18 +75,78 @@ function cloneDraft(draft: QuestionRuntimeQuestionDraft): QuestionRuntimeQuestio
 }
 
 export function createQuestionRuntimeFormState(
-  flattenedQuestions: FlattenedQuestion[],
+  graph: NormalizedQuestionGraph,
+  draftSnapshot?: QuestionRuntimeQuestionDraft[],
 ): QuestionRuntimeFormState {
   const questions: Record<string, QuestionRuntimeQuestionDraft> = {};
-  const questionOrder: string[] = [];
 
-  for (const entry of flattenedQuestions) {
-    const { questionId } = entry.question;
-    questions[questionId] = createDraft(entry.question);
-    questionOrder.push(questionId);
+  for (const questionId of graph.questionOrder) {
+    questions[questionId] = createDraft(graph.questionsById[questionId]!.question);
   }
 
-  return { questions, questionOrder };
+  for (const draft of draftSnapshot ?? []) {
+    restoreQuestionDraft(graph, questions, draft);
+  }
+
+  return {
+    questions,
+    questionOrder: [...graph.questionOrder],
+  };
+}
+
+function restoreQuestionDraft(
+  graph: NormalizedQuestionGraph,
+  questions: Record<string, QuestionRuntimeQuestionDraft>,
+  snapshotDraft: QuestionRuntimeQuestionDraft,
+): void {
+  const node = graph.questionsById[snapshotDraft.questionId];
+  const current = questions[snapshotDraft.questionId];
+  if (!node || !current) return;
+
+  current.closureState = snapshotDraft.closureState;
+  current.questionNote = snapshotDraft.questionNote;
+
+  if (node.question.kind === "yes_no" && snapshotDraft.answerDraft.kind === "yes_no") {
+    current.answerDraft = {
+      kind: "yes_no",
+      selectedOptionId: snapshotDraft.answerDraft.selectedOptionId,
+      note: snapshotDraft.answerDraft.note,
+    };
+    return;
+  }
+
+  if (node.question.kind === "freeform" && snapshotDraft.answerDraft.kind === "freeform") {
+    current.answerDraft = {
+      kind: "freeform",
+      text: snapshotDraft.answerDraft.text,
+      note: snapshotDraft.answerDraft.note,
+    };
+    return;
+  }
+
+  if (
+    node.question.kind !== "multiple_choice" ||
+    snapshotDraft.answerDraft.kind !== "multiple_choice"
+  ) {
+    return;
+  }
+
+  const validOptionIds = new Set(getSelectableOptionIds(node.question));
+  const selectedOptionIds = snapshotDraft.answerDraft.selectedOptionIds.filter((optionId) =>
+    validOptionIds.has(optionId),
+  );
+  const optionNoteDrafts = Object.fromEntries(
+    Object.entries(snapshotDraft.answerDraft.optionNoteDrafts).filter(([optionId]) =>
+      validOptionIds.has(optionId),
+    ),
+  );
+
+  current.answerDraft = {
+    kind: "multiple_choice",
+    selectedOptionIds,
+    otherText: selectedOptionIds.includes("other") ? snapshotDraft.answerDraft.otherText : "",
+    optionNoteDrafts,
+  };
 }
 
 export function getQuestionDraft(
@@ -158,15 +220,15 @@ export function toggleMultipleChoiceOption(
   const index = selected.indexOf(optionId);
   if (selectionMode === "single") {
     draft.answerDraft.selectedOptionIds = index >= 0 ? [] : [optionId];
-    return;
-  }
-
-  if (index >= 0) {
+  } else if (index >= 0) {
     draft.answerDraft.selectedOptionIds = selected.filter((value) => value !== optionId);
-    return;
+  } else {
+    draft.answerDraft.selectedOptionIds = [...selected, optionId];
   }
 
-  draft.answerDraft.selectedOptionIds = [...selected, optionId];
+  if (!draft.answerDraft.selectedOptionIds.includes("other")) {
+    draft.answerDraft.otherText = "";
+  }
 }
 
 export function setMultipleChoiceOtherText(
@@ -278,22 +340,18 @@ export function buildQuestionOutcome(
 
   const multipleChoiceDraft = draft.answerDraft;
 
-  const selections = multipleChoiceDraft.selectedOptionIds.map((optionId) => ({
-    optionId,
-    note:
-      optionId === "other"
-        ? undefined
-        : sanitizedNote(multipleChoiceDraft.optionNoteDrafts[optionId] ?? ""),
-  }));
-
   return {
     questionId: question.questionId,
     state: "answered",
     answer: {
       kind: "multiple_choice",
-      selections: selections.map((selection) =>
-        selection.note ? selection : { optionId: selection.optionId },
-      ),
+      selections: multipleChoiceDraft.selectedOptionIds.map((optionId) => {
+        const note =
+          optionId === "other"
+            ? undefined
+            : sanitizedNote(multipleChoiceDraft.optionNoteDrafts[optionId] ?? "");
+        return note ? { optionId, note } : { optionId };
+      }),
       otherText: multipleChoiceDraft.selectedOptionIds.includes("other")
         ? multipleChoiceDraft.otherText.trim()
         : undefined,
@@ -302,16 +360,16 @@ export function buildQuestionOutcome(
 }
 
 export function validateFormForSubmit(
-  flattenedQuestions: FlattenedQuestion[],
+  activeView: ActiveQuestionView,
   state: QuestionRuntimeFormState,
 ): FormValidationIssue[] {
   const issues: FormValidationIssue[] = [];
 
-  for (const entry of flattenedQuestions) {
-    const draft = getQuestionDraft(state, entry.question.questionId);
+  for (const entry of activeView.entries) {
+    const draft = getQuestionDraft(state, entry.questionId);
     if (draft.closureState === "needs_clarification" && draft.questionNote.trim().length === 0) {
       issues.push({
-        questionId: entry.question.questionId,
+        questionId: entry.questionId,
         code: "missing_clarification_note",
         message: "Needs clarification requires a note.",
       });
@@ -324,7 +382,7 @@ export function validateFormForSubmit(
       draft.answerDraft.otherText.trim().length === 0
     ) {
       issues.push({
-        questionId: entry.question.questionId,
+        questionId: entry.questionId,
         code: "missing_other_text",
         message: "Other requires non-empty text before submit.",
       });
@@ -334,16 +392,55 @@ export function validateFormForSubmit(
   return issues;
 }
 
-export function buildQuestionRuntimeFormResult(
-  flattenedQuestions: FlattenedQuestion[],
+export function buildStructuredSubmitResult(
+  activeView: ActiveQuestionView,
   state: QuestionRuntimeFormState,
-  action: "submit" | "cancel",
+): QuestionRuntimeStructuredSubmitResult {
+  const outcomes = activeView.entries
+    .map((entry) => buildQuestionOutcome(entry.question, getQuestionDraft(state, entry.questionId)))
+    .filter(
+      (outcome): outcome is Exclude<QuestionRuntimeQuestionOutcome, { state: "open" }> =>
+        outcome.state !== "open",
+    );
+
+  if (outcomes.length === 0) {
+    return {
+      kind: "no_user_response",
+      requiresClarification: false,
+      outcomes: [],
+    };
+  }
+
+  return {
+    kind: "question_outcomes",
+    requiresClarification: outcomes.some((outcome) => outcome.state === "needs_clarification"),
+    outcomes,
+  };
+}
+
+export function buildQuestionRuntimeFormResult(
+  input:
+    | { action: "cancel"; state: QuestionRuntimeFormState }
+    | {
+        action: "submit";
+        state: QuestionRuntimeFormState;
+        submitResult: QuestionRuntimeStructuredSubmitResult;
+      },
 ): QuestionRuntimeFormResult {
-  const draftSnapshot = state.questionOrder.map((questionId) =>
-    cloneDraft(getQuestionDraft(state, questionId)),
+  const draftSnapshot = input.state.questionOrder.map((questionId) =>
+    cloneDraft(getQuestionDraft(input.state, questionId)),
   );
-  const outcomes = flattenedQuestions.map((entry) =>
-    buildQuestionOutcome(entry.question, getQuestionDraft(state, entry.question.questionId)),
-  );
-  return { action, draftSnapshot, outcomes };
+
+  if (input.action === "cancel") {
+    return {
+      action: "cancel",
+      draftSnapshot,
+    };
+  }
+
+  return {
+    action: "submit",
+    draftSnapshot,
+    submitResult: input.submitResult,
+  };
 }

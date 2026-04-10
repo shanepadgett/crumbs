@@ -1,46 +1,29 @@
+import { sameCanonicalQuestionDefinition } from "./question-definition.js";
+import { getSelectableOptionIds } from "./question-model.js";
 import type {
+  AuthorizedQuestionNode,
   AuthorizedQuestionRequest,
-  ReservedOptionId,
+  QuestionRuntimeQuestionDraft,
   RequestValidationResult,
+  ReservedOptionId,
   ValidationIssue,
   ValidationIssueCode,
 } from "./types.js";
 
-interface QuestionIdOccurrence {
-  id: string;
-  path: string;
-}
-
-interface OptionIdOccurrence {
-  questionPath: string;
-  optionId: string;
-  path: string;
-}
-
-interface RecommendedOptionIdsOccurrence {
-  questionPath: string;
-  selectionMode: "single" | "multi" | null;
-  values: Array<{ value: string; path: string }>;
-}
-
-interface MultipleChoiceQuestionReference {
-  questionPath: string;
-  optionIds: Set<string>;
-  recommendedOptionIds: Array<{ value: string; path: string }>;
-}
-
-interface QuestionKindPreferenceContext {
-  path: string;
-  kind: "yes_no" | "multiple_choice" | "freeform";
-  prompt: string;
-  justification?: string;
-  suggestedAnswer?: string;
-  selectionMode?: "single" | "multi";
-  optionLabels?: string[];
-}
-
 const FORBIDDEN_PRODUCT_FIELDS = new Set(["screen", "loopControl", "terminalScreen", "terminal"]);
 const RESERVED_OPTION_IDS = new Set<ReservedOptionId>(["yes", "no", "other"]);
+
+interface TraversalOccurrence {
+  question: AuthorizedQuestionNode;
+  path: string;
+  isRoot: boolean;
+  parentQuestion?: AuthorizedQuestionNode;
+}
+
+interface DraftValidationContext {
+  questionsById: Map<string, AuthorizedQuestionNode>;
+  seenDraftIds: Set<string>;
+}
 
 function issue(
   code: ValidationIssueCode,
@@ -69,6 +52,7 @@ function validateRequiredString(
   key: string,
   path: string,
   issues: ValidationIssue[],
+  options?: { allowEmpty?: boolean },
 ): string | null {
   if (!(key in source)) {
     issues.push(
@@ -98,6 +82,10 @@ function validateRequiredString(
     return null;
   }
 
+  if (options?.allowEmpty) {
+    return raw;
+  }
+
   const trimmed = raw.trim();
   if (!trimmed) {
     issues.push(
@@ -123,7 +111,6 @@ function validateOptionalString(
   issues: ValidationIssue[],
 ): string | undefined {
   if (!(key in source)) return undefined;
-
   const raw = source[key];
   if (typeof raw !== "string") {
     issues.push(
@@ -138,7 +125,6 @@ function validateOptionalString(
     );
     return undefined;
   }
-
   const trimmed = raw.trim();
   if (!trimmed) {
     issues.push(
@@ -153,102 +139,38 @@ function validateOptionalString(
     );
     return undefined;
   }
-
   return trimmed;
 }
 
-function validateRecommendedOptionId(
-  question: Record<string, unknown>,
+function validateStringArray(
+  source: Record<string, unknown>,
+  key: string,
   path: string,
   issues: ValidationIssue[],
-): void {
-  if (!("recommendedOptionId" in question)) {
-    issues.push(
-      issue(
-        "missing_required",
-        `${path}.recommendedOptionId`,
-        "Missing required field `recommendedOptionId` for yes_no",
-        "Set `recommendedOptionId` to `yes` or `no`.",
-        "yes | no",
-      ),
-    );
-    return;
-  }
-
-  const value = question.recommendedOptionId;
-  if (typeof value !== "string") {
-    issues.push(
-      issue(
-        "invalid_type",
-        `${path}.recommendedOptionId`,
-        "Field `recommendedOptionId` must be a string",
-        "Set `recommendedOptionId` to `yes` or `no`.",
-        "string",
-        typeName(value),
-      ),
-    );
-    return;
-  }
-
-  if (value !== "yes" && value !== "no") {
-    issues.push(
-      issue(
-        "invalid_enum",
-        `${path}.recommendedOptionId`,
-        "Field `recommendedOptionId` has an unsupported value",
-        "Use `yes` or `no`.",
-        "yes | no",
-        value,
-      ),
-    );
-  }
-}
-
-function validateRecommendedOptionIds(
-  question: Record<string, unknown>,
-  path: string,
-  issues: ValidationIssue[],
-): RecommendedOptionIdsOccurrence | null {
-  const selectionMode =
-    question.selectionMode === "single" || question.selectionMode === "multi"
-      ? question.selectionMode
-      : null;
-
-  if (!("recommendedOptionIds" in question)) {
-    issues.push(
-      issue(
-        "missing_required",
-        `${path}.recommendedOptionIds`,
-        "Missing required field `recommendedOptionIds` for multiple_choice",
-        "Provide recommended authored optionId values.",
-        "array",
-      ),
-    );
-    return null;
-  }
-
-  const raw = question.recommendedOptionIds;
+  options?: { allowEmpty?: boolean },
+): Array<{ value: string; path: string }> | null {
+  if (!(key in source)) return [];
+  const raw = source[key];
   if (!Array.isArray(raw)) {
     issues.push(
       issue(
         "invalid_type",
-        `${path}.recommendedOptionIds`,
-        "Field `recommendedOptionIds` must be an array",
-        "Provide recommended authored optionId values.",
+        `${path}.${key}`,
+        `Field \`${key}\` must be an array`,
+        `Set \`${key}\` to an array of strings.`,
         "array",
         typeName(raw),
       ),
     );
     return null;
   }
-
-  if (raw.length === 0) {
+  if (!options?.allowEmpty && raw.length === 0) {
     issues.push(
       issue(
         "empty_array",
-        `${path}.recommendedOptionIds`,
-        "Field `recommendedOptionIds` must not be empty",
-        "Add at least one recommended authored optionId.",
+        `${path}.${key}`,
+        `Field \`${key}\` must not be empty`,
+        `Add at least one string or remove \`${key}\`.`,
         "non-empty array",
         "empty array",
       ),
@@ -256,181 +178,52 @@ function validateRecommendedOptionIds(
   }
 
   const values: Array<{ value: string; path: string }> = [];
-  for (let i = 0; i < raw.length; i++) {
-    const value = raw[i];
-    const valuePath = `${path}.recommendedOptionIds[${i}]`;
-    if (typeof value !== "string") {
+  const seen = new Set<string>();
+  for (let index = 0; index < raw.length; index++) {
+    const item = raw[index];
+    const itemPath = `${path}.${key}[${index}]`;
+    if (typeof item !== "string") {
       issues.push(
         issue(
           "invalid_type",
-          valuePath,
-          "Recommended option references must be strings",
-          "Use authored optionId strings in `recommendedOptionIds`.",
+          itemPath,
+          `Array item in \`${key}\` must be a string`,
+          `Use non-empty strings in \`${key}\`.`,
           "string",
-          typeName(value),
+          typeName(item),
         ),
       );
       continue;
     }
-
-    const trimmed = value.trim();
+    const trimmed = item.trim();
     if (!trimmed) {
       issues.push(
         issue(
           "empty_string",
-          valuePath,
-          "Recommended option references must not be empty",
-          "Use authored optionId strings in `recommendedOptionIds`.",
+          itemPath,
+          `Array item in \`${key}\` must not be empty`,
+          `Use non-empty strings in \`${key}\`.`,
           "non-empty string",
           "empty string",
         ),
       );
       continue;
     }
-
-    values.push({ value: trimmed, path: valuePath });
-  }
-
-  if (selectionMode === "single" && values.length !== 1) {
-    issues.push(
-      issue(
-        values.length === 0 ? "empty_array" : "invalid_type",
-        `${path}.recommendedOptionIds`,
-        "Single-select questions require exactly one recommended option",
-        "Keep exactly one authored optionId in `recommendedOptionIds` when `selectionMode` is `single`.",
-      ),
-    );
-  }
-
-  if (selectionMode === "multi" && values.length === 0) {
-    issues.push(
-      issue(
-        "empty_array",
-        `${path}.recommendedOptionIds`,
-        "Multi-select questions require at least one recommended option",
-        "Add one or more authored optionId values to `recommendedOptionIds`.",
-      ),
-    );
-  }
-
-  return { questionPath: path, selectionMode, values };
-}
-
-function normalizeToken(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function isYesToken(value: string): boolean {
-  return new Set(["yes", "y", "true"]).has(normalizeToken(value));
-}
-
-function isNoToken(value: string): boolean {
-  return new Set(["no", "n", "false"]).has(normalizeToken(value));
-}
-
-function looksLikeYesNoPrompt(prompt: string): boolean {
-  const normalized = prompt.trim().toLowerCase();
-  return /^(is|are|do|does|did|can|could|should|would|will|has|have|had|was|were|am)\b/.test(
-    normalized,
-  );
-}
-
-function parseEnumeratedChoices(text: string): string[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  const bulletMatches = trimmed
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => /^(-|\*|\d+\.)\s+\S+/.test(line))
-    .map((line) => line.replace(/^(-|\*|\d+\.)\s+/, "").trim())
-    .filter(Boolean);
-
-  if (bulletMatches.length >= 2 && bulletMatches.length <= 5) {
-    return bulletMatches;
-  }
-
-  return [];
-}
-
-function appendQuestionKindPreferenceIssues(
-  context: QuestionKindPreferenceContext,
-  issues: ValidationIssue[],
-): void {
-  if (context.kind === "multiple_choice") {
-    if (
-      context.selectionMode !== "single" ||
-      !context.optionLabels ||
-      context.optionLabels.length !== 2
-    ) {
-      return;
+    if (seen.has(trimmed)) {
+      issues.push(
+        issue(
+          "duplicate_array_value",
+          itemPath,
+          `Duplicate value \`${trimmed}\``,
+          `Keep each value only once in \`${key}\`.`,
+        ),
+      );
+      continue;
     }
-
-    const [first, second] = context.optionLabels;
-    const looksYesNoPair =
-      (isYesToken(first) && isNoToken(second)) || (isNoToken(first) && isYesToken(second));
-    if (!looksYesNoPair) return;
-
-    issues.push(
-      issue(
-        "authoring_guidance",
-        `${context.path}.kind`,
-        "This single-select choice is a yes/no decision and should be authored as `yes_no`",
-        'Use `kind: "yes_no"` with `recommendedOptionId: "yes" | "no"` instead of a two-option yes/no multiple choice.',
-      ),
-    );
-    return;
+    seen.add(trimmed);
+    values.push({ value: trimmed, path: itemPath });
   }
-
-  if (context.kind !== "freeform") return;
-
-  const suggested = context.suggestedAnswer?.trim() ?? "";
-  if (!suggested) return;
-
-  if (looksLikeYesNoPrompt(context.prompt) && (isYesToken(suggested) || isNoToken(suggested))) {
-    issues.push(
-      issue(
-        "authoring_guidance",
-        `${context.path}.kind`,
-        "This question reads like a yes/no decision and should be authored as `yes_no`",
-        'Use `kind: "yes_no"` when the recommended answer is just `yes` or `no`.',
-      ),
-    );
-    return;
-  }
-
-  const finiteChoices = parseEnumeratedChoices(suggested);
-  if (finiteChoices.length >= 2) {
-    issues.push(
-      issue(
-        "authoring_guidance",
-        `${context.path}.kind`,
-        "This freeform suggested answer contains a finite option list and should be authored as `multiple_choice`",
-        "Move the enumerated choices into `options`, set `selectionMode`, and use `recommendedOptionIds`.",
-      ),
-    );
-    return;
-  }
-
-  const justification = context.justification?.toLowerCase() ?? "";
-  const signalsNuance =
-    /(nuance|nuanced|context|explain|details|detail|why|because|tradeoff|trade-off|open ended|open-ended)/.test(
-      justification,
-    );
-  if (!signalsNuance && suggested.split(/\s+/).length <= 3) {
-    issues.push(
-      issue(
-        "authoring_guidance",
-        `${context.path}.justification`,
-        "Freeform questions should explain why fixed choices would lose essential nuance",
-        "Expand `justification` to say what nuance must stay open-ended, or convert the question to `yes_no` or `multiple_choice`.",
-      ),
-    );
-  }
+  return values;
 }
 
 function appendForbiddenFieldIssues(
@@ -455,10 +248,10 @@ function validateQuestionNode(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
-  questionIds: QuestionIdOccurrence[],
-  optionIds: OptionIdOccurrence[],
-  recommendedOptionIds: RecommendedOptionIdsOccurrence[],
-  multipleChoiceReferences: MultipleChoiceQuestionReference[],
+  occurrences: TraversalOccurrence[],
+  questionDefinitions: Map<string, TraversalOccurrence[]>,
+  parentQuestion?: AuthorizedQuestionNode,
+  isRoot = false,
 ): void {
   const question = asObject(value);
   if (!question) {
@@ -478,10 +271,22 @@ function validateQuestionNode(
   appendForbiddenFieldIssues(question, path, issues);
 
   const questionId = validateRequiredString(question, "questionId", path, issues);
-  if (questionId) questionIds.push({ id: questionId, path: `${path}.questionId` });
+  const prompt = validateRequiredString(question, "prompt", path, issues);
+  validateOptionalString(question, "context", path, issues);
+  validateRequiredString(question, "justification", path, issues);
+  const dependsOn = validateStringArray(question, "dependsOnQuestionIds", path, issues, {
+    allowEmpty: false,
+  });
+
+  const anyOf = validateStringArray(question, "anyOfSelectedOptionIds", path, issues, {
+    allowEmpty: false,
+  });
+  const allOf = validateStringArray(question, "allOfSelectedOptionIds", path, issues, {
+    allowEmpty: false,
+  });
 
   const kindRaw = question.kind;
-  let kind: "yes_no" | "multiple_choice" | "freeform" | null = null;
+  let kind: AuthorizedQuestionNode["kind"] | null = null;
   if (!("kind" in question)) {
     issues.push(
       issue(
@@ -503,7 +308,9 @@ function validateQuestionNode(
         typeName(kindRaw),
       ),
     );
-  } else if (kindRaw !== "yes_no" && kindRaw !== "multiple_choice" && kindRaw !== "freeform") {
+  } else if (kindRaw === "yes_no" || kindRaw === "multiple_choice" || kindRaw === "freeform") {
+    kind = kindRaw;
+  } else {
     issues.push(
       issue(
         "invalid_enum",
@@ -514,47 +321,59 @@ function validateQuestionNode(
         kindRaw,
       ),
     );
-  } else {
-    kind = kindRaw;
   }
 
-  const prompt = validateRequiredString(question, "prompt", path, issues);
-  const contextText = validateOptionalString(question, "context", path, issues);
-  const justification = validateRequiredString(question, "justification", path, issues);
-  void contextText;
+  if (isRoot && ((anyOf?.length ?? 0) > 0 || (allOf?.length ?? 0) > 0)) {
+    if ((anyOf?.length ?? 0) > 0) {
+      issues.push(
+        issue(
+          "invalid_activation",
+          `${path}.anyOfSelectedOptionIds`,
+          "Root questions cannot declare activation arrays",
+          "Remove activation arrays from top-level questions.",
+        ),
+      );
+    }
+    if ((allOf?.length ?? 0) > 0) {
+      issues.push(
+        issue(
+          "invalid_activation",
+          `${path}.allOfSelectedOptionIds`,
+          "Root questions cannot declare activation arrays",
+          "Remove activation arrays from top-level questions.",
+        ),
+      );
+    }
+  }
 
   if (kind === "yes_no") {
-    validateRecommendedOptionId(question, path, issues);
+    const recommendedOptionId = validateRequiredString(
+      question,
+      "recommendedOptionId",
+      path,
+      issues,
+    );
+    if (recommendedOptionId && recommendedOptionId !== "yes" && recommendedOptionId !== "no") {
+      issues.push(
+        issue(
+          "invalid_enum",
+          `${path}.recommendedOptionId`,
+          "Field `recommendedOptionId` has an unsupported value",
+          "Use `yes` or `no`.",
+          "yes | no",
+          recommendedOptionId,
+        ),
+      );
+    }
   }
 
-  let freeformSuggestedAnswer: string | null = null;
   if (kind === "freeform") {
-    freeformSuggestedAnswer = validateRequiredString(question, "suggestedAnswer", path, issues);
+    validateRequiredString(question, "suggestedAnswer", path, issues);
   }
 
   if (kind === "multiple_choice") {
-    if (!("selectionMode" in question)) {
-      issues.push(
-        issue(
-          "missing_required",
-          `${path}.selectionMode`,
-          "Missing required field `selectionMode` for multiple_choice",
-          "Set `selectionMode` to `single` or `multi`.",
-          "single | multi",
-        ),
-      );
-    } else if (typeof question.selectionMode !== "string") {
-      issues.push(
-        issue(
-          "invalid_type",
-          `${path}.selectionMode`,
-          "Field `selectionMode` must be a string",
-          "Set `selectionMode` to `single` or `multi`.",
-          "string",
-          typeName(question.selectionMode),
-        ),
-      );
-    } else if (question.selectionMode !== "single" && question.selectionMode !== "multi") {
+    const selectionMode = validateRequiredString(question, "selectionMode", path, issues);
+    if (selectionMode && selectionMode !== "single" && selectionMode !== "multi") {
       issues.push(
         issue(
           "invalid_enum",
@@ -562,13 +381,10 @@ function validateQuestionNode(
           "Field `selectionMode` has an unsupported value",
           "Use `single` or `multi`.",
           "single | multi",
-          question.selectionMode,
+          selectionMode,
         ),
       );
     }
-
-    const optionIdSet = new Set<string>();
-    const optionLabels: string[] = [];
 
     if (!("options" in question)) {
       issues.push(
@@ -603,10 +419,10 @@ function validateQuestionNode(
         ),
       );
     } else {
-      for (let i = 0; i < question.options.length; i++) {
-        const optionValue = question.options[i];
-        const optionPath = `${path}.options[${i}]`;
-        const option = asObject(optionValue);
+      const optionIds = new Set<string>();
+      for (let index = 0; index < question.options.length; index++) {
+        const optionPath = `${path}.options[${index}]`;
+        const option = asObject(question.options[index]);
         if (!option) {
           issues.push(
             issue(
@@ -615,62 +431,80 @@ function validateQuestionNode(
               "Option must be an object",
               "Replace this item with an option object.",
               "object",
-              typeName(optionValue),
+              typeName(question.options[index]),
             ),
           );
           continue;
         }
-
         appendForbiddenFieldIssues(option, optionPath, issues);
-
         const optionId = validateRequiredString(option, "optionId", optionPath, issues);
-        if (optionId) {
-          if (RESERVED_OPTION_IDS.has(optionId as ReservedOptionId)) {
-            issues.push(
-              issue(
-                "reserved_identifier",
-                `${optionPath}.optionId`,
-                `Option ID \`${optionId}\` is reserved by the shared runtime`,
-                "Use a different authored optionId. `yes`, `no`, and `other` are reserved.",
-              ),
-            );
-          }
-          optionIds.push({
-            questionPath: path,
-            optionId,
-            path: `${optionPath}.optionId`,
-          });
-          optionIdSet.add(optionId);
-        }
-        const label = validateRequiredString(option, "label", optionPath, issues);
-        if (label) optionLabels.push(label);
+        validateRequiredString(option, "label", optionPath, issues);
         validateOptionalString(option, "description", optionPath, issues);
+        if (!optionId) continue;
+        if (RESERVED_OPTION_IDS.has(optionId as ReservedOptionId)) {
+          issues.push(
+            issue(
+              "reserved_identifier",
+              `${optionPath}.optionId`,
+              `Option ID \`${optionId}\` is reserved by the shared runtime`,
+              "Use a different authored optionId. `yes`, `no`, and `other` are reserved.",
+            ),
+          );
+          continue;
+        }
+        if (optionIds.has(optionId)) {
+          issues.push(
+            issue(
+              "duplicate_option_id",
+              `${optionPath}.optionId`,
+              `Duplicate optionId \`${optionId}\` within the same question`,
+              "Use unique optionId values within each multiple_choice question.",
+            ),
+          );
+          continue;
+        }
+        optionIds.add(optionId);
+      }
+
+      const recommended = validateStringArray(question, "recommendedOptionIds", path, issues, {
+        allowEmpty: false,
+      });
+      for (const value of recommended ?? []) {
+        if (!optionIds.has(value.value)) {
+          issues.push(
+            issue(
+              "invalid_reference",
+              value.path,
+              `Recommended option \`${value.value}\` does not reference an authored option in this question`,
+              "Reference an authored multiple_choice optionId. Synthetic `other` is not allowed here.",
+            ),
+          );
+        }
       }
     }
+  }
 
-    const recommended = validateRecommendedOptionIds(question, path, issues);
-    if (recommended) {
-      recommendedOptionIds.push(recommended);
-      multipleChoiceReferences.push({
-        questionPath: path,
-        optionIds: optionIdSet,
-        recommendedOptionIds: recommended.values,
-      });
-    }
+  const built = question as unknown as AuthorizedQuestionNode;
+  if (questionId && prompt && kind) {
+    const occurrence = { question: built, path, isRoot, parentQuestion };
+    occurrences.push(occurrence);
+    const group = questionDefinitions.get(questionId) ?? [];
+    group.push(occurrence);
+    questionDefinitions.set(questionId, group);
+  }
 
-    appendQuestionKindPreferenceIssues(
-      {
-        path,
-        kind,
-        prompt: prompt ?? "",
-        justification: justification ?? undefined,
-        selectionMode:
-          question.selectionMode === "single" || question.selectionMode === "multi"
-            ? question.selectionMode
-            : undefined,
-        optionLabels,
-      },
-      issues,
+  if (parentQuestion && (anyOf || allOf)) {
+    appendActivationRuleIssues(parentQuestion, path, anyOf ?? [], allOf ?? [], issues);
+  }
+
+  if (kind === "freeform" && Array.isArray(question.followUps) && question.followUps.length > 0) {
+    issues.push(
+      issue(
+        "invalid_activation",
+        `${path}.followUps`,
+        "Freeform questions cannot declare follow-ups",
+        "Remove `followUps` from freeform questions.",
+      ),
     );
   }
 
@@ -687,127 +521,246 @@ function validateQuestionNode(
         ),
       );
     } else {
-      for (let i = 0; i < question.followUps.length; i++) {
+      for (let index = 0; index < question.followUps.length; index++) {
         validateQuestionNode(
-          question.followUps[i],
-          `${path}.followUps[${i}]`,
+          question.followUps[index],
+          `${path}.followUps[${index}]`,
           issues,
-          questionIds,
-          optionIds,
-          recommendedOptionIds,
-          multipleChoiceReferences,
+          occurrences,
+          questionDefinitions,
+          built,
+          false,
         );
       }
     }
   }
 
-  if (!kind || !questionId || !prompt) return;
-
-  if (kind === "freeform") {
-    appendQuestionKindPreferenceIssues(
-      {
-        path,
-        kind,
-        prompt,
-        justification: justification ?? undefined,
-        suggestedAnswer: freeformSuggestedAnswer ?? undefined,
-      },
-      issues,
-    );
+  if (dependsOn) {
+    for (const dependency of dependsOn) {
+      if (dependency.value === questionId) {
+        issues.push(
+          issue(
+            "invalid_reference",
+            dependency.path,
+            `Question \`${questionId}\` cannot depend on itself`,
+            "Remove self-dependencies from `dependsOnQuestionIds`.",
+          ),
+        );
+      }
+    }
   }
 }
 
-function appendDuplicateRecommendedOptionIssues(
-  occurrences: RecommendedOptionIdsOccurrence[],
+function appendConflictingQuestionDefinitionIssues(
+  questionDefinitions: Map<string, TraversalOccurrence[]>,
   issues: ValidationIssue[],
 ): void {
-  for (const occurrence of occurrences) {
-    const seen = new Set<string>();
-    for (const value of occurrence.values) {
-      if (!seen.has(value.value)) {
-        seen.add(value.value);
-        continue;
-      }
-
+  for (const [questionId, occurrences] of questionDefinitions.entries()) {
+    if (occurrences.length < 2) continue;
+    const first = occurrences[0]!;
+    for (let index = 1; index < occurrences.length; index++) {
+      const next = occurrences[index]!;
+      if (sameCanonicalQuestionDefinition(first.question, next.question)) continue;
       issues.push(
         issue(
-          "duplicate_array_value",
-          value.path,
-          `Duplicate recommended option reference \`${value.value}\``,
-          "Keep each recommended optionId only once per question.",
+          "conflicting_question_definition",
+          `${next.path}.questionId`,
+          `Repeated questionId \`${questionId}\` must keep the same canonical question definition`,
+          "Keep prompt, kind, dependencies, recommendations, and authored options identical across repeated occurrences.",
         ),
       );
     }
   }
 }
 
-function appendRecommendedOptionReferenceIssues(
-  questions: MultipleChoiceQuestionReference[],
+function appendDependencyReferenceIssues(
+  occurrences: TraversalOccurrence[],
   issues: ValidationIssue[],
 ): void {
-  for (const question of questions) {
-    for (const reference of question.recommendedOptionIds) {
-      if (question.optionIds.has(reference.value)) continue;
+  const allQuestionIds = new Set(occurrences.map((occurrence) => occurrence.question.questionId));
+  for (const occurrence of occurrences) {
+    for (let index = 0; index < (occurrence.question.dependsOnQuestionIds ?? []).length; index++) {
+      const dependencyId = occurrence.question.dependsOnQuestionIds![index]!;
+      if (!allQuestionIds.has(dependencyId)) {
+        issues.push(
+          issue(
+            "invalid_reference",
+            `${occurrence.path}.dependsOnQuestionIds[${index}]`,
+            `Dependency \`${dependencyId}\` does not reference a declared questionId`,
+            "Reference another declared questionId in this request.",
+          ),
+        );
+      }
+    }
+  }
+}
+
+function appendActivationRuleIssues(
+  parentQuestion: AuthorizedQuestionNode,
+  path: string,
+  anyOf: Array<{ value: string; path: string }>,
+  allOf: Array<{ value: string; path: string }>,
+  issues: ValidationIssue[],
+): void {
+  if (parentQuestion.kind === "freeform") {
+    if (anyOf.length > 0) {
+      issues.push(
+        issue(
+          "invalid_activation",
+          `${path}.anyOfSelectedOptionIds`,
+          "Freeform parents cannot drive activation rules",
+          "Remove activation arrays from follow-ups under freeform questions.",
+        ),
+      );
+    }
+    if (allOf.length > 0) {
+      issues.push(
+        issue(
+          "invalid_activation",
+          `${path}.allOfSelectedOptionIds`,
+          "Freeform parents cannot drive activation rules",
+          "Remove activation arrays from follow-ups under freeform questions.",
+        ),
+      );
+    }
+    return;
+  }
+
+  const selectable = new Set(getSelectableOptionIds(parentQuestion));
+  for (const entry of [...anyOf, ...allOf]) {
+    if (!selectable.has(entry.value)) {
       issues.push(
         issue(
           "invalid_reference",
-          reference.path,
-          `Recommended option \`${reference.value}\` does not reference an authored option in this question`,
-          "Reference an authored multiple_choice optionId. Synthetic `other` is not allowed here.",
+          entry.path,
+          `Activation option \`${entry.value}\` is not valid for parent question \`${parentQuestion.questionId}\``,
+          "Use one of the parent question's selectable optionIds.",
         ),
       );
     }
   }
 }
 
-function appendDuplicateQuestionIssues(
-  questionIds: QuestionIdOccurrence[],
+function validateDraftSnapshot(
+  value: unknown,
+  path: string,
   issues: ValidationIssue[],
+  context: DraftValidationContext,
 ): void {
-  const seen = new Set<string>();
-  for (const occurrence of questionIds) {
-    if (!seen.has(occurrence.id)) {
-      seen.add(occurrence.id);
-      continue;
-    }
-
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
     issues.push(
       issue(
-        "duplicate_question_id",
-        occurrence.path,
-        `Duplicate questionId \`${occurrence.id}\``,
-        "Use a unique questionId for every question in pre-order traversal.",
+        "invalid_type",
+        path,
+        "Field `draftSnapshot` must be an array when provided",
+        "Set `draftSnapshot` to an array of question draft objects.",
+        "array",
+        typeName(value),
       ),
     );
+    return;
   }
-}
 
-function appendDuplicateOptionIssues(
-  optionIds: OptionIdOccurrence[],
-  issues: ValidationIssue[],
-): void {
-  const seenByQuestion = new Map<string, Set<string>>();
-
-  for (const occurrence of optionIds) {
-    let seen = seenByQuestion.get(occurrence.questionPath);
-    if (!seen) {
-      seen = new Set<string>();
-      seenByQuestion.set(occurrence.questionPath, seen);
-    }
-
-    if (!seen.has(occurrence.optionId)) {
-      seen.add(occurrence.optionId);
+  for (let index = 0; index < value.length; index++) {
+    const itemPath = `${path}[${index}]`;
+    const item = asObject(value[index]);
+    if (!item) {
+      issues.push(
+        issue(
+          "invalid_type",
+          itemPath,
+          "Draft entry must be an object",
+          "Replace this item with a question draft object.",
+          "object",
+          typeName(value[index]),
+        ),
+      );
       continue;
     }
 
-    issues.push(
-      issue(
-        "duplicate_option_id",
-        occurrence.path,
-        `Duplicate optionId \`${occurrence.optionId}\` within the same question`,
-        "Use unique optionId values within each multiple_choice question.",
-      ),
+    const questionId = validateRequiredString(item, "questionId", itemPath, issues);
+    if (!questionId) continue;
+    if (context.seenDraftIds.has(questionId)) {
+      issues.push(
+        issue(
+          "duplicate_question_id",
+          `${itemPath}.questionId`,
+          `Duplicate draftSnapshot questionId \`${questionId}\``,
+          "Keep one draft entry per questionId.",
+        ),
+      );
+      continue;
+    }
+    context.seenDraftIds.add(questionId);
+
+    const question = context.questionsById.get(questionId);
+    if (!question) {
+      issues.push(
+        issue(
+          "invalid_reference",
+          `${itemPath}.questionId`,
+          `Draft snapshot questionId \`${questionId}\` does not reference a declared question`,
+          "Keep only draft entries for questions that exist in this request.",
+        ),
+      );
+      continue;
+    }
+
+    const closureState = validateRequiredString(item, "closureState", itemPath, issues);
+    if (
+      closureState &&
+      closureState !== "open" &&
+      closureState !== "skipped" &&
+      closureState !== "needs_clarification"
+    ) {
+      issues.push(
+        issue(
+          "invalid_enum",
+          `${itemPath}.closureState`,
+          "Field `closureState` has an unsupported value",
+          "Use `open`, `skipped`, or `needs_clarification`.",
+          "open | skipped | needs_clarification",
+          closureState,
+        ),
+      );
+    }
+
+    const answerDraft = asObject(item.answerDraft);
+    if (!answerDraft) {
+      issues.push(
+        issue(
+          "invalid_type",
+          `${itemPath}.answerDraft`,
+          "Field `answerDraft` must be an object",
+          "Provide an answerDraft matching the question kind.",
+          "object",
+          typeName(item.answerDraft),
+        ),
+      );
+      continue;
+    }
+
+    const answerKind = validateRequiredString(
+      answerDraft,
+      "kind",
+      `${itemPath}.answerDraft`,
+      issues,
     );
+    if (answerKind !== question.kind) {
+      issues.push(
+        issue(
+          "invalid_type",
+          `${itemPath}.answerDraft.kind`,
+          `Draft answer kind must match question kind \`${question.kind}\``,
+          "Keep draft answer kind aligned with the current question kind.",
+          question.kind,
+          answerKind ?? "missing",
+        ),
+      );
+    }
+
+    validateRequiredString(item, "questionNote", itemPath, issues, { allowEmpty: true });
   }
 }
 
@@ -849,10 +802,8 @@ export function validateAuthorizedQuestionRequest(text: string): RequestValidati
   }
 
   const issues: ValidationIssue[] = [];
-  const questionIds: QuestionIdOccurrence[] = [];
-  const optionIds: OptionIdOccurrence[] = [];
-  const recommendedOptionIds: RecommendedOptionIdsOccurrence[] = [];
-  const multipleChoiceReferences: MultipleChoiceQuestionReference[] = [];
+  const occurrences: TraversalOccurrence[] = [];
+  const questionDefinitions = new Map<string, TraversalOccurrence[]>();
 
   appendForbiddenFieldIssues(root, "$", issues);
 
@@ -889,23 +840,28 @@ export function validateAuthorizedQuestionRequest(text: string): RequestValidati
       ),
     );
   } else {
-    for (let i = 0; i < root.questions.length; i++) {
+    for (let index = 0; index < root.questions.length; index++) {
       validateQuestionNode(
-        root.questions[i],
-        `$.questions[${i}]`,
+        root.questions[index],
+        `$.questions[${index}]`,
         issues,
-        questionIds,
-        optionIds,
-        recommendedOptionIds,
-        multipleChoiceReferences,
+        occurrences,
+        questionDefinitions,
+        undefined,
+        true,
       );
     }
   }
 
-  appendDuplicateQuestionIssues(questionIds, issues);
-  appendDuplicateOptionIssues(optionIds, issues);
-  appendDuplicateRecommendedOptionIssues(recommendedOptionIds, issues);
-  appendRecommendedOptionReferenceIssues(multipleChoiceReferences, issues);
+  appendConflictingQuestionDefinitionIssues(questionDefinitions, issues);
+  appendDependencyReferenceIssues(occurrences, issues);
+
+  validateDraftSnapshot(root.draftSnapshot, "$.draftSnapshot", issues, {
+    questionsById: new Map(
+      occurrences.map((occurrence) => [occurrence.question.questionId, occurrence.question]),
+    ),
+    seenDraftIds: new Set<string>(),
+  });
 
   if (issues.length > 0) {
     return { ok: false, issues };
@@ -916,4 +872,10 @@ export function validateAuthorizedQuestionRequest(text: string): RequestValidati
     issues: [],
     request: root as unknown as AuthorizedQuestionRequest,
   };
+}
+
+export function isQuestionRuntimeDraftSnapshot(
+  value: unknown,
+): value is QuestionRuntimeQuestionDraft[] {
+  return Array.isArray(value);
 }

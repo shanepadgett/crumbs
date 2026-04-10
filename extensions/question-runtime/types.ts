@@ -8,6 +8,7 @@ export type QuestionResponseState = "answered" | "needs_clarification" | "skippe
 
 export interface AuthorizedQuestionRequest {
   questions: AuthorizedQuestionNode[];
+  draftSnapshot?: QuestionRuntimeQuestionDraft[];
 }
 
 export interface AuthorizedQuestionBase {
@@ -15,7 +16,13 @@ export interface AuthorizedQuestionBase {
   prompt: string;
   context?: string;
   justification: string;
+  dependsOnQuestionIds?: string[];
   followUps?: AuthorizedQuestionNode[];
+}
+
+export interface AuthorizedQuestionOccurrenceMetadata {
+  anyOfSelectedOptionIds?: string[];
+  allOfSelectedOptionIds?: string[];
 }
 
 export interface AuthorizedYesNoQuestion extends AuthorizedQuestionBase {
@@ -42,9 +49,9 @@ export interface AuthorizedMultipleChoiceQuestion extends AuthorizedQuestionBase
 }
 
 export type AuthorizedQuestionNode =
-  | AuthorizedYesNoQuestion
-  | AuthorizedFreeformQuestion
-  | AuthorizedMultipleChoiceQuestion;
+  | (AuthorizedYesNoQuestion & AuthorizedQuestionOccurrenceMetadata)
+  | (AuthorizedFreeformQuestion & AuthorizedQuestionOccurrenceMetadata)
+  | (AuthorizedMultipleChoiceQuestion & AuthorizedQuestionOccurrenceMetadata);
 
 export type ValidationIssueCode =
   | "json_parse"
@@ -60,7 +67,9 @@ export type ValidationIssueCode =
   | "duplicate_array_value"
   | "reserved_identifier"
   | "invalid_reference"
-  | "authoring_guidance";
+  | "authoring_guidance"
+  | "conflicting_question_definition"
+  | "invalid_activation";
 
 export interface ValidationIssue {
   code: ValidationIssueCode;
@@ -131,11 +140,33 @@ export type QuestionRuntimeQuestionOutcome =
         | { kind: "freeform"; text: string; note?: string };
     };
 
-export interface QuestionRuntimeFormResult {
-  action: "submit" | "cancel";
-  draftSnapshot: QuestionRuntimeQuestionDraft[];
-  outcomes: QuestionRuntimeQuestionOutcome[];
-}
+export type SubmittedQuestionRuntimeQuestionOutcome = Exclude<
+  QuestionRuntimeQuestionOutcome,
+  { state: "open" }
+>;
+
+export type QuestionRuntimeStructuredSubmitResult =
+  | {
+      kind: "question_outcomes";
+      requiresClarification: boolean;
+      outcomes: SubmittedQuestionRuntimeQuestionOutcome[];
+    }
+  | {
+      kind: "no_user_response";
+      requiresClarification: false;
+      outcomes: [];
+    };
+
+export type QuestionRuntimeFormResult =
+  | {
+      action: "cancel";
+      draftSnapshot: QuestionRuntimeQuestionDraft[];
+    }
+  | {
+      action: "submit";
+      draftSnapshot: QuestionRuntimeQuestionDraft[];
+      submitResult: QuestionRuntimeStructuredSubmitResult;
+    };
 
 export const QUESTION_RUNTIME_STATE_ENTRY = "question-runtime.state";
 

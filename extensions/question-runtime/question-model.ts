@@ -1,13 +1,4 @@
-import type {
-  AuthorizedMultipleChoiceQuestion,
-  AuthorizedQuestionNode,
-  AuthorizedYesNoQuestion,
-} from "./types.js";
-
-export interface FlattenedQuestion {
-  question: AuthorizedQuestionNode;
-  path: string;
-}
+import type { AuthorizedMultipleChoiceQuestion, AuthorizedYesNoQuestion } from "./types.js";
 
 export interface RuntimeChoiceOption {
   optionId: string;
@@ -21,27 +12,6 @@ export interface RuntimeChoiceOption {
 export interface RuntimeChoiceQuestionModel {
   selectionMode: "single" | "multi";
   options: RuntimeChoiceOption[];
-}
-
-export function flattenQuestionsPreOrder(
-  questions: AuthorizedQuestionNode[],
-  basePath = "$.questions",
-): FlattenedQuestion[] {
-  const flattened: FlattenedQuestion[] = [];
-
-  function visit(nodes: AuthorizedQuestionNode[], pathBase: string): void {
-    for (let i = 0; i < nodes.length; i++) {
-      const question = nodes[i]!;
-      const path = `${pathBase}[${i}]`;
-      flattened.push({ question, path });
-      if (Array.isArray(question.followUps) && question.followUps.length > 0) {
-        visit(question.followUps, `${path}.followUps`);
-      }
-    }
-  }
-
-  visit(questions, basePath);
-  return flattened;
 }
 
 export function buildChoiceQuestionModel(
@@ -89,4 +59,20 @@ export function buildChoiceQuestionModel(
       },
     ],
   };
+}
+
+export function getSelectableOptionIds(
+  question: AuthorizedYesNoQuestion | AuthorizedMultipleChoiceQuestion,
+): string[] {
+  return buildChoiceQuestionModel(question).options.map((option) => option.optionId);
+}
+
+export function getChoiceOptionLabel(
+  question: AuthorizedYesNoQuestion | AuthorizedMultipleChoiceQuestion,
+  optionId: string,
+): string | null {
+  return (
+    buildChoiceQuestionModel(question).options.find((option) => option.optionId === optionId)
+      ?.label ?? null
+  );
 }
