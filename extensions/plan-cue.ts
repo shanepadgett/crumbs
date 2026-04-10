@@ -28,6 +28,28 @@ function hasPlanCue(text: string): boolean {
   return PLAN_WORD_PATTERN.test(text);
 }
 
+async function switchPermissionsMode(
+  pi: ExtensionAPI,
+  mode: string,
+  ctx: unknown,
+): Promise<boolean> {
+  const direct = await setPermissionsMode(mode, ctx as never);
+  if (direct) return true;
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    pi.events.emit("permissions:set-mode", { mode, ctx, done: finish });
+    setTimeout(() => finish(false), 250);
+  });
+}
+
 export default function planCueExtension(pi: ExtensionAPI): void {
   pi.on("input", async (event, ctx) => {
     if (event.source === "extension") return { action: "continue" };
@@ -43,7 +65,7 @@ export default function planCueExtension(pi: ExtensionAPI): void {
 
     pi.setThinkingLevel("xhigh");
 
-    const permissionsChanged = await setPermissionsMode(TARGET_PERMISSION_MODE, ctx);
+    const permissionsChanged = await switchPermissionsMode(pi, TARGET_PERMISSION_MODE, ctx);
     if (permissionsChanged) {
       ctx.ui.notify("Plan mode ready: xhigh thinking + workspace-open permissions.", "info");
       return { action: "continue" };

@@ -173,6 +173,27 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
   registerPermissionsModeSetter(applyMode);
 
+  pi.events.on("permissions:set-mode", async (rawData: unknown) => {
+    const data = rawData as {
+      mode?: unknown;
+      ctx?: unknown;
+      done?: (result: boolean) => void;
+    };
+    const mode = typeof data.mode === "string" ? data.mode : undefined;
+    const ctx = data.ctx as ExtensionContext | undefined;
+
+    if (!mode || !ctx || typeof data.done !== "function") {
+      data.done?.(false);
+      return;
+    }
+
+    try {
+      data.done(await applyMode(mode, ctx));
+    } catch {
+      data.done(false);
+    }
+  });
+
   pi.registerTool({
     ...baseBashTool,
     label: "bash (permissions)",
