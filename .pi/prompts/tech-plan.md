@@ -1,9 +1,22 @@
 ---
-description: Build a deep implementation plan for a task file against a target code area
+description: Build a deep implementation plan for a task file and write it next to the task
 ---
 # Technical Plan
 
 Create a detailed implementation plan for `$1` against the relevant current implementation.
+
+## Delivery requirements
+
+- Write the full plan to a Markdown file instead of returning the full plan in chat.
+- Place the plan file next to the task file.
+- Derive the plan file name from the task file name:
+  - `.../task-01.md` -> `.../task-01-plan.md`
+  - `.../task-01/task-01.md` -> `.../task-01/task-01-plan.md`
+- Overwrite the sibling plan file if it already exists.
+- After writing the file, respond in chat with only:
+  - `Plan File: <path>`
+  - `Task File: <path>`
+  - optional brief note only if needed
 
 ## Scope
 
@@ -32,7 +45,7 @@ Produce a cold-agent-ready technical plan that another agent can execute with mi
 
 ## Output format
 
-Use exactly these sections in this order:
+Write the plan file using exactly these sections in this order:
 
 ### 1. Plan Signature
 
