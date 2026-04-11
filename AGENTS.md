@@ -12,5 +12,6 @@
 - Code is not live yet. Break anything. Change or replace whatever needed. Don't worry about versions or migrations.
 - When modifying code, leave no past remnant unless asked to. Clean up and keep the codebase free of indirection from prior implementations.
 - Any changes to exntensions/ or .pi/extensions requires user to reload before testing.
+- Only actual [extension-name].ts files may live under extensions/ root folder. All other files must be in an extension subfolder or extensions/shared/
 
 > **IMPORTANT**: Use only known safe bash tools and flags until permissions are in place, and never work outside the current working directory until sandboxing is introduced.
