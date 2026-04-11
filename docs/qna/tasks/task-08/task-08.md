@@ -28,6 +28,7 @@ This is one committable and testable unit because it covers everything that happ
 - When the user runs `/interview` after the first user message in a chat, the system shall not attach the interview directly to that chat.
 - When `/interview` is invoked in a non-clean chat, the system shall prompt the user to start a new clean chat, jump back to the last interview chat, or cancel.
 - For clean-chat interview start or resume, the system shall use `ctx.newSession()` to create a new pi session preseeded with imported canonical interview context instead of reusing the current dirty chat.
+- When a chat attaches to or detaches from an interview session, the interview system shall mirror that state into a hidden current-chat marker `customType: "interview.chat_attachment"` with data `{ schemaVersion: 1, interviewSessionId: string | null }`.
 - `/interview` shall accept an optional inline objective argument.
 - When the user chooses `start new`, the system shall offer `enter objective` or `explore objective`.
 - Objective exploration shall happen in a temporary clean chat before any persisted interview session exists.
@@ -38,6 +39,7 @@ This is one committable and testable unit because it covers everything that happ
 ## Expected end-to-end outcome
 
 - A user can start an interview from any chat and get safely routed into a clean session without mixing ordinary QnA into the interview.
+- The attached clean chat publishes a deterministic hidden attachment marker so `/qna` and future cross-product guards can detect interview ownership without guessing.
 - The user can supply an objective directly or explore one temporarily, with no committed session written until the objective is explicitly confirmed.
 
 ## User test at exit
@@ -46,3 +48,4 @@ This is one committable and testable unit because it covers everything that happ
 2. Run `/interview` in a dirty chat and confirm the user must choose a clean-chat path or cancel.
 3. Explore an objective, then cancel, and confirm no session files were created.
 4. Confirm a session is created only after objective confirmation and that the new clean chat is attached to the interview.
+5. Confirm the attached chat writes `interview.chat_attachment` with a non-null `interviewSessionId`, and detaching/ending clears it to `null`.

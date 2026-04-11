@@ -83,6 +83,7 @@
 - The system shall maintain local runtime state under `.pi/local/interviews/<interviewSessionId>.json`.
 - `.pi/local/` shall be a git-ignored repo-local scratch area.
 - The local runtime file shall store current chat attachment, interview-owned persisted copies of unsent shared-runtime drafts keyed by `questionId`, and local stale flags.
+- When a chat attaches to or detaches from an interview session, the interview system shall mirror that state into a hidden current-chat marker `customType: "interview.chat_attachment"` with data `{ schemaVersion: 1, interviewSessionId: string | null }`.
 - The local runtime file shall store the latest shared-runtime `draftSnapshot` keyed by `questionId`, including hidden inactive branch drafts for currently inactive follow-up branches.
 - Unsent interview form drafts shall remain local-only runtime state.
 - The interview system shall own durable storage of interview drafts outside the live shared runtime form.

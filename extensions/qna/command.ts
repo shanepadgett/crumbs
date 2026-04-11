@@ -2,8 +2,10 @@ import {
   BorderedLoader,
   type ExtensionAPI,
   type ExtensionCommandContext,
+  type SessionEntry,
 } from "@mariozechner/pi-coding-agent";
 import { QnaBranchStateStore } from "./branch-state.js";
+import type { QnaLoopController } from "./loop-controller.js";
 import { reconcileQnaTranscript } from "./model-reconcile.js";
 import { applyQnaReconciliation, getUnresolvedQnaQuestions } from "./reconcile.js";
 import { collectQnaTranscriptSinceBoundary } from "./transcript-scan.js";
@@ -66,20 +68,67 @@ function persistHydratedStateIfNeeded(
   store.replaceSnapshot(snapshot);
 }
 
-export function registerQnaCommand(pi: ExtensionAPI): void {
+function buildNoResultsMessage(summary?: string): string {
+  return summary && summary !== "QnA ledger unchanged"
+    ? `${summary}. No unresolved QnA questions remain.`
+    : "No unresolved QnA questions remain";
+}
+
+function maybeStartLoop(
+  ctx: ExtensionCommandContext,
+  options: QnaCommandOptions,
+  unresolvedQuestions: ReturnType<typeof getUnresolvedQnaQuestions>,
+  discoverySummary?: string,
+): boolean {
+  if (unresolvedQuestions.length === 0) {
+    ctx.ui.notify(buildNoResultsMessage(discoverySummary), "info");
+    return false;
+  }
+
+  if (!ctx.model) {
+    ctx.ui.notify("QnA loop cannot start without a selected model", "error");
+    return false;
+  }
+
+  options.loopController.startLoop({
+    openQuestions: unresolvedQuestions,
+    discoverySummary,
+  });
+  return true;
+}
+
+export interface QnaCommandOptions {
+  loopController: QnaLoopController;
+  getAttachedInterviewSessionId: (branch: SessionEntry[]) => string | null;
+}
+
+export function registerQnaCommand(pi: ExtensionAPI, options: QnaCommandOptions): void {
   pi.registerCommand("qna", {
     description: "Reconcile branch-local transcript changes into the hidden QnA ledger",
-    handler: async (_args, ctx) => runQnaCommand(pi, ctx),
+    handler: async (_args, ctx) => runQnaCommand(pi, ctx, options),
   });
 }
 
-export async function runQnaCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+export async function runQnaCommand(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  options: QnaCommandOptions,
+): Promise<void> {
   if (!ctx.hasUI) {
     ctx.ui.notify("/qna requires interactive UI mode", "error");
     return;
   }
 
   const branch = ctx.sessionManager.getBranch();
+  const attachedInterviewSessionId = options.getAttachedInterviewSessionId(branch);
+  if (attachedInterviewSessionId) {
+    ctx.ui.notify(
+      `This chat is attached to interview ${attachedInterviewSessionId}. Return to /interview instead of /qna.`,
+      "warning",
+    );
+    return;
+  }
+
   const store = new QnaBranchStateStore(pi);
   store.hydrateFromBranch(branch);
   const currentState = store.getSnapshot();
@@ -90,7 +139,7 @@ export async function runQnaCommand(pi: ExtensionAPI, ctx: ExtensionCommandConte
     const nextState = store.getSnapshot();
     nextState.durableBoundaryEntryId = transcript.latestBranchEntryId;
     store.replaceSnapshot(nextState);
-    ctx.ui.notify("QnA ledger unchanged", "info");
+    maybeStartLoop(ctx, options, getUnresolvedQnaQuestions(nextState));
     return;
   }
 
@@ -121,5 +170,10 @@ export async function runQnaCommand(pi: ExtensionAPI, ctx: ExtensionCommandConte
 
   result.nextState.durableBoundaryEntryId = transcript.latestBranchEntryId;
   store.replaceSnapshot(result.nextState);
-  ctx.ui.notify(formatSummary(result.stats), "info");
+  const summary = formatSummary(result.stats);
+  if (!maybeStartLoop(ctx, options, getUnresolvedQnaQuestions(result.nextState), summary)) {
+    return;
+  }
+
+  ctx.ui.notify(summary, "info");
 }

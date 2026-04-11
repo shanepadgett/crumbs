@@ -9,6 +9,20 @@ import { runQnaCommand } from "./command.js";
 import { createEmptyQnaBranchState } from "./branch-state.js";
 import { QNA_STATE_ENTRY } from "./types.js";
 
+function makeOptions(overrides: Record<string, unknown> = {}) {
+  return {
+    loopController: {
+      startLoop() {
+        return { startedNewLoop: true, loopId: "loop_1" };
+      },
+    },
+    getAttachedInterviewSessionId() {
+      return null;
+    },
+    ...overrides,
+  } as any;
+}
+
 function customStateEntry(id: string, data: unknown): SessionEntry {
   return {
     id,
@@ -92,10 +106,14 @@ describe("runQnaCommand", () => {
         },
       } as unknown as ExtensionAPI,
       ctx,
+      makeOptions(),
     );
 
     expect((appended[0] as { durableBoundaryEntryId?: string }).durableBoundaryEntryId).toBe("c1");
-    expect(notifications).toContainEqual({ message: "QnA ledger unchanged", level: "info" });
+    expect(notifications).toContainEqual({
+      message: "No unresolved QnA questions remain",
+      level: "info",
+    });
   });
 
   test("does not persist on failure", async () => {
@@ -113,6 +131,7 @@ describe("runQnaCommand", () => {
         },
       } as unknown as ExtensionAPI,
       ctx,
+      makeOptions(),
     );
 
     expect(appended).toHaveLength(0);
@@ -137,6 +156,7 @@ describe("runQnaCommand", () => {
         },
       } as unknown as ExtensionAPI,
       ctx,
+      makeOptions(),
     );
 
     expect(appended).toHaveLength(0);
@@ -170,6 +190,7 @@ describe("runQnaCommand", () => {
         },
       } as unknown as ExtensionAPI,
       ctx,
+      makeOptions(),
     );
 
     expect(appended).toHaveLength(1);
@@ -185,5 +206,134 @@ describe("runQnaCommand", () => {
       message: "QnA reconciliation cancelled or failed",
       level: "warning",
     });
+  });
+
+  test("starts loop when unresolved backlog exists after no-op", async () => {
+    const appended: unknown[] = [];
+    const started: unknown[] = [];
+    const state = createEmptyQnaBranchState();
+    state.durableBoundaryEntryId = "u1";
+    state.questions = [
+      {
+        questionId: "qna_0001",
+        questionText: "Who owns this?",
+        questionFingerprint: "who owns this",
+        state: "open",
+        sendState: { localRevision: 1, lastSentRevision: 0 },
+      },
+    ];
+
+    const branch = [userEntry("u1", "old"), customStateEntry("c1", state)];
+    const { ctx, notifications } = makeContext(branch, { model: { id: "test-model" } as any });
+
+    await runQnaCommand(
+      {
+        appendEntry(_type: string, data: unknown) {
+          appended.push(data);
+        },
+      } as unknown as ExtensionAPI,
+      ctx,
+      makeOptions({
+        loopController: {
+          startLoop(input: unknown) {
+            started.push(input);
+            return { startedNewLoop: true, loopId: "loop_1" };
+          },
+        },
+      }),
+    );
+
+    expect(appended).toHaveLength(1);
+    expect(started).toHaveLength(1);
+    expect(notifications).toHaveLength(0);
+  });
+
+  test("starts one merged loop with existing backlog plus newly reconciled questions", async () => {
+    const appended: unknown[] = [];
+    const started: unknown[] = [];
+    const state = createEmptyQnaBranchState();
+    state.durableBoundaryEntryId = "u1";
+    state.questions = [
+      {
+        questionId: "qna_0001",
+        questionText: "Who owns this?",
+        questionFingerprint: "who owns this",
+        state: "open",
+        sendState: { localRevision: 1, lastSentRevision: 0 },
+      },
+    ];
+
+    const branch = [
+      userEntry("u1", "old"),
+      customStateEntry("c1", state),
+      userEntry("u2", "We still need to decide the deadline."),
+    ];
+    const { ctx, notifications } = makeContext(branch, {
+      ui: {
+        notify(message: string, level: string) {
+          notifications.push({ message, level });
+        },
+        async custom() {
+          return {
+            updates: [],
+            newQuestions: [{ ref: "ref_1", questionText: "What is the deadline?" }],
+          };
+        },
+      },
+    } as unknown as Partial<ExtensionCommandContext>);
+
+    await runQnaCommand(
+      {
+        appendEntry(_type: string, data: unknown) {
+          appended.push(data);
+        },
+      } as unknown as ExtensionAPI,
+      ctx,
+      makeOptions({
+        loopController: {
+          startLoop(input: unknown) {
+            started.push(input);
+            return { startedNewLoop: true, loopId: "loop_1" };
+          },
+        },
+      }),
+    );
+
+    expect(appended).toHaveLength(1);
+    expect(started).toHaveLength(1);
+    expect(started[0]).toEqual({
+      openQuestions: [
+        { questionId: "qna_0001", questionText: "Who owns this?" },
+        { questionId: "qna_0002", questionText: "What is the deadline?" },
+      ],
+      discoverySummary: "QnA ledger updated: 1 new",
+    });
+    expect(notifications).toContainEqual({
+      message: "QnA ledger updated: 1 new",
+      level: "info",
+    });
+  });
+
+  test("blocks when chat is attached to an interview", async () => {
+    const appended: unknown[] = [];
+    const branch = [userEntry("u1", "old")];
+    const { ctx, notifications } = makeContext(branch);
+
+    await runQnaCommand(
+      {
+        appendEntry(_type: string, data: unknown) {
+          appended.push(data);
+        },
+      } as unknown as ExtensionAPI,
+      ctx,
+      makeOptions({
+        getAttachedInterviewSessionId() {
+          return "int_123";
+        },
+      }),
+    );
+
+    expect(appended).toHaveLength(0);
+    expect(notifications[0]?.message).toContain("int_123");
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  QuestionRuntimeStructuredSubmitResult,
   QuestionRuntimeQuestionDraft,
   SubmittedQuestionRuntimeQuestionOutcome,
 } from "../question-runtime/types.js";
@@ -81,3 +82,41 @@ export interface QnaReconcileModelResponse {
   updates: QnaReconcileUpdate[];
   newQuestions: QnaReconcileNewQuestion[];
 }
+
+export interface QnaOpenQuestionReference {
+  questionId: string;
+  questionText: string;
+}
+
+export type QnaToolInput =
+  | { action: "question_batch"; questionIds: string[] }
+  | { action: "complete"; reason?: string };
+
+export type QnaLoopFinishReason =
+  | "agent_complete"
+  | "no_user_response"
+  | "all_questions_resolved"
+  | "session_reset";
+
+export type QnaToolResultDetails =
+  | {
+      kind: "question_batch_submitted";
+      submitResult: QuestionRuntimeStructuredSubmitResult;
+      remainingOpenQuestionIds: string[];
+      loopSettled: boolean;
+    }
+  | {
+      kind: "question_batch_cancelled";
+      remainingOpenQuestionIds: string[];
+      loopSettled: false;
+    }
+  | {
+      kind: "no_user_response_settled";
+      remainingOpenQuestionIds: string[];
+      loopSettled: true;
+    }
+  | {
+      kind: "loop_completed";
+      remainingOpenQuestionIds: string[];
+      loopSettled: true;
+    };

@@ -16,6 +16,7 @@
 - While the agent-facing `qna` tool is active for `/qna`, the system shall still allow the agent to ask ordinary clarifying questions in chat when structured capture is unnecessary.
 - When the current `/qna` loop settles, the system shall deactivate the agent-facing `qna` tool.
 - When the current chat is attached to an interview session, the system shall block `/qna` and direct the user back to the interview instead of mixing the two systems in one chat.
+- The `/qna` interview-attachment guard shall read a hidden current-chat marker `customType: "interview.chat_attachment"` with data `{ schemaVersion: 1, interviewSessionId: string | null }`.
 
 ## Branch-local state
 
