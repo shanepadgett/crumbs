@@ -14,5 +14,6 @@
 - Any changes to extensions/ or .pi/extensions requires user to reload before testing.
 - Only actual [extension-name].ts files may live under extensions/ root folder. All other files must be in an extension subfolder or extensions/shared/
 - Do not manually run `mise run check` after edits. Trust the system will report issues to you.
+- Do not manually run `markdownlint` after Markdown edits, even after fixing issues. Trust the quiet markdownlint extension to report failures.
 
 > **IMPORTANT**: Use only known safe bash tools and flags until permissions are in place, and never work outside the current working directory until sandboxing is introduced.

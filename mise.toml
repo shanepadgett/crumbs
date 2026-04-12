@@ -9,17 +9,13 @@ bun = "1.3.11"
 description = "Format TypeScript files with oxfmt"
 run = "oxfmt --write \"extensions/**/*.ts\" \".pi/extensions/**/*.ts\""
 
-[tasks.lint-md]
-description = "Lint Markdown files with markdownlint"
-run = "markdownlint . --ignore node_modules --ignore external --ignore dist --ignore '**/_hidden/**' --ignore 'extensions/permissions/**'"
-
 [tasks.lint-ts]
 description = "Lint TypeScript files with oxlint"
 run = "oxlint . --ignore-pattern 'node_modules/**' --ignore-pattern 'external/**' --ignore-pattern 'dist/**' --ignore-pattern '**/.*/**' --ignore-pattern '**/_hidden/**' --ignore-pattern 'extensions/permissions/**'"
 
 [tasks.lint]
 description = "Run markdown and TypeScript lint tasks"
-depends = ["lint-md", "lint-ts"]
+depends = ["lint-ts"]
 
 [tasks.typecheck]
 description = "Typecheck TypeScript files"

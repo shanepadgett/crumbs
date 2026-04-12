@@ -20,10 +20,10 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { CRUMBS_EVENT_USER_INPUT_REQUIRED } from "../shared/events.js";
 
 const TITLE = "Pi";
 const MAC_SOUND_FILE = fileURLToPath(new URL("./assets/notification.mp3", import.meta.url));
+const CRUMBS_EVENT_USER_INPUT_REQUIRED = "crumbs:user-input-required";
 
 function isGhosttyTerminal(): boolean {
   if (process.env.TERM_PROGRAM?.toLowerCase() !== "ghostty") return false;

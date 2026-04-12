@@ -7,15 +7,11 @@
  * - Injects those instructions and that evidence into the commit turn so the
  *   model can usually decide commit boundaries without first rediscovering the
  *   repository state.
- * - Temporarily switches permissions to `full-access` for the `/commit` run,
- *   then restores the previous permissions mode when the run finishes.
  * - Guides the model to group semantically related edits together and split
  *   independent work into separate commits when that makes review/revert safer.
  *
  * How to use:
  * - Run `/commit` from inside a git repository with uncommitted changes.
- * - If the permissions extension is active, `/commit` temporarily elevates to
- *   `full-access` and restores the prior mode after the run.
  * - The extension gathers a deterministic evidence packet and asks the agent to
  *   create one or more semantic commits.
  *
@@ -23,7 +19,7 @@
  * - Update a feature, adjust docs, and include an unrelated refactor.
  * - Run `/commit`.
  * - The agent should keep the feature + docs together and split the unrelated
- *   refactor into its own commit, then return permissions to the prior mode.
+ *   refactor into its own commit.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
@@ -31,7 +27,6 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 const COMMAND_DESCRIPTION = "Create semantic git commit groupings from deterministic git evidence";
 const COMMIT_TRIGGER_MESSAGE =
   "Create the git commit(s) from the injected /commit context only. Do not run repository inspection commands.";
-const COMMIT_PERMISSION_MODE = "full-access";
 const COMMAND_TIMEOUT_MS = 15_000;
 const DIFF_CONTEXT_LINES = 1;
 const MAX_SUMMARY_CHARS = 4_000;
@@ -266,30 +261,6 @@ function parseStatusEntries(statusOutput: string): StatusEntry[] {
 
 function getPathArgs(entry: StatusEntry): string[] {
   return entry.previousPath ? [entry.previousPath, entry.path] : [entry.path];
-}
-
-function getCurrentPermissionMode(): string | null {
-  const mode = process.env.CRUMBS_PERMISSIONS_MODE?.trim();
-  return mode ? mode : null;
-}
-
-async function switchPermissionsMode(
-  pi: ExtensionAPI,
-  mode: string,
-  ctx: unknown,
-): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    let settled = false;
-
-    const finish = (result: boolean) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-
-    pi.events.emit("permissions:set-mode", { mode, ctx, done: finish });
-    setTimeout(() => finish(false), 250);
-  });
 }
 
 async function runGitText(
@@ -546,70 +517,33 @@ function renderCommitPrompt(evidence: CommitEvidence): string {
 
 export default function commitExtension(pi: ExtensionAPI): void {
   let pendingPrompt: string | null = null;
-  let restorePermissionMode: string | null = null;
-  let commitRunActive = false;
 
   pi.registerCommand("commit", {
     description: COMMAND_DESCRIPTION,
     handler: async (_args, ctx) => {
       await ctx.waitForIdle();
 
-      const previousPermissionMode = getCurrentPermissionMode();
-      const needsPermissionSwitch = previousPermissionMode !== COMMIT_PERMISSION_MODE;
-
-      const restorePermissions = async (): Promise<void> => {
-        if (!needsPermissionSwitch || !previousPermissionMode) return;
-
-        const restored = await switchPermissionsMode(pi, previousPermissionMode, ctx);
-        if (!restored) {
-          ctx.ui.notify(
-            `Unable to restore permissions mode to ${previousPermissionMode} after /commit setup.`,
-            "warning",
-          );
-        }
-      };
-
-      if (needsPermissionSwitch) {
-        if (!previousPermissionMode) {
-          ctx.ui.notify("Unable to determine current permissions mode for /commit.", "error");
-          return;
-        }
-
-        const switched = await switchPermissionsMode(pi, COMMIT_PERMISSION_MODE, ctx);
-        if (!switched) {
-          ctx.ui.notify("Unable to switch permissions to full-access for /commit.", "error");
-          return;
-        }
-      }
-
       let evidence: CommitEvidence | null;
       try {
         evidence = await collectCommitEvidence(pi, ctx);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await restorePermissions();
         ctx.ui.notify(`Unable to prepare commit evidence: ${message}`, "error");
         return;
       }
 
       if (!evidence) {
-        await restorePermissions();
         ctx.ui.notify("No git repository found or no uncommitted changes detected.", "info");
         return;
       }
 
       const prompt = renderCommitPrompt(evidence);
       pendingPrompt = prompt;
-      restorePermissionMode = needsPermissionSwitch ? previousPermissionMode : null;
-      commitRunActive = true;
 
       try {
         pi.sendUserMessage(COMMIT_TRIGGER_MESSAGE);
       } catch (error) {
         pendingPrompt = null;
-        commitRunActive = false;
-        restorePermissionMode = null;
-        await restorePermissions();
 
         const message = error instanceof Error ? error.message : String(error);
         ctx.ui.notify(`Unable to start /commit run: ${message}`, "error");
@@ -626,20 +560,5 @@ export default function commitExtension(pi: ExtensionAPI): void {
     return {
       systemPrompt: `${event.systemPrompt}\n\n${prompt}`,
     };
-  });
-
-  pi.on("agent_end", async (_event, ctx) => {
-    if (!commitRunActive) return;
-
-    commitRunActive = false;
-    const mode = restorePermissionMode;
-    restorePermissionMode = null;
-
-    if (!mode || mode === COMMIT_PERMISSION_MODE) return;
-
-    const restored = await switchPermissionsMode(pi, mode, ctx);
-    if (!restored) {
-      ctx.ui.notify(`Unable to restore permissions mode to ${mode} after /commit.`, "warning");
-    }
   });
 }
