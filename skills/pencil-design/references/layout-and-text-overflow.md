@@ -28,6 +28,7 @@ Overflow = unreadable clipped text, broken mobile layouts, code needing manual f
 ### Nested Components
 
 Set ref instance width to `"fill_container"` when it should fill parent:
+
 ```javascript
 card=I(container, { type: "ref", ref: "CardComponent", width: "fill_container" })
 ```
@@ -35,7 +36,8 @@ card=I(container, { type: "ref", ref: "CardComponent", width: "fill_container" }
 ## Detection
 
 After inserting content:
-```
+
+```javascript
 pencil_snapshot_layout({ filePath: "...", parentId: "screenId", maxDepth: 3, problemsOnly: true })
 ```
 

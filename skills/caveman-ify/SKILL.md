@@ -25,6 +25,7 @@ If no path given, ask.
 Apply to ALL files in skill (SKILL.md, references, script comments):
 
 **Drop:**
+
 - Articles (a/an/the)
 - Filler (just/really/basically/actually/simply/note that/it's worth noting/keep in mind)
 - Pleasantries (sure/certainly/of course/happy to)
@@ -34,6 +35,7 @@ Apply to ALL files in skill (SKILL.md, references, script comments):
 - "For example" / "In other words" / "That is to say"
 
 **Keep exact:**
+
 - Technical terms, API names, flags, paths
 - Code blocks (unchanged)
 - Error messages (quoted exact)
@@ -42,6 +44,7 @@ Apply to ALL files in skill (SKILL.md, references, script comments):
 - Decision logic / branching conditions
 
 **Transform:**
+
 - Long sentences -> fragments
 - "You should X because Y" -> "X. Reason: Y."
 - "In order to" -> "To"
@@ -51,6 +54,7 @@ Apply to ALL files in skill (SKILL.md, references, script comments):
 - Paragraphs -> bullets or tables
 
 **Aggressive mode (additional):**
+
 - Abbreviate common terms (DB/auth/config/req/res/fn/impl/repo/dir/msg)
 - Use arrows for causality (X -> Y)
 - Merge related sections

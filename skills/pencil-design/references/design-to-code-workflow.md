@@ -6,13 +6,13 @@
 
 ## Step 2: Read Design Guidelines
 
-```
+```javascript
 pencil_get_guidelines({ topic: "code" })
 ```
 
 ## Step 3: Read Design Tokens
 
-```
+```javascript
 pencil_get_variables({ filePath: "path/to/file.pen" })
 ```
 
@@ -20,13 +20,13 @@ Map Pencil variables to your project's design token system (CSS custom propertie
 
 ## Step 4: Read Design Tree
 
-```
+```javascript
 pencil_batch_get({ filePath: "...", nodeIds: ["screenId"], readDepth: 5 })
 ```
 
 ## Step 5: Map Components
 
-```
+```javascript
 pencil_batch_get({ filePath: "...", patterns: [{ reusable: true }], readDepth: 3 })
 ```
 
@@ -79,13 +79,14 @@ Identify reusable Pencil components and map them to your project's UI library co
 
 ## Step 7: Sync Variables Back (Optional)
 
-```
+```javascript
 pencil_set_variables({ filePath: "...", variables: { ... } })
 ```
 
 ## Responsive Code
 
 Multi-artboard designs (375px mobile, 768px tablet, 1280px desktop):
+
 1. Read all artboards, compare structures
 2. Mobile-first code (base = smallest artboard)
 3. Add breakpoint overrides for larger layouts

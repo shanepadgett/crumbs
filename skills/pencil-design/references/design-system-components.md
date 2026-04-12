@@ -10,7 +10,7 @@ Reusable components (`reusable: true`) = Figma components / React components. Re
 
 Do this at start of every design task:
 
-```
+```javascript
 pencil_batch_get({
   filePath: "path/to/file.pen",
   patterns: [{ reusable: true }],
@@ -49,6 +49,7 @@ newContent=R(btn+"/content-slot", { type: "text", content: "Custom Content" })
 ## When to Create New
 
 Only when:
+
 1. No similar component exists after checking `reusable: true`
 2. Existing component is fundamentally different (not just color/text change)
 3. Building new design system from empty file

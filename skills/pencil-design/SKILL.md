@@ -24,6 +24,7 @@ Design production-quality UIs in Pencil, generate clean code from them. Enforces
 **NEVER recreate a component from scratch when one exists.**
 
 Before inserting any element:
+
 1. `pencil_batch_get` with `patterns: [{ reusable: true }]` — list all reusable components
 2. Search results for matching component (button, card, input, nav, etc.)
 3. Match found -> insert as `ref`: `I(parent, { type: "ref", ref: "<componentId>" })`
@@ -59,6 +60,7 @@ See [references/layout-and-text-overflow.md](references/layout-and-text-overflow
 **NEVER skip visual verification after building a section.**
 
 After each logical section (header, hero, sidebar, form, etc.):
+
 1. `pencil_get_screenshot` on section/screen node
 2. Analyze: alignment, spacing, overflow, glitches, missing content
 3. `pencil_snapshot_layout` with `problemsOnly: true` for clipping/overlap
@@ -93,7 +95,7 @@ Applies to both Pencil design tasks and code generation from Pencil.
 
 ### Starting New Design
 
-```
+```text
 0. Load `frontend-design` skill
 1. pencil_get_editor_state        -> file state, schema
 2. pencil_batch_get (reusable)    -> design system components
@@ -120,6 +122,7 @@ Applies to both Pencil design tasks and code generation from Pencil.
 See [references/design-to-code-workflow.md](references/design-to-code-workflow.md), [references/responsive-breakpoints.md](references/responsive-breakpoints.md).
 
 Summary:
+
 1. Load `frontend-design` skill
 2. `pencil_get_guidelines` with `"code"`
 3. `pencil_get_variables` -> read design tokens
