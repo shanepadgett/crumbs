@@ -26,7 +26,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 
 const COMMAND_DESCRIPTION = "Create semantic git commit groupings from deterministic git evidence";
 const COMMIT_TRIGGER_MESSAGE =
-  "Create the git commit(s) from the injected /commit context only. Do not run repository inspection commands.";
+  "Create the git commit(s) from the injected /commit context only. First state the commit chunks you intend to make, then make them. Do not run repository inspection commands.";
 const COMMAND_TIMEOUT_MS = 15_000;
 const DIFF_CONTEXT_LINES = 1;
 const MAX_SUMMARY_CHARS = 4_000;
@@ -437,6 +437,7 @@ function renderCommitPrompt(evidence: CommitEvidence): string {
     "You are executing the `/commit` command.",
     "",
     "Commit behavior:",
+    "- First state the commit chunks you intend to create so you can verify the split before acting.",
     "- Build commit groups by semantic intent, not by file count or current stage state.",
     "- Put changes in the same commit when they implement one logical objective and should ship/revert together.",
     "- Split commits when groups are independently understandable, independently revertable, or represent different intents.",
@@ -445,11 +446,16 @@ function renderCommitPrompt(evidence: CommitEvidence): string {
     "- Prefer fewer commits when boundaries are weak, but do not force a single commit.",
     "- Treat staged vs unstaged as informational only.",
     "- Use the evidence below as your primary source of truth.",
+    "- If this `/commit` run happens in an ongoing work session with prior task context, commit only the work that matches that prior context.",
+    "- If this `/commit` run is cold and there is no meaningful prior context beyond this injected diff stream, treat the user's intent as committing all current changes.",
+    "- When committing all current changes, still split the work into the smallest clear semantic commits you can justify from the evidence.",
+    "- Keep creating those commits until the worktree is clean unless the evidence shows everything belongs in one commit.",
     "- Do not run repository inspection commands for planning (`git status`, `git diff`, `find`, `ls`, `cat`, `rg`, etc.).",
     "- Assume this evidence packet is authoritative for planning and grouping.",
     "- If evidence contains explicit truncation/omission markers and that blocks a safe decision, stop and ask the user for direction instead of probing the repo.",
     "- Execute commit creation, do not just describe a plan.",
-    '- For each commit group, stage and commit in one continuous shell step (for example: `git add <paths> && git diff --staged -- <paths> && git commit -m "..."`).',
+    "- After deciding the split, save tokens and stage with `git add -A` instead of enumerating files.",
+    '- For each commit group, stage and commit in one continuous shell step (for example: `git add -A && git diff --staged && git commit -m "..."`).',
     "- Do not pause between staging and committing to ask for confirmation when evidence already supports the grouping.",
     "- Use unscoped conventional commit messages in the form `type: concise why-action summary`.",
     "- If there are multiple groups, create commits in an order that keeps intermediate history coherent.",
