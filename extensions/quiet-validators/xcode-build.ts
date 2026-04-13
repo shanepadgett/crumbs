@@ -5,9 +5,26 @@ import type { QuietValidatorDefinition, Snapshot } from "./core.js";
 import { createFallbackFailureGroups } from "./core.js";
 import { asBoolean, asRecord, readExtensionConfig } from "./config.js";
 
-const SOURCE_EXTENSIONS = new Set([".entitlements", ".h", ".m", ".mm", ".metal", ".plist", ".swift", ".xcconfig"]);
+const SOURCE_EXTENSIONS = new Set([
+  ".entitlements",
+  ".h",
+  ".m",
+  ".mm",
+  ".metal",
+  ".plist",
+  ".swift",
+  ".xcconfig",
+]);
 const ROOT_PACKAGE_FILES = new Set(["Package.swift", "Package.resolved"]);
-const IGNORED_DIRECTORIES = new Set([".build", ".git", ".pi", ".swiftpm", "DerivedData", "build", "node_modules"]);
+const IGNORED_DIRECTORIES = new Set([
+  ".build",
+  ".git",
+  ".pi",
+  ".swiftpm",
+  "DerivedData",
+  "build",
+  "node_modules",
+]);
 
 type XcodeConfig = { enabled: boolean; name: string };
 
@@ -32,7 +49,8 @@ async function pathExists(pathValue: string): Promise<boolean> {
 async function loadConfig(cwd: string): Promise<XcodeConfig | null> {
   const extensions = await readExtensionConfig(cwd);
   const value = extensions?.quietXcodeBuild;
-  if (typeof value === "string" && value.trim().length > 0) return { enabled: true, name: value.trim() };
+  if (typeof value === "string" && value.trim().length > 0)
+    return { enabled: true, name: value.trim() };
   const config = asRecord(value);
   if (!config || typeof config.name !== "string" || config.name.trim().length === 0) return null;
   return { enabled: asBoolean(config.enabled, true), name: config.name.trim() };
@@ -57,7 +75,12 @@ async function resolveBuildSpec(cwd: string, config: XcodeConfig): Promise<Build
   };
 }
 
-async function scanDirectory(root: string, relativeRoot: string, snapshot: Snapshot, shouldTrackFile: (relativePath: string) => boolean): Promise<void> {
+async function scanDirectory(
+  root: string,
+  relativeRoot: string,
+  snapshot: Snapshot,
+  shouldTrackFile: (relativePath: string) => boolean,
+): Promise<void> {
   async function walk(currentPath: string): Promise<void> {
     const entries = await fs.readdir(currentPath, { withFileTypes: true });
 
@@ -139,7 +162,9 @@ function buildScript(spec: BuildSpec): string {
 }
 
 async function canRunXcodeBuild(pi: any, signal?: AbortSignal): Promise<boolean> {
-  const result = await pi.exec("bash", ["-lc", "command -v xcodebuild >/dev/null 2>&1"], { signal });
+  const result = await pi.exec("bash", ["-lc", "command -v xcodebuild >/dev/null 2>&1"], {
+    signal,
+  });
   return result.code === 0;
 }
 
@@ -149,7 +174,12 @@ export const xcodeBuildValidator: QuietValidatorDefinition<XcodeConfig | null> =
   title: "xcode build",
   loadConfig,
   async isSupported(pi, ctx, config) {
-    return !!config && config.enabled && (await resolveBuildSpec(ctx.cwd, config)) !== null && (await canRunXcodeBuild(pi, ctx.signal));
+    return (
+      !!config &&
+      config.enabled &&
+      (await resolveBuildSpec(ctx.cwd, config)) !== null &&
+      (await canRunXcodeBuild(pi, ctx.signal))
+    );
   },
   async scanInputs(cwd, config) {
     if (!config) return new Map();

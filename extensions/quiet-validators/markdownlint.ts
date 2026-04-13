@@ -1,8 +1,20 @@
 import { promises as fs } from "node:fs";
 import { join, relative } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { createFallbackFailureGroups, type FailureGroup, type QuietValidatorDefinition, type Snapshot } from "./core.js";
-import { asBoolean, asRecord, asStringArray, matchesAny, normalizePath, readExtensionConfig } from "./config.js";
+import {
+  createFallbackFailureGroups,
+  type FailureGroup,
+  type QuietValidatorDefinition,
+  type Snapshot,
+} from "./core.js";
+import {
+  asBoolean,
+  asRecord,
+  asStringArray,
+  matchesAny,
+  normalizePath,
+  readExtensionConfig,
+} from "./config.js";
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
@@ -103,21 +115,30 @@ async function runMarkdownlint(pi: ExtensionAPI, signal?: AbortSignal) {
   for (const runner of RUNNERS) {
     const args = [...runner.args, ...IGNORE_PATTERNS.flatMap((pattern) => ["--ignore", pattern])];
     const result = await pi.exec(runner.command, args, { signal });
-    if (result.code === 0) return { code: 0, stdout: result.stdout || "", stderr: result.stderr || "" };
+    if (result.code === 0)
+      return { code: 0, stdout: result.stdout || "", stderr: result.stderr || "" };
 
     const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n");
     const missingCommand =
-      result.code === 127 || /command not found|not found|ENOENT|executable file not found/i.test(combinedOutput);
+      result.code === 127 ||
+      /command not found|not found|ENOENT|executable file not found/i.test(combinedOutput);
     if (missingCommand) continue;
 
     return { code: result.code, stdout: result.stdout || "", stderr: result.stderr || "" };
   }
 
-  return { code: 127, stdout: "", stderr: "markdownlint was not available via markdownlint, bunx, or npx." };
+  return {
+    code: 127,
+    stdout: "",
+    stderr: "markdownlint was not available via markdownlint, bunx, or npx.",
+  };
 }
 
 function parseFailureGroups(output: string): FailureGroup[] {
-  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const groups = new Map<string, FailureGroup>();
 
   for (const line of lines) {
@@ -128,14 +149,17 @@ function parseFailureGroups(output: string): FailureGroup[] {
     const existing = groups.get(key);
     if (existing) {
       existing.count += 1;
-      if (existing.examples.length < 5 && !existing.examples.includes(line)) existing.examples.push(line);
+      if (existing.examples.length < 5 && !existing.examples.includes(line))
+        existing.examples.push(line);
       continue;
     }
 
     groups.set(key, { key, title, count: 1, examples: [line] });
   }
 
-  return groups.size > 0 ? [...groups.values()] : createFallbackFailureGroups("Markdownlint", output);
+  return groups.size > 0
+    ? [...groups.values()]
+    : createFallbackFailureGroups("Markdownlint", output);
 }
 
 export const markdownlintValidator: QuietValidatorDefinition<MarkdownConfig> = {

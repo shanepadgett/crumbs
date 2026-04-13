@@ -2,7 +2,14 @@ import { promises as fs } from "node:fs";
 import { extname, join, relative } from "node:path";
 import type { QuietValidatorDefinition, Snapshot } from "./core.js";
 import { createFallbackFailureGroups } from "./core.js";
-import { asBoolean, asRecord, asStringArray, matchesAny, normalizePath, readExtensionConfig } from "./config.js";
+import {
+  asBoolean,
+  asRecord,
+  asStringArray,
+  matchesAny,
+  normalizePath,
+  readExtensionConfig,
+} from "./config.js";
 
 const DEFAULT_TASK = "check";
 
@@ -53,7 +60,10 @@ async function loadConfig(cwd: string): Promise<MiseTaskConfig> {
 
   return {
     enabled: asBoolean(config.enabled, true),
-    task: typeof config.task === "string" && config.task.trim().length > 0 ? config.task.trim() : DEFAULT_TASK,
+    task:
+      typeof config.task === "string" && config.task.trim().length > 0
+        ? config.task.trim()
+        : DEFAULT_TASK,
     trackedExtensions: asTrackedExtensions(config.trackedExtensions),
     excludeGlobs: asStringArray(config.excludeGlobs),
   };
@@ -120,11 +130,19 @@ function titleCase(value: string): string {
 }
 
 function parseFailureGroups(output: string) {
-  const groups = new Map<string, { key: string; title: string; count: number; examples: string[] }>();
-  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const groups = new Map<
+    string,
+    { key: string; title: string; count: number; examples: string[] }
+  >();
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   for (const line of lines) {
-    const swiftLintMatch = line.match(/^(.+?):(\d+):(\d+):\s+(warning|error):\s+(.+?)\s+\(([A-Za-z0-9_]+)\)$/);
+    const swiftLintMatch = line.match(
+      /^(.+?):(\d+):(\d+):\s+(warning|error):\s+(.+?)\s+\(([A-Za-z0-9_]+)\)$/,
+    );
     if (swiftLintMatch) {
       const ruleId = swiftLintMatch[6];
       const key = `swiftlint:${ruleId}`;
@@ -132,7 +150,8 @@ function parseFailureGroups(output: string) {
       const existing = groups.get(key);
       if (existing) {
         existing.count += 1;
-        if (existing.examples.length < 5 && !existing.examples.includes(line)) existing.examples.push(line);
+        if (existing.examples.length < 5 && !existing.examples.includes(line))
+          existing.examples.push(line);
       } else {
         groups.set(key, { key, title, count: 1, examples: [line] });
       }
@@ -143,21 +162,33 @@ function parseFailureGroups(output: string) {
       const existing = groups.get("swiftformat");
       if (existing) {
         existing.count += 1;
-        if (existing.examples.length < 5 && !existing.examples.includes(line)) existing.examples.push(line);
+        if (existing.examples.length < 5 && !existing.examples.includes(line))
+          existing.examples.push(line);
       } else {
-        groups.set("swiftformat", { key: "swiftformat", title: "SwiftFormat", count: 1, examples: [line] });
+        groups.set("swiftformat", {
+          key: "swiftformat",
+          title: "SwiftFormat",
+          count: 1,
+          examples: [line],
+        });
       }
       continue;
     }
 
-    if (/error:/i.test(line) || /warning:/i.test(line) || /failed/i.test(line) || /not formatted/i.test(line)) {
+    if (
+      /error:/i.test(line) ||
+      /warning:/i.test(line) ||
+      /failed/i.test(line) ||
+      /not formatted/i.test(line)
+    ) {
       const normalized = normalizeMessageStem(line);
       const key = `message:${normalized.toLowerCase()}`;
       const title = titleCase(normalized);
       const existing = groups.get(key);
       if (existing) {
         existing.count += 1;
-        if (existing.examples.length < 5 && !existing.examples.includes(line)) existing.examples.push(line);
+        if (existing.examples.length < 5 && !existing.examples.includes(line))
+          existing.examples.push(line);
       } else {
         groups.set(key, { key, title, count: 1, examples: [line] });
       }
@@ -187,7 +218,11 @@ export const miseTaskValidator: QuietValidatorDefinition<MiseTaskConfig> = {
   title: "mise task",
   loadConfig,
   async isSupported(pi, ctx, config) {
-    return config.enabled && config.trackedExtensions.length > 0 && (await canRunTask(pi, config.task, ctx.signal));
+    return (
+      config.enabled &&
+      config.trackedExtensions.length > 0 &&
+      (await canRunTask(pi, config.task, ctx.signal))
+    );
   },
   async scanInputs(cwd, config) {
     return scanInputs(cwd, config);

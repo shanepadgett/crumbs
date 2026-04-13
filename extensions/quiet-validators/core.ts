@@ -62,11 +62,7 @@ function beginValidationBatch(cwd: string, scope: string): void {
 }
 
 function renderValidationSummary(entries: ValidatorSummaryEntry[]): string {
-  const lines = [
-    "Validation:",
-    "",
-    ...entries.map((entry) => `${entry.title} - ${entry.status}`),
-  ];
+  const lines = ["Validation:", "", ...entries.map((entry) => `${entry.title} - ${entry.status}`)];
   return lines.join("\n");
 }
 
@@ -108,8 +104,15 @@ function buildValidationSignature(snapshot: Snapshot, changedFiles: string[]): s
   return changedFiles.map((file) => `${file}:${snapshot.get(file) ?? "<deleted>"}`).join("|");
 }
 
-function buildFailureContent(title: string, changedFiles: string[], failureGroups: FailureGroup[]): string {
-  const fileLines = changedFiles.slice(0, 12).map((file) => `- ${file}`).join("\n");
+function buildFailureContent(
+  title: string,
+  changedFiles: string[],
+  failureGroups: FailureGroup[],
+): string {
+  const fileLines = changedFiles
+    .slice(0, 12)
+    .map((file) => `- ${file}`)
+    .join("\n");
   const extraCount = Math.max(0, changedFiles.length - 12);
   const extraLine = extraCount > 0 ? `\n- ... and ${extraCount} more` : "";
   const groupLines = failureGroups.map((group) => `- ${group.title}: ${group.count}`).join("\n");
@@ -126,7 +129,11 @@ function buildFailureContent(title: string, changedFiles: string[], failureGroup
   ].join("\n");
 }
 
-function buildExpandedOutput(changedFiles: string[], failureGroups: FailureGroup[], output: string): string {
+function buildExpandedOutput(
+  changedFiles: string[],
+  failureGroups: FailureGroup[],
+  output: string,
+): string {
   const lines: string[] = [];
 
   if (changedFiles.length > 0) {
@@ -159,10 +166,20 @@ export function createFallbackFailureGroups(title: string, output: string): Fail
     return [{ key: title.toLowerCase(), title, count: 1, examples: [] }];
   }
 
-  return [{ key: title.toLowerCase(), title, count: 1, examples: [output.trim().split(/\r?\n/)[0] ?? title] }];
+  return [
+    {
+      key: title.toLowerCase(),
+      title,
+      count: 1,
+      examples: [output.trim().split(/\r?\n/)[0] ?? title],
+    },
+  ];
 }
 
-export function registerQuietValidator<TConfig>(pi: ExtensionAPI, definition: QuietValidatorDefinition<TConfig>): void {
+export function registerQuietValidator<TConfig>(
+  pi: ExtensionAPI,
+  definition: QuietValidatorDefinition<TConfig>,
+): void {
   registeredValidatorIds.add(definition.id);
 
   let config: TConfig | null = null;
@@ -205,7 +222,13 @@ export function registerQuietValidator<TConfig>(pi: ExtensionAPI, definition: Qu
         validationBaseline = current;
         dirty = false;
         lastAttemptedSignature = null;
-        finishValidationBatch(ctx.cwd, scope, definition.id, { title: definition.title, status: "passed" }, ctx);
+        finishValidationBatch(
+          ctx.cwd,
+          scope,
+          definition.id,
+          { title: definition.title, status: "passed" },
+          ctx,
+        );
         return;
       }
 
@@ -230,7 +253,13 @@ export function registerQuietValidator<TConfig>(pi: ExtensionAPI, definition: Qu
         pi.sendMessage(message, { deliverAs: "steer" });
       }
 
-      finishValidationBatch(ctx.cwd, scope, definition.id, { title: definition.title, status: "failed" }, ctx);
+      finishValidationBatch(
+        ctx.cwd,
+        scope,
+        definition.id,
+        { title: definition.title, status: "failed" },
+        ctx,
+      );
     } finally {
       validationInFlight = false;
     }
@@ -245,7 +274,9 @@ export function registerQuietValidator<TConfig>(pi: ExtensionAPI, definition: Qu
   }>(definition.customMessageType, (message, options, theme) => {
     const details = message.details ?? {};
     const exitCode =
-      typeof details.exitCode === "number" && Number.isFinite(details.exitCode) ? details.exitCode : undefined;
+      typeof details.exitCode === "number" && Number.isFinite(details.exitCode)
+        ? details.exitCode
+        : undefined;
     const failureGroups = Array.isArray(details.failureGroups) ? details.failureGroups : [];
     const status = [
       theme.fg("warning", "failed"),
@@ -265,7 +296,9 @@ export function registerQuietValidator<TConfig>(pi: ExtensionAPI, definition: Qu
     const label = theme.fg("customMessageLabel", `\x1b[1m[${message.customType}]\x1b[22m`);
     box.addChild(new Text(label, 0, 0));
     box.addChild(new Spacer(1));
-    box.addChild(new Text([theme.fg("toolTitle", theme.bold(definition.title)), status].join(" "), 0, 0));
+    box.addChild(
+      new Text([theme.fg("toolTitle", theme.bold(definition.title)), status].join(" "), 0, 0),
+    );
 
     for (const group of failureGroups) {
       box.addChild(new Text(theme.fg("toolOutput", `- ${group.title}: ${group.count}`), 0, 0));
