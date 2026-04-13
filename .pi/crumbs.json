@@ -1,5 +1,15 @@
 {
   "$schema": "../schemas/crumbs.schema.json",
+  "extensions": {
+    "quietMarkdownlint": {
+      "excludeGlobs": ["external/**", "docs/_hidden/**"]
+    },
+    "quietMiseTask": {
+      "task": "check",
+      "excludeGlobs": ["external/**"],
+      "trackedExtensions": [".ts"]
+    }
+  },
   "permissions": {
     "mode": "workspace",
     "modes": {
@@ -9,17 +19,10 @@
         "networkMode": "open",
         "direct": {
           "mutation": "paths",
-          "allowPaths": [
-            "docs/research/**/*.md",
-            "docs/notes/**/*.md",
-            "docs/plans/**/*.md"
-          ]
+          "allowPaths": ["docs/research/**/*.md", "docs/notes/**/*.md", "docs/plans/**/*.md"]
         },
         "shell": {
-          "writeRoots": [
-            ".git/",
-            "/tmp"
-          ]
+          "writeRoots": [".git/", "/tmp"]
         }
       }
     },
