@@ -19,5 +19,6 @@ coverage/
 # Other Folders
 external/
 .pi/local/
+.agents/reviews/refactor-opportunities/runs/
 tmp/
 temp/

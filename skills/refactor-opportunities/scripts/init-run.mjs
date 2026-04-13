@@ -15,10 +15,16 @@ const paths = manifest.paths ?? {};
 
 for (const dirPath of [
   dirname(manifestPath),
+  manifest.artifactRoot,
+  manifest.runDir,
   paths.findings,
   paths.compiled,
   paths.normalized,
   paths.plans,
+  dirname(paths.reconciled ?? ""),
+  dirname(paths.churn ?? ""),
+  dirname(paths.plan ?? ""),
+  dirname(manifest.historyPath ?? ""),
 ]) {
   if (dirPath) mkdirSync(dirPath, { recursive: true });
 }

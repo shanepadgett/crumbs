@@ -26,13 +26,13 @@ const EXT_TO_STACK = new Map([
 
 const IGNORE_DIRS = new Set([
   ".git",
+  ".agents",
   "node_modules",
   ".build",
   "build",
   "dist",
   ".next",
   ".turbo",
-  ".work",
   "DerivedData",
 ]);
 

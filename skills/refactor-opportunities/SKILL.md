@@ -1,23 +1,35 @@
 ---
 name: refactor-opportunities
-description: "Repo-health review across hygiene, over-engineering, runtime lenses. Reconciles conflicts, emits ordered work units. Language-adaptive overlays."
+description: "Refactor and code review across hygiene, over-engineering, runtime lenses. Supports target review and uncommitted-changes review. Reconciles conflicts, checks churn, emits ordered work units, uses language overlays."
 ---
 
 # Refactor Opportunities
 
 Target dir defaults to cwd.
 
+## Artifact root
+
+- Artifact root: `.agents/reviews/refactor-opportunities`
+- Per-run artifacts: `.agents/reviews/refactor-opportunities/runs/<run-id>/`
+- Cross-run history: `.agents/reviews/refactor-opportunities/history.jsonl`
+
 ## Init
 
-Do not jump into full discovery.
+No full discovery first.
 
 Order:
 
 1. Root topology scan
-2. Target confirmation
-3. Effort confirmation
-4. Scoped language discovery
-5. Setup + dispatch
+2. Scope-mode confirmation
+3. Scope confirmation
+4. Effort confirmation
+5. Scoped language discovery
+6. Setup + dispatch
+
+## Scope modes
+
+- `target`: review repo or confirmed dir
+- `changes`: review uncommitted git changes; judge impl quality; catch missed local impact
 
 ## Modes
 
@@ -28,29 +40,37 @@ Order:
 
 ## Rules
 
-- Say `subagents`. Host decides parallel vs sequential.
-- Agents do judgment. Scripts do shape.
+- Say `subagents`. Host chooses parallel or sequential.
+- Agents judge. Scripts shape.
 - Discovery before dispatch.
 - Subagents get only files for their lane.
-- Subagents read one section of their lens criteria file (not isolated file). Reason: adjacent-criteria awareness.
-- Lens criteria are language-agnostic. Language overlays in `references/languages/`.
-- All output must match `references/output-schema.md`.
+- Subagents read one section from their lens criteria file, not isolated excerpt. Reason: adjacent-criteria awareness.
+- Lens criteria stay language-agnostic. Overlays live in `references/languages/`.
+- Output matches `references/output-schema.md`.
 - No automatic code changes.
-- Work units must not fight each other.
-- Orchestrator stays thin. Read only files needed to route work.
-- Orchestrator does not read language overlays unless routing requires it.
-- Root scan is cheap. No deep traversal before user confirms target.
-- Detect repo shape before asking scope.
-- If one target is obvious, propose it and ask for confirmation.
-- If many targets exist, show candidates and ask user to choose.
-- Effort controls fanout. Do not use fixed max fanout by default.
+- Work units must not fight.
+- Orchestrator stays thin. Read only routing files.
+- Orchestrator reads language overlays only if routing needs them.
+- Root scan stays cheap. No deep traversal before scope confirmation.
+- Detect repo shape before scope question.
+- One obvious target -> propose it.
+- Many targets -> show short candidate list.
+- Effort controls fanout. No fixed max fanout by default.
+- `changes` mode is focused review, not blind diff review.
+- In `changes`, changed files are primary evidence.
+- In `changes`, unchanged files are context only: verification, dependency tracing, missed-impact checks.
+- In `changes`, every finding ties to changed work or direct local impact.
+- Do not use `changes` mode for random repo cleanup hunt.
+- Cross-run history is advisory. It warns on churn. It does not veto findings.
+- Churn check can use cheaper model. Escalate only strong conflicts.
 
 ## 1. Root topology scan
 
-Run deterministic root scan first.
+Run deterministic root scan.
 
 ```bash
-ROOT_SCAN_DIR=.work/refactor-opportunities/root-scan
+ARTIFACT_ROOT=.agents/reviews/refactor-opportunities
+ROOT_SCAN_DIR="$ARTIFACT_ROOT/root-scan"
 node ./scripts/root-topology-scan.mjs \
   . \
   "$ROOT_SCAN_DIR/root-topology.txt"
@@ -65,36 +85,76 @@ Read `root-topology.txt`. Infer shape:
 
 Do not read criteria or overlays yet.
 
-## 2. Confirm target
+## 2. Confirm scope mode
 
-Use root scan result to ask smart question.
+Ask for:
 
-- If one target is obvious, ask: review this target?
-- If root files show main app at repo root, include root as target candidate.
-- If several targets exist, show short candidate list.
-- Ask user to pick one target or whole repo.
+- `target`
+- `changes`
 
-Target means actual review scope. Subagents stay inside it. Adjacent issues outside scope may be mentioned only if they materially affect findings inside scope.
+Default rules:
 
-## 3. Confirm effort
+- repo or dir review -> `target`
+- uncommitted work, working tree, feature in progress, current impl review -> `changes`
 
-Ask user for effort after target confirmation.
+## 3. Confirm scope
+
+Use root scan + chosen scope mode.
+
+### `target` scope
+
+- One obvious target -> ask to review it.
+- Root app present -> include repo root as candidate.
+- Many targets -> show short list.
+- Ask user to pick target or whole repo.
+
+Target is actual review scope. Subagents stay inside it. Mention outside issues only if they materially affect in-scope findings.
+
+### `changes` scope
+
+Build changed-files manifest first.
+
+```bash
+ARTIFACT_ROOT=.agents/reviews/refactor-opportunities
+RUN_ID=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+RUN_DIR="$ARTIFACT_ROOT/runs/$RUN_ID"
+mkdir -p "$RUN_DIR"
+node ./scripts/collect-changed-files.mjs . "$RUN_DIR/changed-files.json"
+```
+
+Read `changed-files.json`.
+
+- No changed files -> stop. Say none found.
+- Exclude deleted files from primary scope.
+- Keep rename paths accurate.
+- Ignore generated artifacts and lockfiles unless user asks or finding depends on them.
+- If volume is high, ask: all changed files or subset?
+
+In `changes`, target is changed-files manifest + nearby unchanged code only when needed for truth.
+
+## 4. Confirm effort
+
+Ask after scope confirmation.
 
 - `low`: one subagent per active lens
 - `medium`: one subagent per active criteria section for active lenses
-- `high`: per-section subagents, verification subagents when volume warrants, extra partitioning for very large targets only if needed
+- `high`: per-section subagents; add verification subagents if needed; extra partition only for very large scope
 
 Effort controls token spend and fanout.
 
-## 4. Scoped language discovery
+## 5. Scoped language discovery
 
-Run language detection only inside confirmed target.
+Run only inside confirmed scope.
 
-Supported detection: TypeScript, JavaScript, Swift, Java, Kotlin, Go, Rust.
+Supported: TypeScript, JavaScript, Swift, Java, Kotlin, Go, Rust.
+
+### `target` language discovery
 
 ```bash
-RUN_DIR=.work/refactor-opportunities/$(date -u +%Y-%m-%dT%H-%M-%SZ)
-MANIFEST=$RUN_DIR/run-manifest.json
+ARTIFACT_ROOT=.agents/reviews/refactor-opportunities
+RUN_ID=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+RUN_DIR="$ARTIFACT_ROOT/runs/$RUN_ID"
+MANIFEST="$RUN_DIR/run-manifest.json"
 mkdir -p "$RUN_DIR"
 TARGET_PATH="<confirmed-target>"
 node ./scripts/detect-languages.mjs \
@@ -102,27 +162,58 @@ node ./scripts/detect-languages.mjs \
   "$RUN_DIR/detected-languages.json"
 ```
 
-Read result. Use counts to pick active stacks:
+### `changes` language discovery
+
+Detect languages from changed-files manifest first.
+
+```bash
+node ./scripts/detect-languages-from-files.mjs \
+  "$RUN_DIR/changed-files.json" \
+  "$RUN_DIR/detected-languages.json"
+```
+
+Use counts to pick stacks:
 
 - whole repo -> only stacks with meaningful counts
 - subdir scope -> only stacks inside target
-- one dominant stack -> prefer only that overlay
-- mixed stack -> pass only overlays relevant to findings lane
+- changed scope -> only stacks in changed files unless adjacent context proves direct involvement
+- one dominant stack -> prefer that overlay only
+- mixed stack -> pass only overlays relevant to lane
 - never send unrelated overlays
 
-Counts help target summary and routing. They do not force overlays.
+Counts help routing and summary. They do not force overlays.
 
-## 5. Setup
+## 6. Setup
 
-Write `run-manifest.json` with: `runId`, `target`, `mode`, detected languages, active overlays, active lens sections, paths (`findings`, `compiled`, `normalized`, `reconciled`, `plan`, `plans`).
+Write `run-manifest.json` with:
+
+- `runId`
+- `artifactRoot`
+- `runDir`
+- `historyPath`
+- `scopeMode`
+- `target`
+- `mode`
+- `effort`
+- detected languages
+- active overlays
+- active lens sections
+- paths: `findings`, `compiled`, `normalized`, `reconciled`, `churn`, `plan`, `plans`
+
+If `scopeMode=changes`, include:
+
+- `changedFiles`
+- optional `reviewedChangedFiles`
+- optional `excludedFiles`
+- `contextRule`: unchanged files are support evidence only
 
 ```bash
 node ./scripts/init-run.mjs "$MANIFEST"
 ```
 
-## 6. Dispatch subagents
+## 7. Dispatch subagents
 
-Subagent count depends on effort.
+Fanout by effort.
 
 - `low`
   - `full`: 3 subagents, one per lens
@@ -133,32 +224,27 @@ Subagent count depends on effort.
 - `high`
   - same section fanout as `medium`
   - add verification subagents if needed
-  - split extra only when target is large enough to justify it
+  - split extra only when scope size justifies it
 
-Each subagent gets: target dir, manifest path, assigned lens criteria scope, matching language overlays, one output path, `references/output-schema.md`.
+Each subagent gets: target dir or changed-files scope, manifest path, assigned lens criteria scope, matching overlays, one output path, `references/output-schema.md`.
 
-`low` effort lane shape:
+Lane shape:
 
-- one subagent reads whole active lens criteria file
-- one output file per lens
-- use when repo is already healthy or user wants cheaper pass
-
-`medium` and `high` lane shape:
-
-- one subagent reads one assigned section from one active lens criteria file
-- one output file per section
+- `low`: one subagent reads whole active lens criteria file; one output file per lens
+- `medium` and `high`: one subagent reads one assigned section from one active lens criteria file; one output file per section
 
 Prompt:
 
-> Read your assigned lens criteria scope, `references/output-schema.md`, and
-> only language overlays assigned to you. Do not read other language overlays.
-> Do not read other lens criteria files. Investigate codebase in scope.
-> Primary focus is assigned scope, but flag adjacent issues in same lens if you
-> spot them. Use assigned language overlays to refine checks, not replace lens
+> Read assigned lens criteria scope, `references/output-schema.md`, and only
+> assigned language overlays. Do not read other overlays. Do not read other
+> lens criteria files. Investigate codebase in scope. Flag adjacent issues in
+> same lens if seen. If scope mode is `changes`, changed files are primary
+> evidence and unchanged files are context only. Tie findings to changed work
+> or direct impact from it. Use overlays to refine checks, not replace lens
 > criteria. Write exactly one findings markdown file to assigned output path.
 > File only. No extra report text.
 
-Overlay rule: orchestrator picks overlays first, subagent receives explicit paths. No overlay match -> lens criteria only.
+Overlay rule: orchestrator picks overlays first. Subagent gets explicit paths. No overlay match -> lens criteria only.
 
 | Lens | Sections |
 |---|---|
@@ -176,67 +262,123 @@ Overlay rule: orchestrator picks overlays first, subagent receives explicit path
 | Go | none |
 | Rust | none |
 
-## 7. Validate raw findings
+## 8. Validate raw findings
 
 ```bash
 node ./scripts/validate-findings.mjs "$RUN_DIR/findings"
 ```
 
-Re-dispatch only failed sections.
+Re-dispatch failed sections only.
 
-## 8. Compile per lens
+## 9. Compile per lens
 
 ```bash
 node ./scripts/compile-lens-report.mjs "$RUN_DIR/findings/<lens>" "$RUN_DIR/compiled/<lens>.md" "<lens>"
 ```
 
-## 9. Normalize and detect conflicts
+## 10. Normalize and detect conflicts
 
 ```bash
 node ./scripts/extract-issues.mjs "$RUN_DIR/normalized/issues.json" "$RUN_DIR/compiled"/*.md
 node ./scripts/detect-conflicts.mjs "$RUN_DIR/normalized/issues.json" "$RUN_DIR/normalized/conflict-candidates.json"
 ```
 
-## 10. Verify findings accuracy
+## 11. Verify findings accuracy
 
-Before reconciliation, orchestrator verifies findings against source code. For each finding:
+Verify against source before reconciliation. For each finding:
 
-- Cited file and symbol exist at described location
-- Described behavior matches actual code (not guarded, already handled, or outdated)
-- Evidence snippet is real, not fabricated
+- cited file and symbol exist
+- described behavior matches code; not guarded, handled, or outdated
+- evidence snippet is real
+- in `changes`, finding stays anchored to changed work or direct local impact
 
-Triage by severity: verify all high findings, spot-check medium, sample low. Drop findings that fail verification — update compiled reports and re-run extract/detect scripts if any dropped.
+Triage by severity:
 
-If volume is high, dispatch verification subagents per lens. Each gets compiled report + source access, returns list of verified/dropped finding IDs with one-line reason per drop.
+- verify all high
+- spot-check medium
+- sample low
 
-## 11. Reconcile
+Drop failed findings. Update compiled reports. Re-run extract/detect if anything dropped.
 
-Orchestrator reads: compiled lens reports (post-verification), `normalized/issues.json`, `normalized/conflict-candidates.json`, `references/reconcile.md`, `references/output-schema.md`. Write `reconciled-findings.md` in strict schema. Use reconcile subagent only if volume too high for one pass.
+If volume is high, dispatch verification subagents per lens. Each gets compiled report + source access. Return verified and dropped finding IDs with one-line reason per drop.
 
-## 12. Validate reconciled findings
+## 12. Reconcile
+
+Orchestrator reads compiled lens reports after verification, `normalized/issues.json`, `normalized/conflict-candidates.json`, `references/reconcile.md`, and `references/output-schema.md`. Write `reconciled-findings.md` in strict schema. Use reconcile subagent only if volume is too high for one pass.
+
+## 13. Check churn
+
+Run cheap churn pass after reconciliation.
+
+Inputs:
+
+- `reconciled-findings.md`
+- recent entries from `history.jsonl`
+- `references/reconcile.md`
+
+Output:
+
+- `churn-report.md`
+
+Guidance:
+
+- Use cheaper model if available.
+- Judge churn risk per reconciled finding: `none` | `weak` | `strong`.
+- Match by overlapping paths, symbols, theme, or direction.
+- Escalate only `strong` churn conflicts to main reconciler.
+- `weak` churn is informational.
+- New evidence can justify reversal. Explain why.
+
+## 14. Validate reconciled findings
 
 ```bash
 node ./scripts/validate-findings.mjs "$RUN_DIR/reconciled-findings.md"
 ```
 
-## 13. Scaffold and fill remediation plan
+## 15. Scaffold and fill remediation plan
 
 ```bash
 node ./scripts/scaffold-remediation.mjs "$RUN_DIR/remediation-plan.md"
 ```
 
-Orchestrator fills plan: group into work units, order by deps then severity, cite source finding IDs, explain why units don't conflict, defer unresolved conflicts.
+Fill plan: group work units, order by deps then severity, cite source finding IDs, explain why units do not conflict, note strong churn warnings, defer unresolved conflicts.
 
-## 14. Split and index
+## 16. Append cross-run history
+
+After plan is finalized, append accepted, deferred, rejected, or superseded architectural and refactor decisions to `history.jsonl`.
+
+```bash
+node ./scripts/append-history.mjs \
+  "$RUN_DIR/history-entries.json" \
+  "$ARTIFACT_ROOT/history.jsonl"
+```
+
+Append only terse entries useful for future churn checks.
+
+## 17. Split and index
 
 ```bash
 node ./scripts/split-work-units.mjs "$RUN_DIR/remediation-plan.md" "$RUN_DIR/plans"
 node ./scripts/index-work-units.mjs "$RUN_DIR/plans" "$RUN_DIR/plans/index.json"
 ```
 
-## 15. Final summary
+## 18. Final summary
 
-Report: target, effort, review mode, active lenses, active stacks, top merged findings, deferred conflicts, work-unit order, artifact paths.
+Report:
+
+- scope mode
+- target
+- effort
+- review mode
+- active lenses
+- active stacks
+- top merged findings
+- deferred conflicts
+- strong churn warnings
+- work-unit order
+- artifact paths
+
+If `scopeMode=changes`, also report reviewed changed-file count and unchanged files cited as context.
 
 ## Ownership
 
@@ -247,6 +389,8 @@ Report: target, effort, review mode, active lenses, active stacks, top merged fi
 | validation, compile, parse, split, index | scripts |
 | findings verification | orchestrator or verification subagents |
 | conflict resolution | orchestrator or reconcile subagent |
+| churn check | cheap verifier subagent or orchestrator |
+| history append | orchestrator or script-fed append step |
 | remediation plan and summary | orchestrator |
 
 ## Guardrails
@@ -254,5 +398,6 @@ Report: target, effort, review mode, active lenses, active stacks, top merged fi
 - Runtime risk > cleanup or simplification
 - Over-engineering > hygiene if cleanup adds abstraction or churn
 - Hygiene > over-engineering if simplification harms clarity or searchability
+- Strong churn warning requires human-visible note, not auto-drop
 - Scripts stay deterministic
 - Agents stay within declared output paths

@@ -44,6 +44,8 @@ One file per section reviewer. No prose between findings. If none, write `None.`
 - **Recommended Action:** <one line>
 - **Tradeoffs:** <one line>
 - **Why This Wins:** <one line>
+- **Churn Risk:** none | weak | strong
+- **Churn Refs:** <history-id1>, <history-id2> | none
 
 ## Summary
 - Merged: <N>
@@ -51,7 +53,28 @@ One file per section reviewer. No prose between findings. If none, write `None.`
 - Deferred: <N>
 ```
 
-## 3. Remediation plan
+`Churn Risk` and `Churn Refs` are required. Use `none` and `none` when no churn signal exists.
+
+## 3. Churn report
+
+```markdown
+# Churn Report
+
+## Findings
+
+### <canonical-id>
+- **Churn Risk:** none | weak | strong
+- **History Refs:** <history-id1>, <history-id2> | none
+- **Reason:** <one line>
+- **Recommended Handling:** ignore | note-only | escalate
+
+## Summary
+- None: <N>
+- Weak: <N>
+- Strong: <N>
+```
+
+## 4. Remediation plan
 
 ```markdown
 # Refactor Opportunities — Remediation Plan
@@ -79,13 +102,37 @@ Generated: <timestamp>
 - ...
 ```
 
-## 4. Run manifest
+## 5. Run manifest
 
 ```json
 {
   "runId": "2026-04-12T10-00-00Z",
+  "artifactRoot": ".agents/reviews/refactor-opportunities",
+  "runDir": ".agents/reviews/refactor-opportunities/runs/2026-04-12T10-00-00Z",
+  "historyPath": ".agents/reviews/refactor-opportunities/history.jsonl",
+  "scopeMode": "changes",
   "target": ".",
   "mode": "full",
+  "effort": "medium",
+  "changedFiles": [
+    {
+      "path": "src/feature/foo.ts",
+      "status": "M",
+      "staged": false,
+      "unstaged": true,
+      "renamedFrom": null
+    }
+  ],
+  "reviewedChangedFiles": [
+    "src/feature/foo.ts"
+  ],
+  "excludedFiles": [
+    {
+      "path": "package-lock.json",
+      "reason": "lockfile"
+    }
+  ],
+  "contextRule": "unchanged files are support evidence only",
   "detected": [
     { "stack": "swift-swiftui", "files": 120 }
   ],
@@ -98,12 +145,37 @@ Generated: <timestamp>
     "runtime": ["1-correctness"]
   },
   "paths": {
-    "findings": ".work/.../findings",
-    "compiled": ".work/.../compiled",
-    "normalized": ".work/.../normalized",
-    "reconciled": ".work/.../reconciled-findings.md",
-    "plan": ".work/.../remediation-plan.md",
-    "plans": ".work/.../plans"
+    "findings": ".agents/reviews/refactor-opportunities/runs/.../findings",
+    "compiled": ".agents/reviews/refactor-opportunities/runs/.../compiled",
+    "normalized": ".agents/reviews/refactor-opportunities/runs/.../normalized",
+    "reconciled": ".agents/reviews/refactor-opportunities/runs/.../reconciled-findings.md",
+    "churn": ".agents/reviews/refactor-opportunities/runs/.../churn-report.md",
+    "plan": ".agents/reviews/refactor-opportunities/runs/.../remediation-plan.md",
+    "plans": ".agents/reviews/refactor-opportunities/runs/.../plans"
   }
+}
+```
+
+## 6. History entry
+
+One JSON object per line in `history.jsonl`.
+
+```json
+{
+  "historyId": "hist-2026-04-12T10-00-00Z-001",
+  "runId": "2026-04-12T10-00-00Z",
+  "timestamp": "2026-04-12T10:00:00Z",
+  "scopeMode": "changes",
+  "target": ".",
+  "findingId": "runtime-correctness-001",
+  "findingTitle": "Collapse duplicate retry wrapper",
+  "lens": "over-engineering",
+  "decision": "accepted",
+  "workUnit": "WU-002",
+  "paths": ["src/feature/foo.ts"],
+  "symbols": ["fetchFoo"],
+  "theme": "retry-boundary",
+  "direction": "simplify into local helper",
+  "rationale": "One use site. Shared layer adds indirection."
 }
 ```
