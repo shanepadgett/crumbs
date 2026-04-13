@@ -17,7 +17,12 @@
  */
 
 import type { Model } from "@mariozechner/pi-ai";
-import { keyHint, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import {
+  SettingsManager,
+  keyHint,
+  type ExtensionAPI,
+  type ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { applyPatch, type ApplyPatchChange, type ApplyPatchSummary } from "./src/apply-patch.js";
@@ -28,6 +33,10 @@ import { loadImageFile } from "./src/view-image.js";
 const COMPAT_TOOL_NAMES = new Set(["apply_patch", "view_image"]);
 const SUPPRESSED_BUILTINS = new Set(["edit", "write"]);
 const KEPT_BUILTINS = ["read", "bash"] as const;
+const FAST_STATUS_KEY = "fast";
+const FAST_SETTINGS_KEY = "crumbs-fast";
+
+const settingsManagers = new Map<string, SettingsManager>();
 
 const APPLY_PATCH_PARAMS = Type.Object({
   input: Type.String({
@@ -50,6 +59,102 @@ interface ToolInfo {
   sourceInfo: {
     source: string;
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function mergeSettings(
+  base: Record<string, unknown>,
+  overrides: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, overrideValue] of Object.entries(overrides)) {
+    const baseValue = merged[key];
+    if (isRecord(baseValue) && isRecord(overrideValue)) {
+      merged[key] = mergeSettings(baseValue, overrideValue);
+      continue;
+    }
+    merged[key] = overrideValue;
+  }
+  return merged;
+}
+
+function getSettingsManager(cwd: string): SettingsManager {
+  const existing = settingsManagers.get(cwd);
+  if (existing) return existing;
+
+  const manager = SettingsManager.create(cwd);
+  settingsManagers.set(cwd, manager);
+  return manager;
+}
+
+function getEffectiveSettings(settingsManager: SettingsManager): Record<string, unknown> {
+  return mergeSettings(
+    settingsManager.getGlobalSettings() as Record<string, unknown>,
+    settingsManager.getProjectSettings() as Record<string, unknown>,
+  );
+}
+
+function loadPersistedFastState(cwd: string): boolean | undefined {
+  const settingsManager = getSettingsManager(cwd);
+  settingsManager.reload();
+  const settings = getEffectiveSettings(settingsManager);
+  const extensionSettings = asObject(settings[FAST_SETTINGS_KEY]);
+  return typeof extensionSettings?.enabled === "boolean" ? extensionSettings.enabled : undefined;
+}
+
+function persistFastState(enabled: boolean, cwd: string): SettingsManager {
+  const settingsManager = getSettingsManager(cwd);
+  const internal = settingsManager as unknown as {
+    globalSettings: Record<string, unknown>;
+    markModified(field: string, nestedKey?: string): void;
+    save(): void;
+  };
+  settingsManager.reload();
+
+  const globalSettings = settingsManager.getGlobalSettings() as Record<string, unknown>;
+  const extensionSettings = asObject(globalSettings[FAST_SETTINGS_KEY]) ?? {};
+
+  internal.globalSettings[FAST_SETTINGS_KEY] = {
+    ...extensionSettings,
+    enabled,
+  };
+
+  internal.markModified(FAST_SETTINGS_KEY);
+  internal.save();
+  return settingsManager;
+}
+
+function reportFastSettingsErrors(
+  settingsManager: SettingsManager,
+  ctx: ExtensionContext,
+  action: "load" | "write",
+): void {
+  if (!ctx.hasUI) return;
+  for (const { scope, error } of settingsManager.drainErrors()) {
+    ctx.ui.notify(`fast: failed to ${action} ${scope} settings: ${error.message}`, "warning");
+  }
+}
+
+function isFastSupportedProvider(ctx: ExtensionContext): boolean {
+  return ctx.model?.provider === "openai" || ctx.model?.provider === "openai-codex";
+}
+
+function updateFastStatus(ctx: ExtensionContext, enabled: boolean): void {
+  if (!ctx.hasUI) return;
+  if (!enabled || !isFastSupportedProvider(ctx)) {
+    ctx.ui.setStatus(FAST_STATUS_KEY, undefined);
+    return;
+  }
+
+  ctx.ui.setStatus(FAST_STATUS_KEY, ctx.ui.theme.fg("accent", "⚡"));
 }
 
 function sameToolSet(a: string[], b: string[]): boolean {
@@ -396,6 +501,58 @@ function normalizeViewImageArgs(args: unknown): { path: string; detail?: "origin
 export default function codexCompatExtension(pi: ExtensionAPI) {
   let compatActive = false;
   let savedActiveTools: string[] | undefined;
+  let fastEnabled = false;
+  let settingsWriteQueue: Promise<void> = Promise.resolve();
+
+  function persistEnabled(nextEnabled: boolean, ctx: ExtensionContext): void {
+    const cwd = ctx.cwd;
+    settingsWriteQueue = settingsWriteQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const settingsManager = persistFastState(nextEnabled, cwd);
+        await settingsManager.flush();
+        reportFastSettingsErrors(settingsManager, ctx, "write");
+      });
+
+    void settingsWriteQueue.catch((error) => {
+      if (!ctx.hasUI) return;
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.ui.notify(`fast: failed to write settings: ${message}`, "warning");
+    });
+  }
+
+  function setFastEnabled(
+    nextEnabled: boolean,
+    ctx: ExtensionContext,
+    options?: { persist?: boolean },
+  ): void {
+    fastEnabled = nextEnabled;
+    if (options?.persist !== false) {
+      persistEnabled(nextEnabled, ctx);
+    }
+    updateFastStatus(ctx, fastEnabled);
+  }
+
+  async function reloadFastEnabledState(ctx: ExtensionContext): Promise<void> {
+    await settingsWriteQueue.catch(() => undefined);
+    fastEnabled = false;
+
+    try {
+      const settingsManager = getSettingsManager(ctx.cwd);
+      const persistedEnabled = loadPersistedFastState(ctx.cwd);
+      reportFastSettingsErrors(settingsManager, ctx, "load");
+      if (typeof persistedEnabled === "boolean") {
+        fastEnabled = persistedEnabled;
+      }
+    } catch (error) {
+      if (ctx.hasUI) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`fast: failed to load settings: ${message}`, "warning");
+      }
+    }
+
+    updateFastStatus(ctx, fastEnabled);
+  }
 
   function currentCapability(model: Pick<Model<any>, "provider" | "id"> | undefined) {
     return getCodexCompatCapabilities(model);
@@ -524,12 +681,46 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("fast", {
+    description: "Toggle Codex fast mode (service_tier=priority)",
+    handler: async (_args, ctx) => {
+      const nextEnabled = !fastEnabled;
+      setFastEnabled(nextEnabled, ctx);
+      if (!ctx.hasUI) return;
+      if (!nextEnabled) {
+        ctx.ui.notify("Fast mode disabled.", "info");
+        return;
+      }
+
+      if (isFastSupportedProvider(ctx)) {
+        ctx.ui.notify("Fast mode enabled. Requests will send service_tier=priority.", "info");
+        return;
+      }
+
+      const modelLabel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "no active model";
+      ctx.ui.notify(
+        `Fast mode enabled. It will apply once you switch to an OpenAI or OpenAI Codex model (current: ${modelLabel}).`,
+        "info",
+      );
+    },
+  });
+
   pi.on("session_start", async (_event, ctx) => {
+    await reloadFastEnabledState(ctx);
     syncActiveTools(ctx.model);
+  });
+
+  (pi as any).on("session_switch", async (_event: unknown, ctx: ExtensionContext) => {
+    await reloadFastEnabledState(ctx);
+  });
+
+  (pi as any).on("session_tree", async (_event: unknown, ctx: ExtensionContext) => {
+    await reloadFastEnabledState(ctx);
   });
 
   pi.on("model_select", async (event, ctx) => {
     syncActiveTools(event.model);
+    updateFastStatus(ctx, fastEnabled);
 
     if (!ctx.hasUI) return;
 
@@ -543,6 +734,21 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     if (!currentCapability(ctx.model)) return undefined;
     return {
       systemPrompt: `${event.systemPrompt}\n\n${buildCompatPromptDelta()}`,
+    };
+  });
+
+  pi.on("before_provider_request", (event, ctx) => {
+    if (!fastEnabled || !isFastSupportedProvider(ctx) || !isRecord(event.payload)) {
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(event.payload, "service_tier")) {
+      return;
+    }
+
+    return {
+      ...event.payload,
+      service_tier: "priority",
     };
   });
 }
