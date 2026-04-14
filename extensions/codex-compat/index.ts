@@ -25,6 +25,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { CRUMBS_EVENT_FAST_CHANGED } from "../shared/crumbs-events.js";
 import { applyPatch, type ApplyPatchChange, type ApplyPatchSummary } from "./src/apply-patch.js";
 import { parseApplyPatchInvocation } from "./src/apply-patch-invocation.js";
 import { type CodexCompatCapabilities, getCodexCompatCapabilities } from "./src/capabilities.js";
@@ -531,6 +532,7 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
       persistEnabled(nextEnabled, ctx);
     }
     updateFastStatus(ctx, fastEnabled);
+    pi.events.emit(CRUMBS_EVENT_FAST_CHANGED, { cwd: ctx.cwd, enabled: fastEnabled });
   }
 
   async function reloadFastEnabledState(ctx: ExtensionContext): Promise<void> {
@@ -552,6 +554,7 @@ export default function codexCompatExtension(pi: ExtensionAPI) {
     }
 
     updateFastStatus(ctx, fastEnabled);
+    pi.events.emit(CRUMBS_EVENT_FAST_CHANGED, { cwd: ctx.cwd, enabled: fastEnabled });
   }
 
   function currentCapability(model: Pick<Model<any>, "provider" | "id"> | undefined) {
