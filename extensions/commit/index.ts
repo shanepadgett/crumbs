@@ -24,7 +24,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 
 const COMMAND_DESCRIPTION = "Create semantic git commit groupings from deterministic git evidence";
 const COMMIT_TRIGGER_MESSAGE =
-  "Create the git commit(s) from the injected /commit context only. First state the commit chunks you intend to make, then make them. Do not run repository inspection commands.";
+  "Create the git commit(s) from the injected /commit context only. First state the commit chunks you intend to make, then make them. Keep command output minimal: silence successful git commands and only show concise failure reasons. Do not run repository inspection commands.";
 const SIMPLE_COMMIT_MODEL_PROVIDER = "openai-codex";
 const SIMPLE_COMMIT_MODEL_ID = "gpt-5.4-mini";
 const COMPLEX_COMMIT_MODEL_PROVIDER = "openai-codex";
@@ -38,6 +38,7 @@ const MAX_DIFF_SECTION_CHARS = 8_000;
 const MAX_DIFF_SECTION_LINES = 300;
 const MAX_TOTAL_DIFF_CHARS = 80_000;
 const MIN_DIFF_BUDGET_CHARS = 1_500;
+const MAX_FAILURE_LOG_LINES = 80;
 
 type OptionalText = string | null;
 
@@ -549,8 +550,11 @@ function renderCommitPrompt(evidence: CommitEvidence): string {
     "- Execute commit creation, do not just describe a plan.",
     "- Use `git add -A` only when the next commit intentionally includes every remaining tracked and untracked change in the worktree.",
     "- If you are splitting work into multiple commits, stage each commit group with explicit file paths instead of `git add -A`.",
-    '- For each commit group, stage and commit in one continuous shell step (for example: `git add path/to/file another/path && git diff --staged && git commit -m "..."`; use `git add -A` in that pattern only for an intentional commit-all group).',
+    '- For each commit group, stage and commit in one continuous shell step (for example: `git add path/to/file another/path && git diff --staged --name-status && git commit --quiet -m "..."`; use `git add -A` in that pattern only for an intentional commit-all group).',
     "- Do not pause between staging and committing to ask for confirmation when evidence already supports the grouping.",
+    "- Keep shell/tool output compact. Prefer `--quiet` flags and avoid printing full patches or full hook/tool logs.",
+    `- For commit commands, capture stdout/stderr to a temp log and only print a short tail (about ${MAX_FAILURE_LOG_LINES} lines) when a commit fails; on success print only a compact confirmation.`,
+    "- Final response should be concise: only pass/fail per commit group, commit hash/message on success, and short reason on failure.",
     "- Use unscoped conventional commit messages in the form `type: concise why-action summary`.",
     "- If there are multiple groups, create commits in an order that keeps intermediate history coherent.",
     "- Allowed shell operations are only those needed to stage, validate staged content, and commit.",
