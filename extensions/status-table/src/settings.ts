@@ -68,6 +68,10 @@ function normalizeMode(value: unknown): StatusTableMode {
   return value === "minimal" ? "minimal" : "full";
 }
 
+function normalizeCavemanMode(value: unknown): "minimal" | "improve" {
+  return value === "improve" ? "improve" : "minimal";
+}
+
 function readEnabledSetting(settings: SettingsObject, key: string): boolean {
   const section = asObject(settings[key]);
   return typeof section?.["enabled"] === "boolean" ? (section["enabled"] as boolean) : false;
@@ -88,10 +92,12 @@ export async function loadStatusTablePrefs(cwd: string): Promise<StatusTablePref
 
 export async function loadStatusFlags(cwd: string): Promise<StatusFlags> {
   const settings = await readEffectiveSettings(cwd);
+  const cavemanSection = asObject(settings[CAVEMAN_SETTINGS_KEY]);
 
   return {
     fastEnabled: readEnabledSetting(settings, FAST_SETTINGS_KEY),
     cavemanEnabled: readEnabledSetting(settings, CAVEMAN_SETTINGS_KEY),
+    cavemanMode: normalizeCavemanMode(cavemanSection?.["mode"]),
   };
 }
 

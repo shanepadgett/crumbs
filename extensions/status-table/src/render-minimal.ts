@@ -26,14 +26,16 @@ function abbreviateThinking(value: string): string {
 function renderModeIcons(theme: Theme, snapshot: StatusSnapshot): string | undefined {
   const icons: string[] = [];
   if (snapshot.fast === "on") icons.push(theme.fg("accent", "⚡"));
-  if (snapshot.caveman === "on") icons.push(theme.fg("accent", "🗿"));
+  if (snapshot.cavemanMode === "minimal") icons.push(theme.fg("accent", "🗿"));
+  if (snapshot.cavemanMode === "improve") icons.push(theme.fg("accent", "🗿🔨"));
   return icons.length > 0 ? icons.join(" ") : undefined;
 }
 
 function getModeIconPlaceholder(snapshot: StatusSnapshot): string {
   const icons: string[] = [];
   if (snapshot.fast === "on") icons.push("⚡");
-  if (snapshot.caveman === "on") icons.push("🗿");
+  if (snapshot.cavemanMode === "minimal") icons.push("🗿");
+  if (snapshot.cavemanMode === "improve") icons.push("🗿🔨");
   return icons.length > 0 ? icons.join(" ") : "—";
 }
 

@@ -31,6 +31,10 @@ type StatusFlagEvent = {
   enabled?: boolean;
 };
 
+type CavemanFlagEvent = StatusFlagEvent & {
+  mode?: "minimal" | "improve";
+};
+
 function asStatusFlagEvent(value: unknown): StatusFlagEvent {
   if (!value || typeof value !== "object") return {};
 
@@ -38,6 +42,17 @@ function asStatusFlagEvent(value: unknown): StatusFlagEvent {
   return {
     cwd: typeof record.cwd === "string" ? record.cwd : undefined,
     enabled: typeof record.enabled === "boolean" ? record.enabled : undefined,
+  };
+}
+
+function asCavemanFlagEvent(value: unknown): CavemanFlagEvent {
+  if (!value || typeof value !== "object") return {};
+
+  const record = value as Record<string, unknown>;
+  return {
+    cwd: typeof record.cwd === "string" ? record.cwd : undefined,
+    enabled: typeof record.enabled === "boolean" ? record.enabled : undefined,
+    mode: record.mode === "improve" || record.mode === "minimal" ? record.mode : undefined,
   };
 }
 
@@ -51,7 +66,11 @@ function asCwdEvent(value: unknown): { cwd?: string } {
 }
 
 const DEFAULT_PREFS: StatusTablePrefs = { enabled: true, mode: "full" };
-const DEFAULT_FLAGS: StatusFlags = { fastEnabled: false, cavemanEnabled: false };
+const DEFAULT_FLAGS: StatusFlags = {
+  fastEnabled: false,
+  cavemanEnabled: false,
+  cavemanMode: "minimal",
+};
 const DEFAULT_TOKEN_TOTALS: SessionTokenTotals = { input: 0, output: 0 };
 const DEFAULT_GIT: GitSummary = { branch: "no git", summary: "no git" };
 
@@ -211,13 +230,23 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
   function applyFlagEvent(
     ctx: ExtensionContext | undefined,
     event: StatusFlagEvent,
-    key: keyof StatusFlags,
+    key: "fastEnabled" | "cavemanEnabled",
   ): void {
     if (!ctx) return;
     if (event.cwd && event.cwd !== ctx.cwd) return;
     if (typeof event.enabled !== "boolean") return;
 
     getWorkspaceState(ctx.cwd).flags[key] = event.enabled;
+    refreshUI(ctx);
+  }
+
+  function applyCavemanEvent(ctx: ExtensionContext | undefined, event: CavemanFlagEvent): void {
+    if (!ctx) return;
+    if (event.cwd && event.cwd !== ctx.cwd) return;
+
+    const flags = getWorkspaceState(ctx.cwd).flags;
+    if (typeof event.enabled === "boolean") flags.cavemanEnabled = event.enabled;
+    if (event.mode) flags.cavemanMode = event.mode;
     refreshUI(ctx);
   }
 
@@ -233,7 +262,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
   });
 
   pi.events.on(CRUMBS_EVENT_CAVEMAN_CHANGED, (event) => {
-    applyFlagEvent(lastContext, asStatusFlagEvent(event), "cavemanEnabled");
+    applyCavemanEvent(lastContext, asCavemanFlagEvent(event));
   });
 
   pi.events.on(CRUMBS_EVENT_THINKING_CHANGED, (event) => {

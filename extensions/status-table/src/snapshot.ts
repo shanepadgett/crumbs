@@ -6,6 +6,21 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { GitSummary, SessionTokenTotals, StatusFlags, StatusSnapshot } from "./types.js";
 
+function getCavemanDisplay(flags: StatusFlags): {
+  label: string;
+  mode: StatusSnapshot["cavemanMode"];
+} {
+  if (!flags.cavemanEnabled) {
+    return { label: "off", mode: "off" };
+  }
+
+  if (flags.cavemanMode === "improve") {
+    return { label: "Me here · Much improve", mode: "improve" };
+  }
+
+  return { label: "Me here", mode: "minimal" };
+}
+
 export function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
   if (value < 1000) return `${Math.round(value)}`;
@@ -141,6 +156,7 @@ export function buildSnapshot(
   flags: StatusFlags,
 ): StatusSnapshot {
   const { contextSummary, tokenSummary, percent: contextPercent } = formatContextUsage(ctx, totals);
+  const caveman = getCavemanDisplay(flags);
 
   return {
     git: git.summary,
@@ -150,7 +166,8 @@ export function buildSnapshot(
     model: ctx.model?.id ?? "none",
     thinking: pi.getThinkingLevel(),
     fast: flags.fastEnabled ? "on" : "off",
-    caveman: flags.cavemanEnabled ? "on" : "off",
+    caveman: caveman.label,
+    cavemanMode: caveman.mode,
     contextSummary,
     tokenSummary,
     contextPercent,

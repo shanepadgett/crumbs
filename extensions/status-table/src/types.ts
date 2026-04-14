@@ -21,6 +21,7 @@ export type StatusSnapshot = {
   thinking: string;
   fast: string;
   caveman: string;
+  cavemanMode: "off" | CavemanMode;
   contextSummary: string;
   tokenSummary: string;
   contextPercent: number | undefined;
@@ -31,9 +32,12 @@ export type SessionTokenTotals = {
   output: number;
 };
 
+export type CavemanMode = "minimal" | "improve";
+
 export type StatusFlags = {
   fastEnabled: boolean;
   cavemanEnabled: boolean;
+  cavemanMode: CavemanMode;
 };
 
 export type Cell = {
