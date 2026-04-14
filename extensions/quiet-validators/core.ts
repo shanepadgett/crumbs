@@ -108,6 +108,7 @@ function buildFailureContent(
   title: string,
   changedFiles: string[],
   failureGroups: FailureGroup[],
+  output: string,
 ): string {
   const fileLines = changedFiles
     .slice(0, 12)
@@ -115,7 +116,22 @@ function buildFailureContent(
     .join("\n");
   const extraCount = Math.max(0, changedFiles.length - 12);
   const extraLine = extraCount > 0 ? `\n- ... and ${extraCount} more` : "";
-  const groupLines = failureGroups.map((group) => `- ${group.title}: ${group.count}`).join("\n");
+  const groupLines = failureGroups
+    .map((group) => {
+      const headline = `- ${group.title}: ${group.count}`;
+      const example = group.examples.find((line) => line.trim().length > 0);
+      if (!example) return headline;
+      return `${headline}\n  • ${example}`;
+    })
+    .join("\n");
+
+  const excerptLines = output
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(0, 20);
+
+  const excerpt = excerptLines.length > 0 ? excerptLines.join("\n") : "(no captured output)";
 
   return [
     `${title} failed after validator-relevant file changes.`,
@@ -126,6 +142,9 @@ function buildFailureContent(
     "",
     "Failure groups:",
     groupLines || "- Validation: 1",
+    "",
+    "Failure excerpt:",
+    excerpt,
   ].join("\n");
 }
 
@@ -236,7 +255,7 @@ export function registerQuietValidator<TConfig>(
       const failureGroups = definition.parseFailureGroups(output, config);
       const message = {
         customType: definition.customMessageType,
-        content: buildFailureContent(definition.title, changedFiles, failureGroups),
+        content: buildFailureContent(definition.title, changedFiles, failureGroups, output),
         display: true,
         details: {
           changedFiles,
