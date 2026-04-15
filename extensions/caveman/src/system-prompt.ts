@@ -6,6 +6,7 @@ type BuildCavemanPromptInput = {
   mode: CavemanMode;
   tools: string[];
   docs: {
+    root: string;
     readme: string;
     docs: string;
     examples: string;
@@ -67,10 +68,13 @@ function buildModeBlock(input: BuildCavemanPromptInput): string {
     "",
     "Pi self-improvement guidance:",
     "- Only use Pi internals/docs when task is about Pi itself, SDK, extensions, themes, skills, prompt templates, TUI, providers, or models.",
+    `- Installed Pi package root: ${input.docs.root}`,
     `- Main documentation: ${input.docs.readme}`,
     `- Additional docs: ${input.docs.docs}`,
     `- Examples: ${input.docs.examples}`,
+    "- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI (docs/tui.md), keybindings (docs/keybindings.md), SDK (docs/sdk.md), custom providers (docs/custom-provider.md), models (docs/models.md), packages (docs/packages.md).",
     "- Read relevant .md docs first and follow cross-references before editing Pi-specific code.",
+    "- Always prefer installed Pi docs/examples paths above over guessing repo-local copies.",
     "- Prefer extension APIs/hooks over internal hacks when possible.",
   ].join("\n");
 }

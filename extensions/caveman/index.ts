@@ -16,8 +16,10 @@
  * - `/caveman improve`
  */
 
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../shared/crumbs-events.js";
 import {
@@ -78,17 +80,33 @@ async function hasProjectOverride(cwd: string): Promise<boolean> {
   return Boolean(caveman);
 }
 
-function getPiDocsPaths(): { readme: string; docs: string; examples: string } {
+function getPiDocsPaths(): { root: string; readme: string; docs: string; examples: string } {
   try {
-    const pkgPath = require.resolve("@mariozechner/pi-coding-agent/package.json");
-    const root = dirname(pkgPath);
+    const entryPath = (() => {
+      if (typeof import.meta.resolve === "function") {
+        return fileURLToPath(import.meta.resolve("@mariozechner/pi-coding-agent"));
+      }
+      return require.resolve("@mariozechner/pi-coding-agent/dist/index.js");
+    })();
+
+    let root = dirname(entryPath);
+
+    while (true) {
+      if (existsSync(join(root, "package.json"))) break;
+      const parent = dirname(root);
+      if (parent === root) throw new Error("package root not found");
+      root = parent;
+    }
+
     return {
+      root,
       readme: join(root, "README.md"),
       docs: join(root, "docs"),
       examples: join(root, "examples"),
     };
   } catch {
     return {
+      root: ".",
       readme: "README.md",
       docs: "docs",
       examples: "examples",
