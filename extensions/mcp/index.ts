@@ -297,20 +297,20 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       }),
     );
 
-    const lines: string[] = [];
-    let hasError = false;
+    let errorCount = 0;
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
-      const name = records[i]?.name ?? "unknown";
-      if (result.status === "fulfilled") lines.push(`  ✓ ${name}: ${result.value.toolCount} tools`);
-      else {
-        hasError = true;
-        lines.push(`  ✗ ${name}: ${errorMessage(result.reason)}`);
-      }
+      if (result.status === "rejected") errorCount += 1;
     }
 
     syncActiveTools();
-    ctx.ui.notify(`${LOG_PREFIX}\n${lines.join("\n")}`, hasError ? "error" : "info");
+    if (errorCount > 0) {
+      const phase = event.reason === "reload" ? "reload" : "startup";
+      ctx.ui.notify(
+        `${LOG_PREFIX} ${errorCount} server(s) failed during ${phase}. Use /mcp to inspect.`,
+        "error",
+      );
+    }
   });
 
   pi.on("session_shutdown", async () => {

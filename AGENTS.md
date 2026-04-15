@@ -76,7 +76,10 @@ Think before coding. Keep changes surgical. Verify outcomes.
 
 - Changes under `extensions/` or `.pi/extensions` require `/reload` before user testing.
 - Prefer project commands via `mise` tasks; run direct command only if task does not exist.
-- **Do not** manually run validations (`tsc`, lint, format, markdownlint). System validators report issues.
+- **Never manually run validations or checkers** unless user explicitly asks in current turn.
+- This includes `tsc`, lint, format, test, markdownlint, typecheck, build verification, or any repo validation command.
+- Reason: repo has silent/background validation path. Manual validation wastes tool calls, burns context, and duplicates signals user already receives.
+- Assume user will be informed of validation failures externally. Do not “double check” on your own.
 
 ## Safety boundary (IMPORTANT)
 

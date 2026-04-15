@@ -12,10 +12,7 @@
  * - `/crumbs doctor`
  */
 
-import { access } from "node:fs/promises";
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { access, readFile } from "node:fs/promises";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getGlobalCrumbsPath, getProjectCrumbsPath } from "../shared/config/crumbs-paths.js";
 import { asObject, type JsonObject } from "../shared/io/json-file.js";
@@ -245,80 +242,7 @@ function renderReport(findings: Finding[]): string {
   return lines.join("\n");
 }
 
-function renderStartupSummary(
-  ctx: any,
-  hasGlobalCrumbs: boolean,
-  hasProjectCrumbs: boolean,
-  hasIssues: boolean,
-): string | null {
-  if (!hasGlobalCrumbs && !hasProjectCrumbs) return null;
-
-  const tint = (tone: string, text: string): string =>
-    typeof ctx?.ui?.theme?.fg === "function" ? ctx.ui.theme.fg(tone, text) : text;
-
-  const issueText = "issues detected (run /crumbs doctor)";
-  const headerLabel = tint("mdHeading", "[Crumbs settings]");
-  const issueLabel = hasIssues ? `  ${tint("warning", issueText)}` : "";
-
-  const lines = [`${headerLabel}${issueLabel}`.replace(/^\s+/, "")];
-  if (hasGlobalCrumbs) lines.push(tint("dim", " ~/.pi/agent/crumbs.json"));
-  if (hasProjectCrumbs) lines.push(tint("dim", " .pi/crumbs.json"));
-  return lines.join("\n");
-}
-
-async function isQuietStartupEnabled(cwd: string): Promise<boolean> {
-  const globalSettingsPath = join(homedir(), ".pi", "agent", "settings.json");
-  const projectSettingsPath = join(cwd, ".pi", "settings.json");
-
-  const readQuietStartup = async (path: string): Promise<boolean | undefined> => {
-    if (!(await fileExists(path))) return undefined;
-
-    try {
-      const raw = await readFile(path, "utf8");
-      const value = asObject(JSON.parse(raw));
-      return typeof value?.quietStartup === "boolean" ? value.quietStartup : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-
-  const [globalQuiet, projectQuiet] = await Promise.all([
-    readQuietStartup(globalSettingsPath),
-    readQuietStartup(projectSettingsPath),
-  ]);
-
-  return projectQuiet ?? globalQuiet ?? false;
-}
-
 export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
-  pi.on("session_start", async (event, ctx) => {
-    if (!ctx.hasUI) return;
-    if (event.reason !== "startup" && event.reason !== "reload") return;
-
-    const showSummary = async (): Promise<void> => {
-      try {
-        if (await isQuietStartupEnabled(ctx.cwd)) return;
-
-        const result = await inspect(ctx.cwd);
-        const summary = renderStartupSummary(
-          ctx,
-          result.hasGlobalCrumbs,
-          result.hasProjectCrumbs,
-          result.findings.length > 0,
-        );
-        if (summary) ctx.ui.notify(summary, "info");
-      } catch {
-        // ignore startup rendering failures; /crumbs doctor remains available
-      }
-    };
-
-    // Defer notify one tick so ordering is stable with Pi startup/reload sections.
-    // Also avoids reload chat rebuild wiping early notifications.
-    setTimeout(() => {
-      void showSummary();
-    }, 0);
-  });
-
   pi.registerCommand("crumbs", {
     description: "Crumbs utilities. Usage: /crumbs doctor",
     getArgumentCompletions(prefix) {
