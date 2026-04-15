@@ -30,6 +30,15 @@
         },
         "quietXcodeBuild": {
           "$ref": "#/$defs/quietXcodeBuildConfig"
+        },
+        "statusTable": {
+          "$ref": "#/$defs/statusTableConfig"
+        },
+        "codexCompat": {
+          "$ref": "#/$defs/codexCompatConfig"
+        },
+        "caveman": {
+          "$ref": "#/$defs/cavemanConfig"
         }
       },
       "additionalProperties": true
@@ -78,6 +87,9 @@
         },
         "focus": {
           "$ref": "#/$defs/focusConfig"
+        },
+        "sessionFocus": {
+          "$ref": "#/$defs/sessionFocusConfig"
         }
       },
       "additionalProperties": false,
@@ -184,6 +196,9 @@
           "type": "boolean",
           "default": true,
           "description": "Inject Focus Advanced tool guidance into the system prompt."
+        },
+        "sessionFocus": {
+          "$ref": "#/$defs/sessionFocusConfig"
         }
       },
       "additionalProperties": false,
@@ -266,6 +281,82 @@
       },
       "required": ["name"],
       "additionalProperties": false
+    },
+    "statusTableConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the status table widget by default."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["full", "minimal"],
+          "default": "full",
+          "description": "Default status table rendering mode."
+        }
+      },
+      "additionalProperties": false
+    },
+    "codexCompatConfig": {
+      "type": "object",
+      "properties": {
+        "fast": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable OpenAI/OpenAI Codex priority service tier for supported requests."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cavemanConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Caveman system prompt mode by default."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["minimal", "improve"],
+          "default": "minimal",
+          "description": "Caveman prompt mode. minimal=concise style, improve=Pi self-improvement guidance enabled."
+        }
+      },
+      "additionalProperties": false
+    },
+    "sessionFocusConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Override session focus enabled state for current session behavior."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["soft", "hidden", "hard"],
+          "default": "hidden",
+          "description": "Session focus override mode."
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "Session focus override roots."
+        }
+      },
+      "additionalProperties": false,
+      "default": {
+        "enabled": false,
+        "mode": "hidden",
+        "roots": []
+      }
     }
   },
   "examples": [
