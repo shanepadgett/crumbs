@@ -1,9 +1,6 @@
 ---
 name: pencil-design
 description: Design UIs in Pencil (.pen files) and generate production code from them. Use when working with .pen files, designing screens or components in Pencil, or generating code from Pencil designs. Triggers on tasks involving Pencil, .pen files, design-to-code workflows, or UI design with the Pencil MCP tools.
-metadata:
-  author: Nyasha Chiroro
-  version: "1.0"
 ---
 
 # Pencil Design Skill
@@ -133,37 +130,37 @@ Summary:
 
 ## MCP Tool Reference
 
-| Tool | Use |
-|------|-----|
-| `pencil_get_editor_state` | First call — file state, schema |
-| `pencil_batch_get` | Read nodes, search components (`reusable: true`) |
-| `pencil_batch_design` | Insert/copy/update/replace/move/delete/image ops |
-| `pencil_get_variables` | Read design tokens |
-| `pencil_set_variables` | Create/update design tokens |
-| `pencil_get_screenshot` | Visual verification |
-| `pencil_snapshot_layout` | Detect clipping, overflow, overlap |
-| `pencil_get_guidelines` | Design rules: `code`, `table`, `landing-page`, `design-system` |
-| `pencil_find_empty_space_on_canvas` | Find space for new screens |
-| `pencil_get_style_guide_tags` | Browse style directions |
-| `pencil_get_style_guide` | Get style inspiration |
-| `pencil_search_all_unique_properties` | Audit property values |
-| `pencil_replace_all_matching_properties` | Bulk update properties |
-| `pencil_open_document` | Open .pen file or create new |
+| Tool                                     | Use                                                            |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `pencil_get_editor_state`                | First call — file state, schema                                |
+| `pencil_batch_get`                       | Read nodes, search components (`reusable: true`)               |
+| `pencil_batch_design`                    | Insert/copy/update/replace/move/delete/image ops               |
+| `pencil_get_variables`                   | Read design tokens                                             |
+| `pencil_set_variables`                   | Create/update design tokens                                    |
+| `pencil_get_screenshot`                  | Visual verification                                            |
+| `pencil_snapshot_layout`                 | Detect clipping, overflow, overlap                             |
+| `pencil_get_guidelines`                  | Design rules: `code`, `table`, `landing-page`, `design-system` |
+| `pencil_find_empty_space_on_canvas`      | Find space for new screens                                     |
+| `pencil_get_style_guide_tags`            | Browse style directions                                        |
+| `pencil_get_style_guide`                 | Get style inspiration                                          |
+| `pencil_search_all_unique_properties`    | Audit property values                                          |
+| `pencil_replace_all_matching_properties` | Bulk update properties                                         |
+| `pencil_open_document`                   | Open .pen file or create new                                   |
 
 ## Common Mistakes
 
-| Mistake | Correct |
-|---------|---------|
-| Creating button from scratch | Search for existing, insert as `ref` |
-| `fill: "#3b82f6"` | Reference `primary` variable |
-| `cornerRadius: 8` | Reference `radius-md` variable |
-| Not checking overflow | `pencil_snapshot_layout(problemsOnly: true)` after every section |
-| Skipping screenshots | `pencil_get_screenshot` after every section |
-| Generating new logo | Copy existing with `C()` |
-| Build entire screen then check | Build and verify section by section |
-| Material Icons in code | Map to Lucide icons |
-| Skipping `frontend-design` | Always load before design or code gen |
-| Generic AI aesthetics | Follow `frontend-design` guidelines |
+| Mistake                        | Correct                                                          |
+| ------------------------------ | ---------------------------------------------------------------- |
+| Creating button from scratch   | Search for existing, insert as `ref`                             |
+| `fill: "#3b82f6"`              | Reference `primary` variable                                     |
+| `cornerRadius: 8`              | Reference `radius-md` variable                                   |
+| Not checking overflow          | `pencil_snapshot_layout(problemsOnly: true)` after every section |
+| Skipping screenshots           | `pencil_get_screenshot` after every section                      |
+| Generating new logo            | Copy existing with `C()`                                         |
+| Build entire screen then check | Build and verify section by section                              |
+| Material Icons in code         | Map to Lucide icons                                              |
+| Skipping `frontend-design`     | Always load before design or code gen                            |
+| Generic AI aesthetics          | Follow `frontend-design` guidelines                              |
 
 ## Resources
 
