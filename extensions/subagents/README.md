@@ -7,7 +7,7 @@ Runs isolated subagent workflows in-process on top of Pi SDK sessions.
 - strict agent discovery from Markdown files with YAML frontmatter
 - runtime validation with `/subagents list` and `/subagents doctor`
 - `subagent` tool with `single`, `chain`, and `parallel` modes
-- starter agents: `scout`, `planner`, `reviewer`, `worker`
+- starter agent: `scout`
 
 ## Architecture
 
@@ -52,12 +52,11 @@ Example:
 
 ```md
 ---
-name: worker
-description: Focused implementer.
+name: scout
+description: Fast local recon.
 tools:
   - read
   - bash
-  - apply_patch
 ---
 Role-only prompt text here.
 ```
@@ -99,13 +98,13 @@ If startup or reload finds agent issues, extension emits notice telling you to r
 Single:
 
 ```json
-{ "agent": "worker", "task": "Summarize repo layout." }
+{ "agent": "scout", "task": "Summarize repo layout." }
 ```
 
 Single with explicit working directory:
 
 ```json
-{ "agent": "worker", "task": "Inspect src.", "cwd": "/path/to/repo" }
+{ "agent": "scout", "task": "Inspect src.", "cwd": "/path/to/repo" }
 ```
 
 Chain:
@@ -114,7 +113,7 @@ Chain:
 {
   "chain": [
     { "agent": "scout", "task": "Inspect relevant files." },
-    { "agent": "planner", "task": "Make smallest safe plan." }
+    { "agent": "scout", "task": "Inspect tests and config impact." }
   ]
 }
 ```
@@ -151,3 +150,25 @@ Parallel limits:
 
 - max tasks: `8`
 - max concurrency: `4`
+
+## Built-in scout guidance
+
+Built-in `scout` is for focused repo discovery.
+
+Use it for:
+
+- multi-file discovery
+- symbol tracing
+- data-flow lookup
+- ownership lookup
+- constraints and unknowns tied to task
+
+Prefer direct work instead when exact target file is already known or one or two files are enough.
+
+Use parallel `scout` tasks when independent discovery lenses keep findings focused, for example:
+
+- frontend vs backend
+- read path vs write path
+- implementation vs tests
+
+Keep parallel scout tasks distinct and narrow to avoid overlapping broad summaries.

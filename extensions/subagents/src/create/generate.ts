@@ -76,10 +76,8 @@ Constraints:
 
 Use these built-in agents as style references:
 - scout
-- planner
-- reviewer
 
-Match their level of brevity and durability, not their exact wording.
+Match its level of brevity and durability, not its exact wording.
 
 ${referenceText}
 
@@ -145,7 +143,7 @@ function parseGeneratedAgent(raw: string): GeneratedAgent {
 }
 
 async function loadGenerationReferences(registry: AgentRegistry): Promise<GenerationReference[]> {
-  const names = ["scout", "planner", "reviewer"];
+  const names = ["scout"];
   const references = await Promise.all(
     names.map(async (name) => {
       const agent = registry.agents.find((item) => item.source === "builtin" && item.name === name);

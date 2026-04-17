@@ -63,13 +63,39 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
     clearAgentRegistryCache();
   });
 
+  pi.on("before_agent_start", async (event, ctx) => {
+    const activeTools = new Set(pi.getActiveTools());
+    if (!activeTools.has("subagent")) return undefined;
+
+    const registry = await discoverAgents(ctx.cwd);
+    const hasScout = registry.agents.some((agent) => agent.name === "scout");
+    if (!hasScout) return undefined;
+
+    return {
+      systemPrompt:
+        event.systemPrompt +
+        "\n\nSubagent guidance:\n" +
+        "- Use subagent when focused isolation helps, not for trivial direct work.\n" +
+        "- Built-in scout is for repo discovery across multiple files, symbols, call paths, ownership, constraints, or unclear scope.\n" +
+        "- Skip scout when exact target file or one or two files already cover task.\n" +
+        "- Use parallel scouts when independent discovery lenses keep findings focused, such as frontend vs backend, read path vs write path, or implementation vs tests.\n" +
+        "- Keep parallel scout tasks distinct and narrow to avoid overlapping summaries.",
+    };
+  });
+
   pi.registerTool({
     name: "subagent",
     label: "Subagent",
-    description: "Run isolated subagent workflows. Supports single, chain, and parallel modes.",
+    description:
+      "Delegate focused repo discovery to isolated subagents. Built-in scout handles multi-file codebase recon. Supports single, chain, and parallel modes.",
     promptSnippet: "Delegate focused work to isolated subagents",
     promptGuidelines: [
-      "Use subagent when context isolation or role specialization helps.",
+      "Use subagent when context isolation or role specialization helps, not for trivial work you can do directly.",
+      "Built-in scout handles multi-file discovery, symbol tracing, data-flow lookup, ownership lookup, and scope clarification.",
+      "Use scout before direct work when task needs focused discovery across several files or unclear code paths.",
+      "Use parallel scouts when discovery benefits from separate independent lenses, such as frontend vs backend, read path vs write path, or implementation vs tests.",
+      "Keep parallel scout tasks narrowly scoped with distinct criteria so each returns focused findings instead of overlapping broad summaries.",
+      "Skip scout when exact target files are already known or only one or two files need direct inspection.",
       "Use single mode for one specialist, chain for sequential handoff, parallel for independent tasks.",
       "Keep task text explicit. Chain forwards prior step output automatically as received handoff.",
       "Run /subagents doctor when agent definitions seem broken.",
