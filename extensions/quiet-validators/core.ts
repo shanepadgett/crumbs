@@ -272,6 +272,10 @@ export function registerQuietValidator<TConfig>(
         pi.sendMessage(message, { deliverAs: "steer" });
       }
 
+      validationBaseline = current;
+      dirty = false;
+      lastAttemptedSignature = null;
+
       finishValidationBatch(
         ctx.cwd,
         scope,
