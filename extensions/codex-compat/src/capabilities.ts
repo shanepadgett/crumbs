@@ -5,7 +5,6 @@ export interface CodexCompatCapabilities {
   modelId: string;
   supportsImageInput: boolean;
   supportsOriginalImageDetail: boolean;
-  preserveCustomTools: boolean;
 }
 
 function capability(
@@ -18,7 +17,6 @@ function capability(
     modelId,
     supportsImageInput: true,
     supportsOriginalImageDetail: true,
-    preserveCustomTools: true,
     ...overrides,
   };
 }
