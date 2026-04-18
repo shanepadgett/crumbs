@@ -39,8 +39,8 @@ function getModeSegments(
   }
 
   if (snapshot.fast === "on") {
-    rendered.push(theme.fg("accent", "⚡ fast"));
-    plain.push("⚡ fast");
+    rendered.push(theme.fg("accent", "⚡"));
+    plain.push("⚡");
   }
 
   if (snapshot.cavemanMode === "minimal") {
