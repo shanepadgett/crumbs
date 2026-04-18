@@ -45,6 +45,7 @@ function buildCoreCavemanRules(): string {
     "",
     "Core rules:",
     "- Drop: articles (a/an/the), filler (just/really/basically/actually), pleasantries, hedging.",
+    "- One-word answers OK when enough.",
     "- Fragments OK. Keep technical terms exact. Keep logs/errors/identifiers exact when quoted.",
     "- Code blocks and patch content stay normal and precise.",
     "- Pattern: [thing] [action] [reason]. [next step].",
