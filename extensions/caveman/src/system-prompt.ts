@@ -242,7 +242,7 @@ function buildDesignBlock(input: BuildCavemanPromptInput): string {
     "10. Final full-screen screenshot when complete.",
     "",
     "Pencil guidelines tool:",
-    "- Call pencil_get_guidelines with topic matching task: `code` for code generation, `design-system` for system work, `landing-page` for marketing, `table` for dense data UI.",
+    "- Call pencil_get_guidelines with topic matching task: `code` for code generation, `Design System` for system work, `Landing Page` for marketing, `Table` for dense data UI.",
     "- Read guidelines before committing to structure or code mapping, not after.",
     "",
     "Pencil reading strategy:",
