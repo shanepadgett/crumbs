@@ -1,0 +1,9 @@
+{
+  "name": "@crumbs-pi/questionnaire",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "pi": {
+    "extensions": ["./questionnaire.ts"]
+  }
+}

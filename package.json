@@ -10,6 +10,7 @@
     "extensions/codex-compat",
     "extensions/memory",
     "extensions/notify",
+    "extensions/questionnaire",
     "extensions/workspaces",
     "extensions/web"
   ],
