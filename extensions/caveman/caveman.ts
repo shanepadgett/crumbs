@@ -9,20 +9,20 @@
  * How to use it:
  * - Persist defaults in crumbs config: `extensions.caveman` in `.pi/crumbs.json`.
  * - Run `/caveman on` to enable caveman mode.
- * - Run `/caveman powers` to toggle optional powers.
+ * - Run `/caveman powers` to edit project or session powers.
  * - Run `/caveman off` to restore normal prompt behavior.
  */
 
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   DynamicBorder,
   type ExtensionAPI,
   type ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-import { Container, Text } from "@mariozechner/pi-tui";
+import { Container, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../shared/crumbs-events.js";
 import {
   loadEffectiveExtensionConfig,
@@ -33,6 +33,7 @@ import { MultiSelectList, type MultiSelectItem } from "../shared/ui/multi-select
 import {
   buildCavemanSystemPrompt,
   CAVEMAN_NAME,
+  normalizeCavemanEnhancement,
   normalizeCavemanEnhancements,
   pickRandomCavemanName,
   type CavemanEnhancement,
@@ -43,8 +44,12 @@ type CavemanState = {
   enhancements: CavemanEnhancement[];
 };
 
+type PowersScope = "project" | "session";
+type PowerSource = "session" | "project" | "global" | "none";
+
 const DEFAULT_STATE: CavemanState = { enabled: false, enhancements: [] };
 const CAVEMAN_NAME_ENTRY = "caveman-name";
+const CAVEMAN_SESSION_POWERS_ENTRY = "caveman-session-powers";
 const ENHANCEMENTS: Array<{
   id: CavemanEnhancement;
   label: string;
@@ -59,6 +64,23 @@ const ENHANCEMENTS: Array<{
     id: "design",
     label: "Design",
     description: "Push harder on UX, naming, flows, and smallest viable interface shape.",
+  },
+  {
+    id: "architecture",
+    label: "Architecture",
+    description:
+      "Push harder on ownership, boundaries, abstractions, and concrete design pressure.",
+  },
+  {
+    id: "swiftui",
+    label: "SwiftUI",
+    description:
+      "Use modern Swift and SwiftUI patterns with stronger state and view structure calls.",
+  },
+  {
+    id: "typescript",
+    label: "TypeScript",
+    description: "Use stronger TypeScript boundary, union, and explicit type-shape judgment.",
   },
 ];
 
@@ -152,24 +174,110 @@ function notifyMode(ctx: ExtensionContext, state: CavemanState, name: string): v
   ctx.ui.notify(`${name} awake. Powers: ${state.enhancements.join(", ")}.`, "info");
 }
 
-function stateEquals(a: CavemanState, b: CavemanState): boolean {
-  if (a.enabled !== b.enabled) return false;
-  if (a.enhancements.length !== b.enhancements.length) return false;
-  return a.enhancements.every((enhancement, index) => enhancement === b.enhancements[index]);
+function enhancementsEqual(a: CavemanEnhancement[], b: CavemanEnhancement[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((enhancement, index) => enhancement === b[index]);
+}
+
+function parseEnhancements(values: string[]): CavemanEnhancement[] {
+  return values
+    .map((value) => normalizeCavemanEnhancement(value))
+    .filter((value): value is CavemanEnhancement => Boolean(value));
+}
+
+function getBranchEntries(ctx: ExtensionContext) {
+  const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & {
+    getBranch?: () => ReturnType<ExtensionContext["sessionManager"]["getEntries"]>;
+  };
+
+  return typeof manager.getBranch === "function"
+    ? manager.getBranch()
+    : ctx.sessionManager.getEntries();
+}
+
+function loadSessionEnhancements(ctx: ExtensionContext): {
+  hasOverride: boolean;
+  enhancements: CavemanEnhancement[];
+} {
+  let hasOverride = false;
+  let enhancements: CavemanEnhancement[] = [];
+
+  for (const entry of getBranchEntries(ctx)) {
+    if (entry.type !== "custom" || entry.customType !== CAVEMAN_SESSION_POWERS_ENTRY) continue;
+    hasOverride = true;
+    const data = asObject(entry.data);
+    enhancements = Array.isArray(data?.powers) ? normalizeCavemanEnhancements(data.powers) : [];
+  }
+
+  return { hasOverride, enhancements };
+}
+
+async function openScopePicker(
+  ctx: ExtensionContext,
+  cavemanName: string,
+): Promise<PowersScope | null> {
+  if (!ctx.hasUI) return null;
+
+  const items: SelectItem[] = [
+    {
+      value: "project",
+      label: "Project powers",
+      description: "Save in .pi/crumbs.json",
+    },
+    {
+      value: "session",
+      label: "Session powers",
+      description: "Current session only",
+    },
+  ];
+
+  return ctx.ui.custom<PowersScope | null>((tui, theme, _kb, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+    container.addChild(new Text(theme.fg("accent", theme.bold(`${cavemanName} powers`)), 1, 0));
+    container.addChild(new Text(theme.fg("muted", "Choose scope first."), 1, 0));
+
+    const list = new SelectList(items, items.length, {
+      selectedPrefix: (text: string) => theme.fg("accent", text),
+      selectedText: (text: string) => theme.fg("accent", text),
+      description: (text: string) => theme.fg("muted", text),
+      scrollInfo: (text: string) => theme.fg("dim", text),
+      noMatch: (text: string) => theme.fg("warning", text),
+    });
+
+    list.onSelect = (item) => done(item.value as PowersScope);
+    list.onCancel = () => done(null);
+
+    container.addChild(list);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • Enter select • Esc close"), 1, 0));
+    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+    return {
+      render(width: number): string[] {
+        return container.render(width);
+      },
+      invalidate(): void {
+        container.invalidate();
+      },
+      handleInput(data: string): void {
+        list.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
 }
 
 async function openEnhancementPicker(
   ctx: ExtensionContext,
-  current: CavemanState,
-): Promise<CavemanState> {
-  if (!ctx.hasUI) return current;
+  scope: PowersScope,
+  cavemanName: string,
+  currentEnhancements: CavemanEnhancement[],
+): Promise<CavemanEnhancement[] | null> {
+  if (!ctx.hasUI) return null;
 
-  let draft: CavemanState = {
-    enabled: current.enabled,
-    enhancements: [...current.enhancements],
-  };
+  let draft = [...currentEnhancements];
 
-  await ctx.ui.custom((tui, theme, _kb, done) => {
+  return ctx.ui.custom<CavemanEnhancement[] | null>((tui, theme, _kb, done) => {
     const items: MultiSelectItem[] = ENHANCEMENTS.map((enhancement) => ({
       value: enhancement.id,
       label: enhancement.label,
@@ -178,9 +286,27 @@ async function openEnhancementPicker(
 
     const container = new Container();
     container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-    container.addChild(new Text(theme.fg("accent", theme.bold(`${CAVEMAN_NAME} powers`)), 1, 0));
     container.addChild(
-      new Text(theme.fg("muted", "Toggle extra brain clubs. Base caveman stays same."), 1, 0),
+      new Text(
+        theme.fg(
+          "accent",
+          theme.bold(`${cavemanName} ${scope === "project" ? "project powers" : "session powers"}`),
+        ),
+        1,
+        0,
+      ),
+    );
+    container.addChild(
+      new Text(
+        theme.fg(
+          "muted",
+          scope === "project"
+            ? "Saved in .pi/crumbs.json"
+            : "Saved for current session only. First time starts blank.",
+        ),
+        1,
+        0,
+      ),
     );
 
     const powersList = new MultiSelectList(items, Math.min(items.length + 2, 10), {
@@ -189,25 +315,14 @@ async function openEnhancementPicker(
       scrollInfo: (text: string) => theme.fg("dim", text),
       noMatch: (text: string) => theme.fg("warning", text),
     });
-    powersList.setCheckedValues(draft.enhancements);
+    powersList.setCheckedValues(draft);
     powersList.onToggle = (values) => {
-      draft = {
-        ...draft,
-        enhancements: values.filter(
-          (value): value is CavemanEnhancement => value === "improve" || value === "design",
-        ),
-      };
+      draft = parseEnhancements(values);
     };
     powersList.onConfirm = (values) => {
-      draft = {
-        ...draft,
-        enhancements: values.filter(
-          (value): value is CavemanEnhancement => value === "improve" || value === "design",
-        ),
-      };
-      done(undefined);
+      done(parseEnhancements(values));
     };
-    powersList.onCancel = () => done(undefined);
+    powersList.onCancel = () => done(null);
 
     container.addChild(powersList);
     container.addChild(new Text(theme.fg("dim", "Space toggle • Enter accept • Esc close"), 1, 0));
@@ -226,8 +341,6 @@ async function openEnhancementPicker(
       },
     };
   });
-
-  return draft;
 }
 
 export default function cavemanExtension(pi: ExtensionAPI): void {
@@ -270,12 +383,24 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
     return name;
   }
 
-  function emitCavemanChanged(ctx: ExtensionContext, state: CavemanState): void {
+  function persistSessionEnhancements(enhancements: CavemanEnhancement[]): void {
+    pi.appendEntry(CAVEMAN_SESSION_POWERS_ENTRY, { powers: [...enhancements] });
+  }
+
+  function emitCavemanChanged(
+    ctx: ExtensionContext,
+    state: CavemanState,
+    powerSource?: PowerSource,
+  ): void {
+    const sessionState = loadSessionEnhancements(ctx);
+
     pi.events.emit(CRUMBS_EVENT_CAVEMAN_CHANGED, {
       cwd: ctx.cwd,
       enabled: state.enabled,
       enhancements: [...state.enhancements],
       name: getCavemanName(ctx),
+      powerSource,
+      hasSessionOverride: sessionState.hasOverride,
     });
   }
 
@@ -289,6 +414,17 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
     return cached ?? { ...DEFAULT_STATE };
   }
 
+  async function getEffectiveState(ctx: ExtensionContext): Promise<CavemanState> {
+    const projectState = await getState(ctx.cwd);
+    const sessionState = loadSessionEnhancements(ctx);
+    return {
+      enabled: projectState.enabled,
+      enhancements: sessionState.hasOverride
+        ? sessionState.enhancements
+        : projectState.enhancements,
+    };
+  }
+
   async function setState(
     ctx: ExtensionContext,
     next: CavemanState,
@@ -296,13 +432,14 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
   ): Promise<void> {
     loadedCwds.add(ctx.cwd);
     await saveState(ctx.cwd, next);
-    const effective = await loadState(ctx.cwd);
-    stateByCwd.set(ctx.cwd, effective);
+    const projectState = await loadState(ctx.cwd);
+    stateByCwd.set(ctx.cwd, projectState);
+    const effectiveState = await getEffectiveState(ctx);
 
-    emitCavemanChanged(ctx, effective);
+    emitCavemanChanged(ctx, effectiveState, "project");
 
     if (options?.notify !== false) {
-      notifyMode(ctx, effective, getCavemanName(ctx));
+      notifyMode(ctx, effectiveState, getCavemanName(ctx));
     }
   }
 
@@ -334,12 +471,44 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const current = await getState(ctx.cwd);
       if (args.trim().toLowerCase() === "powers") {
-        if (!ctx.hasUI) {
+        if (!ctx.hasUI) return;
+
+        const cavemanName = assignCavemanName(ctx);
+        const scope = await openScopePicker(ctx, cavemanName);
+        if (!scope) return;
+
+        if (scope === "project") {
+          const nextEnhancements = await openEnhancementPicker(
+            ctx,
+            scope,
+            cavemanName,
+            current.enhancements,
+          );
+          if (!nextEnhancements || enhancementsEqual(current.enhancements, nextEnhancements))
+            return;
+          await setState(ctx, { ...current, enhancements: nextEnhancements });
           return;
         }
-        const next = await openEnhancementPicker(ctx, current);
-        if (stateEquals(current, next)) return;
-        await setState(ctx, next);
+
+        const sessionState = loadSessionEnhancements(ctx);
+        const nextEnhancements = await openEnhancementPicker(
+          ctx,
+          scope,
+          cavemanName,
+          sessionState.hasOverride ? sessionState.enhancements : [],
+        );
+        if (!nextEnhancements) return;
+        if (
+          sessionState.hasOverride &&
+          enhancementsEqual(sessionState.enhancements, nextEnhancements)
+        ) {
+          return;
+        }
+
+        persistSessionEnhancements(nextEnhancements);
+        const effectiveState = await getEffectiveState(ctx);
+        emitCavemanChanged(ctx, effectiveState, "session");
+        notifyMode(ctx, effectiveState, getCavemanName(ctx));
         return;
       }
 
@@ -361,7 +530,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
 
     const hadName = Boolean(restoreCavemanName(ctx));
     const name = assignCavemanName(ctx);
-    const state = await getState(ctx.cwd);
+    const state = await getEffectiveState(ctx);
     emitCavemanChanged(ctx, state);
 
     if (ctx.hasUI && !hadName) {
@@ -372,25 +541,25 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    const state = await getState(ctx.cwd);
+    const state = await getEffectiveState(ctx);
     assignCavemanName(ctx);
     emitCavemanChanged(ctx, state);
   });
 
   (pi as any).on("session_switch", async (_event: unknown, ctx: ExtensionContext) => {
-    const state = await getState(ctx.cwd);
+    const state = await getEffectiveState(ctx);
     assignCavemanName(ctx);
     emitCavemanChanged(ctx, state);
   });
 
   (pi as any).on("session_tree", async (_event: unknown, ctx: ExtensionContext) => {
-    const state = await getState(ctx.cwd);
+    const state = await getEffectiveState(ctx);
     assignCavemanName(ctx);
     emitCavemanChanged(ctx, state);
   });
 
   pi.on("before_agent_start", async (_event, ctx) => {
-    const state = await getState(ctx.cwd);
+    const state = await getEffectiveState(ctx);
     if (!state.enabled) return undefined;
 
     const docs = getPiDocsPaths();

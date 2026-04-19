@@ -6,6 +6,14 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { GitSummary, SessionTokenTotals, StatusFlags, StatusSnapshot } from "./types.js";
 
+function enhancementIcon(enhancement: StatusFlags["cavemanEnhancements"][number]): string {
+  if (enhancement === "improve") return "🔨";
+  if (enhancement === "design") return "🎨";
+  if (enhancement === "architecture") return "🏛️";
+  if (enhancement === "swiftui") return "🍎";
+  return "📘";
+}
+
 function getCavemanDisplay(flags: StatusFlags): {
   label: string;
   enabled: boolean;
@@ -16,7 +24,7 @@ function getCavemanDisplay(flags: StatusFlags): {
   }
 
   const suffix = flags.cavemanEnhancements
-    .map((enhancement) => (enhancement === "improve" ? "🔨" : "🎨"))
+    .map((enhancement) => enhancementIcon(enhancement))
     .join("");
 
   return {
@@ -190,6 +198,8 @@ export function buildSnapshot(
     cavemanName: flags.cavemanName,
     cavemanEnabled: caveman.enabled,
     cavemanEnhancements: caveman.enhancements,
+    cavemanPowerSource: flags.cavemanPowerSource,
+    cavemanHasSessionOverride: flags.cavemanHasSessionOverride,
     focus: focus.label,
     focusMode: focus.mode,
     contextSummary,

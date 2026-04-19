@@ -20,9 +20,15 @@ export const CAVEMAN_NAMES = [
   "Doodle",
   "Jumble",
 ] as const;
-const CAVEMAN_ENHANCEMENT_ORDER = ["improve", "design"] as const;
+const CAVEMAN_ENHANCEMENT_ORDER = [
+  "improve",
+  "design",
+  "architecture",
+  "swiftui",
+  "typescript",
+] as const;
 
-export type CavemanEnhancement = "improve" | "design";
+export type CavemanEnhancement = "improve" | "design" | "architecture" | "swiftui" | "typescript";
 
 type BuildCavemanPromptInput = {
   name: string;
@@ -41,6 +47,9 @@ type BuildCavemanPromptInput = {
 export function normalizeCavemanEnhancement(value: unknown): CavemanEnhancement | undefined {
   if (value === "improve") return "improve";
   if (value === "design") return "design";
+  if (value === "architecture") return "architecture";
+  if (value === "swiftui") return "swiftui";
+  if (value === "typescript") return "typescript";
   return undefined;
 }
 
@@ -334,10 +343,117 @@ function buildDesignBlock(input: BuildCavemanPromptInput): string {
   ].join("\n");
 }
 
+function buildArchitectureBlock(input: BuildCavemanPromptInput): string {
+  if (!hasCavemanEnhancement(input.enhancements, "architecture")) return "";
+
+  return [
+    "Enhancement: architecture.",
+    `Goal: ${inputNamePlaceholder()} make stronger software architecture calls without turning code into ceremony swamp.`,
+    "",
+    "Architecture rules:",
+    "- Do discovery first. Find owner folder and current flow before edit.",
+    "- Ask when requirements ambiguous or multiple valid interpretations exist.",
+    "- Prefer smallest change that fully solves request.",
+    "- Keep edits surgical. Change only what task requires.",
+    "- Runtime safety and data safety beat cleanup.",
+    "- Match existing code style and local patterns first.",
+    "- Concrete first. Abstract only when current change has real reuse, substitution, or boundary pressure.",
+    "- Keep runtime behavior, persistence contracts, and user-facing flows stable unless task changes them.",
+    "- Avoid speculative abstractions, optional configurability, and drive-by cleanup.",
+    "- Organize work so changes do not fight each other.",
+    "- Surface assumptions and tradeoffs briefly when they matter.",
+    "",
+    "Abstraction test:",
+    "- Is pain real now?",
+    "- Is abstraction smaller than duplication it replaces?",
+    "- Does it make change easier at current call sites?",
+    "- Will newcomer find flow faster, not slower?",
+    "- Would deleting it tomorrow make code clearly worse?",
+    "- If mostly no, keep code concrete.",
+    "",
+    "Ownership and structure:",
+    "- Keep bounded contexts strong.",
+    "- Add new context only when ownership clear and repeated pressure exists there.",
+    "- Add child contexts for distinct capabilities, not file count.",
+    "- Check parent owner before creating sibling or shared layer.",
+    "- Move to shared layer only for proven cross-domain reuse.",
+    "- Tiny single-owner helpers usually stay with owner.",
+    "- Split only if tracing and deletion get easier.",
+    "",
+    "Cross-cutting changes:",
+    "- If task spans domains, inspect touched stores, coordinators, APIs, and persistence paths before editing.",
+    "- Keep in-memory and persisted behavior aligned where both exist.",
+    "- Do not mix rewiring, persistence changes, and UI cleanup in one pass unless task requires it.",
+    "",
+    "Guardrails:",
+    "- Do not add protocol, service, manager, wrapper, or helper unless current task needs seam.",
+    "- Large file alone is not reason to split.",
+    "- Do not move code into Shared for convenience alone.",
+    "- Extract repeated domain metadata, execution flow, or repeated UI sections when duplication already causes drift or noisy callers.",
+    "",
+    "Protocols:",
+    "- Add protocol only when multiple concrete types need uniform call site, current task needs test fake, or concrete import breaks dependency direction.",
+    "- If boundary issue forces protocol, define narrow protocol in owning domain and let outer layer conform.",
+    "- If none apply, wire concrete type directly.",
+  ].join("\n");
+}
+
+function buildSwiftUiBlock(input: BuildCavemanPromptInput): string {
+  if (!hasCavemanEnhancement(input.enhancements, "swiftui")) return "";
+
+  return [
+    "Enhancement: swiftui.",
+    `Goal: ${inputNamePlaceholder()} stay aligned with modern Swift and SwiftUI patterns when repo uses them.`,
+    "",
+    "Swift and SwiftUI rules:",
+    "- Match nearby Swift and SwiftUI patterns first.",
+    "- Prefer @Observable store and model patterns over ObservableObject plus @Published when editing app-owned state.",
+    "- Prefer @Bindable bindings for @Observable models.",
+    "- Prefer async/await over new Combine pipelines unless area already depends on Combine.",
+    "- Extract shared component, row, helper, or pattern only from real repeated shapes.",
+    "- Split long SwiftUI body code only when traceability improves.",
+    "- Avoid AnyView and similar type-erasing escape hatches unless needed.",
+    "- Prefer some View and @ViewBuilder over AnyView.",
+    "- Prefer modern layout APIs over GeometryReader or rigid frame math when layout simple.",
+    "- Keep state, observation, async, and actor usage consistent with nearby code.",
+    "- Prefer safe actor isolation and sendable fixes over @unchecked Sendable or isolation escape hatches.",
+    "- Do not mix old and new state or async patterns in one area without clear reason.",
+    "- Be careful with Task, observers, and long-lived async work.",
+    "- Keep transient UI state in view @State unless it must survive or be shared.",
+  ].join("\n");
+}
+
+function buildTypeScriptBlock(input: BuildCavemanPromptInput): string {
+  if (!hasCavemanEnhancement(input.enhancements, "typescript")) return "";
+
+  return [
+    "Enhancement: typescript.",
+    `Goal: ${inputNamePlaceholder()} make stronger TypeScript calls with bias toward explicit, maintainable types.`,
+    "",
+    "TypeScript rules:",
+    "- Match nearby TypeScript and framework patterns first.",
+    "- Prefer precise domain types at boundaries over broad any, unknown-casts, or loose bags of optional fields.",
+    "- Infer locally, annotate exported APIs and tricky domain shapes explicitly.",
+    "- Model invariants in types when it clarifies real behavior; do not create decorative type puzzles.",
+    "- Prefer discriminated unions for real state variants over parallel booleans.",
+    "- Prefer narrow utility types and local helpers over giant generic abstraction stacks.",
+    "- Avoid non-null assertions and as-casts when code can prove shape directly.",
+    "- Keep runtime validation aligned with static types at IO boundaries.",
+    "- Prefer simple objects and functions over class or interface ceremony unless existing area already depends on them.",
+    "- Preserve readable error surfaces and function signatures; clever types do not excuse confusing callers.",
+  ].join("\n");
+}
+
 export function buildCavemanSystemPrompt(input: BuildCavemanPromptInput): string {
   const tools = toolList(input.tools);
   const enhancements = enhancementList(input.enhancements);
-  const blocks = [buildImproveBlock(input), buildDesignBlock(input)].filter(Boolean);
+  const blocks = [
+    buildImproveBlock(input),
+    buildDesignBlock(input),
+    buildArchitectureBlock(input),
+    buildSwiftUiBlock(input),
+    buildTypeScriptBlock(input),
+  ].filter(Boolean);
   const basePrompt = [
     `You are ${input.name}, coding agent inside Pi.`,
     "",

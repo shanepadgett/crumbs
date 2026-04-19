@@ -4,6 +4,14 @@ import { renderDivider, truncateFromStart } from "./render-shared.js";
 import { renderContextValue } from "./snapshot.js";
 import type { StatusSnapshot } from "./types.js";
 
+function enhancementIcon(enhancement: StatusSnapshot["cavemanEnhancements"][number]): string {
+  if (enhancement === "improve") return "🔨";
+  if (enhancement === "design") return "🎨";
+  if (enhancement === "architecture") return "🏛️";
+  if (enhancement === "swiftui") return "🍎";
+  return "📘";
+}
+
 function compactMinimalPath(path: string): string {
   if (path === "~") return path;
 
@@ -51,14 +59,10 @@ function getModeSegments(
     cavemanPlain.push(cavemanLabel);
   }
 
-  if (snapshot.cavemanEnhancements.includes("improve")) {
-    cavemanRendered.push(theme.fg("accent", "🔨"));
-    cavemanPlain.push("🔨");
-  }
-
-  if (snapshot.cavemanEnhancements.includes("design")) {
-    cavemanRendered.push(theme.fg("accent", "🎨"));
-    cavemanPlain.push("🎨");
+  for (const enhancement of snapshot.cavemanEnhancements) {
+    const icon = enhancementIcon(enhancement);
+    cavemanRendered.push(theme.fg("accent", icon));
+    cavemanPlain.push(icon);
   }
 
   if (cavemanRendered.length > 0) {

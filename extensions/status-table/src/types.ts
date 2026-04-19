@@ -26,6 +26,8 @@ export type StatusSnapshot = {
   cavemanName: string;
   cavemanEnabled: boolean;
   cavemanEnhancements: CavemanEnhancement[];
+  cavemanPowerSource: "session" | "project" | "global" | "none";
+  cavemanHasSessionOverride: boolean;
   focus: string;
   focusMode: "off" | FocusMode;
   contextSummary: string;
@@ -45,6 +47,8 @@ export type StatusFlags = {
   cavemanName: string;
   cavemanEnabled: boolean;
   cavemanEnhancements: CavemanEnhancement[];
+  cavemanPowerSource: "session" | "project" | "global" | "none";
+  cavemanHasSessionOverride: boolean;
   focusEnabled: boolean;
   focusMode: FocusMode;
 };

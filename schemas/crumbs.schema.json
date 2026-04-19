@@ -328,17 +328,17 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["improve", "design"]
+            "enum": ["improve", "design", "architecture", "swiftui", "typescript"]
           },
           "uniqueItems": true,
           "default": [],
-          "description": "Optional Caveman powers. improve adds Pi self-improvement guidance. design adds UX and interface-shaping guidance."
+          "description": "Optional Caveman powers. improve adds Pi self-improvement guidance. design adds UX and interface-shaping guidance. architecture adds stronger ownership and abstraction judgment. swiftui adds modern SwiftUI guidance. typescript adds stronger TypeScript guidance."
         },
         "enhancements": {
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["improve", "design"]
+            "enum": ["improve", "design", "architecture", "swiftui", "typescript"]
           },
           "uniqueItems": true,
           "default": [],
@@ -374,7 +374,7 @@
         },
         "requiresCavemanPower": {
           "type": "string",
-          "enum": ["improve", "design"],
+          "enum": ["improve", "design", "architecture", "swiftui", "typescript"],
           "description": "Enable this server only when Caveman is enabled and this power is active."
         },
         "lifecycle": {

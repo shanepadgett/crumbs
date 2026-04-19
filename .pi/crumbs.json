@@ -3,7 +3,9 @@
   "extensions": {
     "caveman": {
       "enabled": true,
-      "powers": []
+      "powers": [
+        "improve"
+      ]
     },
     "quietMarkdownlint": {
       "excludeGlobs": [

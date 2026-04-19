@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { normalizeCavemanEnhancement } from "../../caveman/src/system-prompt.js";
 import { GIT_REFRESH_INTERVAL_MS, WIDGET_KEY } from "./constants.js";
 import {
   CRUMBS_EVENT_CAVEMAN_CHANGED,
@@ -36,6 +37,8 @@ type StatusFlagEvent = {
 type CavemanFlagEvent = StatusFlagEvent & {
   name?: string;
   enhancements?: CavemanEnhancement[];
+  powerSource?: "session" | "project" | "global" | "none";
+  hasSessionOverride?: boolean;
 };
 
 type FocusFlagEvent = StatusFlagEvent & {
@@ -61,10 +64,19 @@ function asCavemanFlagEvent(value: unknown): CavemanFlagEvent {
     enabled: typeof record.enabled === "boolean" ? record.enabled : undefined,
     name: typeof record.name === "string" ? record.name : undefined,
     enhancements: Array.isArray(record.enhancements)
-      ? record.enhancements.filter(
-          (value): value is CavemanEnhancement => value === "improve" || value === "design",
-        )
+      ? record.enhancements
+          .map((value) => normalizeCavemanEnhancement(value))
+          .filter((value): value is CavemanEnhancement => Boolean(value))
       : undefined,
+    powerSource:
+      record.powerSource === "session" ||
+      record.powerSource === "project" ||
+      record.powerSource === "global" ||
+      record.powerSource === "none"
+        ? record.powerSource
+        : undefined,
+    hasSessionOverride:
+      typeof record.hasSessionOverride === "boolean" ? record.hasSessionOverride : undefined,
   };
 }
 
@@ -100,6 +112,8 @@ const DEFAULT_FLAGS: StatusFlags = {
   cavemanName: "Grug",
   cavemanEnabled: false,
   cavemanEnhancements: [],
+  cavemanPowerSource: "none",
+  cavemanHasSessionOverride: false,
   focusEnabled: false,
   focusMode: "hidden",
 };
@@ -161,13 +175,10 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     return prefs;
   }
 
-  async function refreshFlags(cwd: string): Promise<StatusFlags> {
-    const state = getWorkspaceState(cwd);
-    const flags = await loadStatusFlags(cwd);
-    state.flags = {
-      ...flags,
-      cavemanName: state.flags.cavemanName,
-    };
+  async function refreshFlags(ctx: ExtensionContext): Promise<StatusFlags> {
+    const state = getWorkspaceState(ctx.cwd);
+    const flags = await loadStatusFlags(ctx);
+    state.flags = { ...flags };
     return state.flags;
   }
 
@@ -284,6 +295,10 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (event.name) flags.cavemanName = event.name;
     if (typeof event.enabled === "boolean") flags.cavemanEnabled = event.enabled;
     if (event.enhancements) flags.cavemanEnhancements = [...event.enhancements];
+    if (event.powerSource) flags.cavemanPowerSource = event.powerSource;
+    if (typeof event.hasSessionOverride === "boolean") {
+      flags.cavemanHasSessionOverride = event.hasSessionOverride;
+    }
     if (ctx && ctx.cwd === targetCwd) refreshUI(ctx);
   }
 
@@ -300,7 +315,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
 
   async function hydrateContext(ctx: ExtensionContext): Promise<void> {
     await ensurePrefs(ctx.cwd);
-    await refreshFlags(ctx.cwd);
+    await refreshFlags(ctx);
     refreshTokenTotals(ctx);
     setCurrentContext(ctx);
   }
@@ -335,7 +350,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const current = await ensurePrefs(ctx.cwd);
-      await refreshFlags(ctx.cwd);
+      await refreshFlags(ctx);
       refreshTokenTotals(ctx);
 
       if (!trimmed) {

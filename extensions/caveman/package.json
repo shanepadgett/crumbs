@@ -1,0 +1,8 @@
+{
+  "name": "@crumbs-pi/caveman",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./caveman.ts"]
+  }
+}

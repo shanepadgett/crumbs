@@ -17,6 +17,7 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { normalizeCavemanEnhancement } from "../caveman/src/system-prompt.js";
 import {
   connectAndDiscover,
   formatSourceKind,
@@ -388,10 +389,9 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     cavemanState = {
       enabled: typeof record.enabled === "boolean" ? record.enabled : cavemanState.enabled,
       enhancements: Array.isArray(record.enhancements)
-        ? record.enhancements.filter(
-            (value): value is CavemanGateState["enhancements"][number] =>
-              value === "improve" || value === "design",
-          )
+        ? record.enhancements
+            .map((value) => normalizeCavemanEnhancement(value))
+            .filter((value): value is CavemanGateState["enhancements"][number] => Boolean(value))
         : cavemanState.enhancements,
     };
 
