@@ -461,16 +461,30 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
   }
 
   pi.registerCommand("caveman", {
-    description: "Toggle caveman mode or open powers: /caveman [on|off|powers]",
+    description: "Toggle caveman mode or manage powers: /caveman [on|off|powers|minimal]",
     getArgumentCompletions(prefix) {
       const value = prefix.trim().toLowerCase();
-      const options = ["off", "on", "powers"];
+      const options = ["off", "on", "powers", "minimal"];
       const filtered = options.filter((item) => item.startsWith(value));
       return filtered.length > 0 ? filtered.map((item) => ({ value: item, label: item })) : null;
     },
     handler: async (args, ctx) => {
       const current = await getState(ctx.cwd);
-      if (args.trim().toLowerCase() === "powers") {
+      const arg = args.trim().toLowerCase();
+
+      if (arg === "minimal") {
+        const sessionState = loadSessionEnhancements(ctx);
+        if (sessionState.hasOverride && sessionState.enhancements.length === 0) return;
+
+        assignCavemanName(ctx);
+        persistSessionEnhancements([]);
+        const effectiveState = await getEffectiveState(ctx);
+        emitCavemanChanged(ctx, effectiveState, "session");
+        notifyMode(ctx, effectiveState, getCavemanName(ctx));
+        return;
+      }
+
+      if (arg === "powers") {
         if (!ctx.hasUI) return;
 
         const cavemanName = assignCavemanName(ctx);
@@ -516,7 +530,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
 
       if (result === "usage") {
         if (ctx.hasUI) {
-          ctx.ui.notify("Usage: /caveman [on|off|powers]", "warning");
+          ctx.ui.notify("Usage: /caveman [on|off|powers|minimal]", "warning");
         }
         return;
       }

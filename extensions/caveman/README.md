@@ -22,6 +22,7 @@ What it does:
 - `/caveman on` — enable caveman mode
 - `/caveman off` — disable caveman mode
 - `/caveman powers` — choose `Project powers` or `Session powers`, then edit that scope
+- `/caveman minimal` — save empty session powers override for current session
 
 ## Power scopes
 
@@ -37,6 +38,7 @@ What it does:
 - restore previous session selection on later opens
 - override project and global powers for current session
 - follow current branch on resume, fork, and tree navigation
+- `/caveman minimal` writes this scope as empty, so project/global powers stay off for current session
 
 ## Precedence
 
