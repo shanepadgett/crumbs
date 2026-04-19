@@ -1,13 +1,18 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { normalizeCavemanEnhancements } from "../caveman/src/system-prompt.js";
+import { loadEffectiveExtensionConfig } from "../shared/config/crumbs-loader.js";
+import { asObject } from "../shared/io/json-file.js";
 import { DirectMcpClient } from "./client.js";
 import {
+  type CavemanGateState,
   type McpTool,
   type RawServerConfig,
   type ServerConfig,
   type ServerConfigRecord,
   type ServerSourceKind,
+  isServerAllowedByCaveman,
 } from "./shared.js";
 
 interface RawMcpFile {
@@ -168,12 +173,22 @@ export function loadServerRecords(cwd: string): Record<string, ServerConfigRecor
   return merged;
 }
 
-export function loadServersConfig(cwd: string): Record<string, ServerConfig> {
+export async function loadCavemanGateState(cwd: string): Promise<CavemanGateState> {
+  const section = asObject(await loadEffectiveExtensionConfig(cwd, "caveman"));
+  return {
+    enabled: typeof section?.enabled === "boolean" ? section.enabled : false,
+    enhancements: normalizeCavemanEnhancements(section?.powers ?? section?.enhancements),
+  };
+}
+
+export async function loadServersConfig(cwd: string): Promise<Record<string, ServerConfig>> {
   const records = loadServerRecords(cwd);
+  const caveman = await loadCavemanGateState(cwd);
   const normalized: Record<string, ServerConfig> = {};
 
   for (const [name, record] of Object.entries(records)) {
     if (record.raw.enabled === false) continue;
+    if (!isServerAllowedByCaveman(record.raw, caveman)) continue;
     if (record.config) normalized[name] = record.config;
   }
 

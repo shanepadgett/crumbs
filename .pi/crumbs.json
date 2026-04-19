@@ -3,9 +3,7 @@
   "extensions": {
     "caveman": {
       "enabled": true,
-      "powers": [
-        "improve"
-      ]
+      "powers": []
     },
     "quietMarkdownlint": {
       "excludeGlobs": [
@@ -30,7 +28,8 @@
             "--app",
             "visual_studio_code"
           ],
-          "lifecycle": "lazy"
+          "lifecycle": "lazy",
+          "requiresCavemanPower": "design"
         }
       }
     }

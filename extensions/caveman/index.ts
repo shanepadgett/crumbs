@@ -26,8 +26,7 @@ import { Container, Text } from "@mariozechner/pi-tui";
 import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../shared/crumbs-events.js";
 import {
   loadEffectiveExtensionConfig,
-  loadProjectCrumbsConfig,
-  updateGlobalCrumbsConfig,
+  updateProjectCrumbsConfig,
 } from "../shared/config/crumbs-loader.js";
 import { asObject, type JsonObject } from "../shared/io/json-file.js";
 import { MultiSelectList, type MultiSelectItem } from "../shared/ui/multi-select-list.js";
@@ -79,8 +78,8 @@ function parseState(section: JsonObject | null): CavemanState {
   return { enabled, enhancements: [] };
 }
 
-async function saveState(state: CavemanState): Promise<void> {
-  await updateGlobalCrumbsConfig((current) => {
+async function saveState(cwd: string, state: CavemanState): Promise<void> {
+  await updateProjectCrumbsConfig(cwd, (current) => {
     const next = { ...current };
     const extensions = asObject(next.extensions) ?? {};
     const caveman = { ...asObject(extensions.caveman) };
@@ -102,13 +101,6 @@ async function saveState(state: CavemanState): Promise<void> {
 async function loadState(cwd: string): Promise<CavemanState> {
   const config = asObject(await loadEffectiveExtensionConfig(cwd, "caveman"));
   return parseState(config);
-}
-
-async function hasProjectOverride(cwd: string): Promise<boolean> {
-  const project = await loadProjectCrumbsConfig(cwd);
-  const extensions = asObject(project.extensions);
-  const caveman = asObject(extensions?.caveman);
-  return Boolean(caveman);
 }
 
 function getPiDocsPaths(): { root: string; readme: string; docs: string; examples: string } {
@@ -303,7 +295,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
     options?: { notify?: boolean },
   ): Promise<void> {
     loadedCwds.add(ctx.cwd);
-    await saveState(next);
+    await saveState(ctx.cwd, next);
     const effective = await loadState(ctx.cwd);
     stateByCwd.set(ctx.cwd, effective);
 
@@ -311,15 +303,6 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
 
     if (options?.notify !== false) {
       notifyMode(ctx, effective, getCavemanName(ctx));
-      if (!stateEquals(effective, next) && ctx.hasUI) {
-        const projectOverride = await hasProjectOverride(ctx.cwd);
-        if (projectOverride) {
-          ctx.ui.notify(
-            "Project crumbs override is active (.pi/crumbs.json -> extensions.caveman). Global toggle saved but local override still wins.",
-            "warning",
-          );
-        }
-      }
     }
   }
 

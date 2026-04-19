@@ -372,6 +372,11 @@
           "default": true,
           "description": "Enable or disable this server entry."
         },
+        "requiresCavemanPower": {
+          "type": "string",
+          "enum": ["improve", "design"],
+          "description": "Enable this server only when Caveman is enabled and this power is active."
+        },
         "lifecycle": {
           "type": "string",
           "enum": ["lazy", "eager"],

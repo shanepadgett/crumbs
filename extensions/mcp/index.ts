@@ -10,27 +10,32 @@
  * - Add server entries under `mcpServers` in config.
  * - Use `/mcp` to open the manager.
  * - Use `/mcp reconnect [server]` for quick reconnects.
+ * - Add `requiresCavemanPower` to gate server behind active Caveman power.
  *
  * Example:
- * - `{"mcpServers":{"exa":{"url":"https://mcp.exa.ai/mcp","lifecycle":"eager"}}}`
+ * - `{"mcpServers":{"pencil":{"url":"https://example.com/mcp","requiresCavemanPower":"design"}}}`
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
   connectAndDiscover,
   formatSourceKind,
+  loadCavemanGateState,
   loadServerRecords,
   removeServerRecord,
   updateServerRecord,
 } from "./config.js";
 import {
+  type CavemanGateState,
   errorMessage,
+  isServerAllowedByCaveman,
   LOG_PREFIX,
   type McpTool,
   type ServerConfigRecord,
   type ServerState,
 } from "./shared.js";
 import { registerServerTool } from "./tools.js";
+import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../shared/crumbs-events.js";
 import {
   matchesTool,
   parseQuery,
@@ -48,6 +53,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
   const managedToolNames = new Set<string>();
   const toolOwners = new Map<string, string>();
   let lastCwd = process.cwd();
+  let cavemanState: CavemanGateState = { enabled: false, enhancements: [] };
 
   function withToolOverride(
     tools: ServerConfigRecord["raw"]["tools"] | undefined,
@@ -66,6 +72,14 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     return loadServerRecords(lastCwd);
   }
 
+  function isRecordRuntimeEnabled(record: ServerConfigRecord): boolean {
+    return (
+      record.raw.enabled !== false &&
+      !!record.config &&
+      isServerAllowedByCaveman(record.raw, cavemanState)
+    );
+  }
+
   function releaseServerTools(name: string): void {
     const state = servers.get(name);
     if (!state) return;
@@ -77,7 +91,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 
   function claimUnownedTools(): void {
     for (const record of sortByName(Object.values(getRecords()))) {
-      if (record.raw.enabled === false) continue;
+      if (!isRecordRuntimeEnabled(record)) continue;
       const state = servers.get(record.name);
       if (!state) continue;
 
@@ -99,7 +113,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     const names = Array.from(new Set([...discovered.keys(), ...configuredNames])).sort((a, b) =>
       a.localeCompare(b),
     );
-    const serverEnabled = record.raw.enabled !== false;
+    const serverEnabled = isRecordRuntimeEnabled(record);
 
     return names.map((name) => {
       const tool = discovered.get(name);
@@ -141,7 +155,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     for (const toolName of managedToolNames) active.delete(toolName);
 
     for (const record of Object.values(getRecords())) {
-      if (record.raw.enabled === false || !record.config) continue;
+      if (!isRecordRuntimeEnabled(record)) continue;
 
       for (const tool of servers.get(record.name)?.tools ?? []) {
         if (toolOwners.get(tool.name) !== record.name) continue;
@@ -153,11 +167,54 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     pi.setActiveTools([...active]);
   }
 
+  async function ensureServerReady(record: ServerConfigRecord): Promise<McpTool[]> {
+    const state = servers.get(record.name);
+
+    if (state) {
+      if (record.config?.lifecycle === "eager" && !state.client.connected) {
+        return connectServer(record.name);
+      }
+
+      claimUnownedTools();
+      syncActiveTools();
+      return state.tools;
+    }
+
+    const tools = await connectServer(record.name);
+    if (record.config?.lifecycle !== "eager") await disconnectServer(record.name, false);
+    return tools;
+  }
+
+  async function syncServersForCavemanState(): Promise<void> {
+    const records = sortByName(Object.values(getRecords()));
+
+    for (const record of records) {
+      if (!isRecordRuntimeEnabled(record)) {
+        await disconnectServer(record.name, true);
+        continue;
+      }
+
+      try {
+        await ensureServerReady(record);
+      } catch {
+        continue;
+      }
+    }
+
+    claimUnownedTools();
+    syncActiveTools();
+  }
+
   async function connectServer(name: string): Promise<McpTool[]> {
     const record = getRecords()[name];
     if (!record) throw new Error(`Unknown server: ${name}`);
     if (record.raw.enabled === false) throw new Error(`Server "${name}" is disabled`);
     if (!record.config) throw new Error(`Server "${name}" has invalid config`);
+    if (!isServerAllowedByCaveman(record.raw, cavemanState)) {
+      throw new Error(
+        `Server "${name}" requires Caveman power "${record.raw.requiresCavemanPower}"`,
+      );
+    }
 
     const previous = servers.get(name);
     if (previous) {
@@ -231,7 +288,15 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       return undefined;
     }
 
-    await connectServer(name);
+    const nextRecord = getRecords()[name];
+    if (!nextRecord || !isRecordRuntimeEnabled(nextRecord)) {
+      syncActiveTools();
+      return nextRecord?.raw.requiresCavemanPower
+        ? `${name} waits for Caveman power ${nextRecord.raw.requiresCavemanPower}`
+        : undefined;
+    }
+
+    await ensureServerReady(nextRecord);
     return undefined;
   }
 
@@ -284,17 +349,17 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     if (event.reason !== "startup" && event.reason !== "reload") return;
 
     lastCwd = ctx.cwd;
-    const records = sortByName(Object.values(getRecords())).filter(
-      (record) => record.raw.enabled !== false && !!record.config,
+    cavemanState = await loadCavemanGateState(ctx.cwd);
+    const records = sortByName(Object.values(getRecords())).filter((record) =>
+      isRecordRuntimeEnabled(record),
     );
     if (records.length === 0) return;
 
     const results = await Promise.allSettled(
-      records.map(async (record) => {
-        const tools = await connectServer(record.name);
-        if (record.config?.lifecycle !== "eager") await disconnectServer(record.name, false);
-        return { name: record.name, toolCount: tools.length };
-      }),
+      records.map(async (record) => ({
+        name: record.name,
+        toolCount: (await ensureServerReady(record)).length,
+      })),
     );
 
     let errorCount = 0;
@@ -311,6 +376,26 @@ export default function mcpExtension(pi: ExtensionAPI): void {
         "error",
       );
     }
+  });
+
+  pi.events.on(CRUMBS_EVENT_CAVEMAN_CHANGED, (event) => {
+    if (!event || typeof event !== "object") return;
+
+    const record = event as Record<string, unknown>;
+    const cwd = typeof record.cwd === "string" ? record.cwd : undefined;
+    if (cwd && cwd !== lastCwd) return;
+
+    cavemanState = {
+      enabled: typeof record.enabled === "boolean" ? record.enabled : cavemanState.enabled,
+      enhancements: Array.isArray(record.enhancements)
+        ? record.enhancements.filter(
+            (value): value is CavemanGateState["enhancements"][number] =>
+              value === "improve" || value === "design",
+          )
+        : cavemanState.enhancements,
+    };
+
+    void syncServersForCavemanState();
   });
 
   pi.on("session_shutdown", async () => {

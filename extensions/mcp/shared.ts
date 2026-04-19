@@ -1,4 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CavemanEnhancement } from "../caveman/src/system-prompt.js";
 
 export type LifecycleMode = "lazy" | "eager";
 export type TransportMode = "stdio" | "http";
@@ -9,6 +10,7 @@ export interface ToolPolicyConfig {
 
 export interface RawServerConfig {
   enabled?: boolean;
+  requiresCavemanPower?: CavemanEnhancement;
   lifecycle?: "lazy" | "eager";
   command?: string;
   args?: string[];
@@ -66,10 +68,22 @@ export interface ServerState {
   lastError?: string;
 }
 
+export interface CavemanGateState {
+  enabled: boolean;
+  enhancements: CavemanEnhancement[];
+}
+
 export const LOG_PREFIX = "[mcp]";
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+export function isServerAllowedByCaveman(raw: RawServerConfig, caveman: CavemanGateState): boolean {
+  return (
+    !raw.requiresCavemanPower ||
+    (caveman.enabled && caveman.enhancements.includes(raw.requiresCavemanPower))
+  );
 }
 
 export function resolveTemplate(input: string): string {
