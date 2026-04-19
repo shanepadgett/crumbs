@@ -11,11 +11,22 @@ import {
 } from "../../shared/config/crumbs-loader.js";
 import { asObject, type JsonObject } from "../../shared/io/json-file.js";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { StatusFlags, StatusTableMode, StatusTablePrefs } from "./types.js";
+import type { StatusBlockId, StatusFlags, StatusTablePrefs } from "./types.js";
 
 const DEFAULT_PREFS: StatusTablePrefs = {
   enabled: true,
-  mode: "full",
+  visibleBlocks: [
+    "path",
+    "git",
+    "provider",
+    "model",
+    "thinking",
+    "focus",
+    "fast",
+    "caveman",
+    "context",
+    "tokens",
+  ],
 };
 
 const STATUS_TABLE_EXTENSION_KEY = "statusTable";
@@ -23,8 +34,19 @@ const CODEX_COMPAT_EXTENSION_KEY = "codexCompat";
 const CAVEMAN_EXTENSION_KEY = "caveman";
 const FOCUS_ADV_EXTENSION_KEY = "focusAdvanced";
 
-function normalizeMode(value: unknown): StatusTableMode {
-  return value === "minimal" ? "minimal" : "full";
+const STATUS_BLOCK_IDS: readonly StatusBlockId[] = DEFAULT_PREFS.visibleBlocks;
+
+function normalizeVisibleBlocks(value: unknown): StatusBlockId[] {
+  if (!Array.isArray(value)) return [...DEFAULT_PREFS.visibleBlocks];
+
+  const unique = new Set<StatusBlockId>();
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    if (!STATUS_BLOCK_IDS.includes(entry as StatusBlockId)) continue;
+    unique.add(entry as StatusBlockId);
+  }
+
+  return [...unique];
 }
 
 function normalizeLegacyCavemanMode(value: unknown): CavemanEnhancement[] {
@@ -104,7 +126,7 @@ export async function loadStatusTablePrefs(cwd: string): Promise<StatusTablePref
 
   return {
     enabled: typeof section?.enabled === "boolean" ? section.enabled : DEFAULT_PREFS.enabled,
-    mode: normalizeMode(section?.mode),
+    visibleBlocks: normalizeVisibleBlocks(section?.visibleBlocks),
   };
 }
 
@@ -155,7 +177,7 @@ export async function saveStatusTablePrefs(_cwd: string, prefs: StatusTablePrefs
     extensions[STATUS_TABLE_EXTENSION_KEY] = {
       ...statusTable,
       enabled: prefs.enabled,
-      mode: prefs.mode,
+      visibleBlocks: prefs.visibleBlocks,
     };
 
     next.extensions = extensions;

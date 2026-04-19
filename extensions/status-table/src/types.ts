@@ -7,11 +7,21 @@ export type GitSummary = {
   summary: string;
 };
 
-export type StatusTableMode = "full" | "minimal";
+export type StatusBlockId =
+  | "path"
+  | "git"
+  | "provider"
+  | "model"
+  | "thinking"
+  | "focus"
+  | "fast"
+  | "caveman"
+  | "context"
+  | "tokens";
 
 export type StatusTablePrefs = {
   enabled: boolean;
-  mode: StatusTableMode;
+  visibleBlocks: StatusBlockId[];
 };
 
 export type StatusSnapshot = {

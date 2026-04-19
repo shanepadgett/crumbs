@@ -2,7 +2,14 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { renderDivider, truncateFromStart } from "./render-shared.js";
 import { renderContextValue } from "./snapshot.js";
-import type { StatusSnapshot } from "./types.js";
+import type { StatusBlockId, StatusSnapshot } from "./types.js";
+
+type BlockDefinition = {
+  id: StatusBlockId;
+  placement: "left" | "right";
+  renderText: (theme: Theme, snapshot: StatusSnapshot) => string | null;
+  plainText: (snapshot: StatusSnapshot) => string | null;
+};
 
 function enhancementIcon(enhancement: StatusSnapshot["cavemanEnhancements"][number]): string {
   if (enhancement === "improve") return "🔨";
@@ -31,48 +38,6 @@ function abbreviateThinking(value: string): string {
   return value;
 }
 
-function getModeSegments(
-  theme: Theme,
-  snapshot: StatusSnapshot,
-): {
-  rendered: string[];
-  plain: string[];
-} {
-  const rendered: string[] = [];
-  const plain: string[] = [];
-  const cavemanRendered: string[] = [];
-  const cavemanPlain: string[] = [];
-
-  if (snapshot.focusMode !== "off") {
-    rendered.push(theme.fg("accent", `🎯 ${snapshot.focus}`));
-    plain.push(`🎯 ${snapshot.focus}`);
-  }
-
-  if (snapshot.fast === "on") {
-    rendered.push(theme.fg("accent", "⚡"));
-    plain.push("⚡");
-  }
-
-  if (snapshot.cavemanEnabled) {
-    const cavemanLabel = `🗿(${snapshot.cavemanName})`;
-    cavemanRendered.push(theme.fg("accent", cavemanLabel));
-    cavemanPlain.push(cavemanLabel);
-  }
-
-  for (const enhancement of snapshot.cavemanEnhancements) {
-    const icon = enhancementIcon(enhancement);
-    cavemanRendered.push(theme.fg("accent", icon));
-    cavemanPlain.push(icon);
-  }
-
-  if (cavemanRendered.length > 0) {
-    rendered.push(cavemanRendered.join(theme.fg("dim", " · ")));
-    plain.push(cavemanPlain.join(" · "));
-  }
-
-  return { rendered, plain };
-}
-
 function dim(theme: Theme, value: string): string {
   return theme.fg("dim", value);
 }
@@ -83,6 +48,91 @@ function joinSegments(theme: Theme, segments: string[]): string {
 
 function joinMutedSegments(theme: Theme, segments: string[]): string {
   return segments.map((segment) => dim(theme, segment)).join(dim(theme, " │ "));
+}
+
+const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
+  {
+    id: "path",
+    placement: "left",
+    renderText: (_theme, snapshot) => compactMinimalPath(snapshot.path),
+    plainText: (snapshot) => compactMinimalPath(snapshot.path),
+  },
+  {
+    id: "git",
+    placement: "left",
+    renderText: (_theme, snapshot) => `${snapshot.branch} (${snapshot.git})`,
+    plainText: (snapshot) => `${snapshot.branch} (${snapshot.git})`,
+  },
+  {
+    id: "provider",
+    placement: "left",
+    renderText: (_theme, snapshot) => snapshot.provider,
+    plainText: (snapshot) => snapshot.provider,
+  },
+  {
+    id: "model",
+    placement: "left",
+    renderText: (_theme, snapshot) => snapshot.model,
+    plainText: (snapshot) => snapshot.model,
+  },
+  {
+    id: "thinking",
+    placement: "left",
+    renderText: (_theme, snapshot) => abbreviateThinking(snapshot.thinking),
+    plainText: (snapshot) => abbreviateThinking(snapshot.thinking),
+  },
+  {
+    id: "focus",
+    placement: "right",
+    renderText: (theme, snapshot) =>
+      snapshot.focusMode !== "off" ? theme.fg("accent", `🎯 ${snapshot.focus}`) : null,
+    plainText: (snapshot) => (snapshot.focusMode !== "off" ? `🎯 ${snapshot.focus}` : null),
+  },
+  {
+    id: "fast",
+    placement: "right",
+    renderText: (theme, snapshot) => (snapshot.fast === "on" ? theme.fg("accent", "⚡") : null),
+    plainText: (snapshot) => (snapshot.fast === "on" ? "⚡" : null),
+  },
+  {
+    id: "caveman",
+    placement: "right",
+    renderText: (theme, snapshot) => {
+      if (!snapshot.cavemanEnabled) return null;
+
+      const segments = [theme.fg("accent", `🗿(${snapshot.cavemanName})`)];
+      for (const enhancement of snapshot.cavemanEnhancements) {
+        segments.push(theme.fg("accent", enhancementIcon(enhancement)));
+      }
+      return segments.join(theme.fg("dim", " · "));
+    },
+    plainText: (snapshot) => {
+      if (!snapshot.cavemanEnabled) return null;
+
+      const segments = [`🗿(${snapshot.cavemanName})`];
+      for (const enhancement of snapshot.cavemanEnhancements) {
+        segments.push(enhancementIcon(enhancement));
+      }
+      return segments.join(" · ");
+    },
+  },
+  {
+    id: "context",
+    placement: "right",
+    renderText: (theme, snapshot) =>
+      renderContextValue(theme, snapshot.contextSummary, snapshot.contextPercent),
+    plainText: (snapshot) => snapshot.contextSummary,
+  },
+  {
+    id: "tokens",
+    placement: "right",
+    renderText: (theme, snapshot) => dim(theme, snapshot.tokenSummary),
+    plainText: (snapshot) => snapshot.tokenSummary,
+  },
+] as const;
+
+function getBlockDefinition(id: StatusBlockId): BlockDefinition | undefined {
+  return BLOCK_DEFINITIONS.find((block) => block.id === id);
 }
 
 function fitLeftSegments(theme: Theme, segments: string[], availableWidth: number): string {
@@ -130,24 +180,28 @@ export function renderMinimalTable(
   theme: Theme,
   width: number,
   snapshot: StatusSnapshot,
+  visibleBlocks: readonly StatusBlockId[],
 ): string[] {
-  const pathValue = compactMinimalPath(snapshot.path);
-  const branchValue = `${snapshot.branch} (${snapshot.git})`;
-  const thinkingValue = abbreviateThinking(snapshot.thinking);
-  const leftSegments = [pathValue, branchValue, snapshot.provider, snapshot.model, thinkingValue];
-
+  const leftSegments: string[] = [];
   const rightTextSegments: string[] = [];
   const rightPlainSegments: string[] = [];
-  const modes = getModeSegments(theme, snapshot);
 
-  rightTextSegments.push(...modes.rendered);
-  rightPlainSegments.push(...modes.plain);
+  for (const blockId of visibleBlocks) {
+    const block = getBlockDefinition(blockId);
+    if (!block) continue;
 
-  rightTextSegments.push(
-    renderContextValue(theme, snapshot.contextSummary, snapshot.contextPercent),
-  );
-  rightTextSegments.push(dim(theme, snapshot.tokenSummary));
-  rightPlainSegments.push(snapshot.contextSummary, snapshot.tokenSummary);
+    if (block.placement === "left") {
+      const text = block.plainText(snapshot);
+      if (text) leftSegments.push(text);
+      continue;
+    }
+
+    const rendered = block.renderText(theme, snapshot);
+    const plain = block.plainText(snapshot);
+    if (!rendered || !plain) continue;
+    rightTextSegments.push(rendered);
+    rightPlainSegments.push(plain);
+  }
 
   const rightText = joinSegments(theme, rightTextSegments);
   const rightWidth = visibleWidth(joinSegments(theme, rightPlainSegments));

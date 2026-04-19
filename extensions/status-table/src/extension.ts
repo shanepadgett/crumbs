@@ -1,5 +1,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { DynamicBorder } from "@mariozechner/pi-coding-agent";
+import { Container, Text } from "@mariozechner/pi-tui";
 import { normalizeCavemanEnhancement } from "../../caveman/src/system-prompt.js";
+import type { MultiSelectItem } from "../../shared/ui/multi-select-list.js";
+import { MultiSelectList } from "../../shared/ui/multi-select-list.js";
 import { GIT_REFRESH_INTERVAL_MS, WIDGET_KEY } from "./constants.js";
 import {
   CRUMBS_EVENT_CAVEMAN_CHANGED,
@@ -8,7 +12,6 @@ import {
   CRUMBS_EVENT_THINKING_CHANGED,
 } from "../../shared/crumbs-events.js";
 import { loadGitSummary } from "./git.js";
-import { renderFullTable } from "./render-full.js";
 import { renderMinimalTable } from "./render-minimal.js";
 import { loadStatusFlags, loadStatusTablePrefs, saveStatusTablePrefs } from "./settings.js";
 import { buildSnapshot, getSessionTokenTotals } from "./snapshot.js";
@@ -16,8 +19,8 @@ import type {
   CavemanEnhancement,
   GitSummary,
   SessionTokenTotals,
+  StatusBlockId,
   StatusFlags,
-  StatusTableMode,
   StatusTablePrefs,
 } from "./types.js";
 
@@ -106,7 +109,22 @@ function asFocusFlagEvent(value: unknown): FocusFlagEvent {
   };
 }
 
-const DEFAULT_PREFS: StatusTablePrefs = { enabled: true, mode: "full" };
+const DEFAULT_VISIBLE_BLOCKS: StatusBlockId[] = [
+  "path",
+  "git",
+  "provider",
+  "model",
+  "thinking",
+  "focus",
+  "fast",
+  "caveman",
+  "context",
+  "tokens",
+];
+const DEFAULT_PREFS: StatusTablePrefs = {
+  enabled: true,
+  visibleBlocks: [...DEFAULT_VISIBLE_BLOCKS],
+};
 const DEFAULT_FLAGS: StatusFlags = {
   fastEnabled: false,
   cavemanName: "Grug",
@@ -137,10 +155,75 @@ function clearStatusTable(ctx: ExtensionContext): void {
   ctx.ui.setFooter(undefined);
 }
 
-function parseModeArg(args: string): StatusTableMode | undefined {
-  const value = args.trim();
-  if (value === "full" || value === "minimal") return value;
-  return undefined;
+const STATUS_BLOCK_OPTIONS: { id: StatusBlockId; label: string; description: string }[] = [
+  { id: "path", label: "Path", description: "Current working directory" },
+  { id: "git", label: "Git", description: "Current branch and git cleanliness" },
+  { id: "provider", label: "Provider", description: "Active model provider" },
+  { id: "model", label: "Model", description: "Active model id" },
+  { id: "thinking", label: "Thinking", description: "Current thinking level" },
+  { id: "focus", label: "Focus", description: "focus-advanced state" },
+  { id: "fast", label: "Fast", description: "Codex fast mode" },
+  { id: "caveman", label: "Caveman", description: "Caveman state and powers" },
+  { id: "context", label: "Context", description: "Current context usage" },
+  { id: "tokens", label: "Tokens", description: "Accumulated session token totals" },
+];
+
+async function openStatusTableConfig(
+  ctx: ExtensionContext,
+  currentVisibleBlocks: StatusBlockId[],
+): Promise<StatusBlockId[] | null> {
+  if (!ctx.hasUI) return null;
+
+  let draft = [...currentVisibleBlocks];
+
+  return ctx.ui.custom<StatusBlockId[] | null>((tui, theme, _kb, done) => {
+    const items: MultiSelectItem[] = STATUS_BLOCK_OPTIONS.map((block) => ({
+      value: block.id,
+      label: block.label,
+      description: block.description,
+    }));
+
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold("Status table config")), 1, 0));
+    container.addChild(new Text(theme.fg("muted", "Toggle blocks rendered below editor."), 1, 0));
+
+    const list = new MultiSelectList(items, Math.min(items.length + 2, 12), {
+      selectedText: (text: string) => theme.fg("accent", text),
+      description: (text: string) => theme.fg("muted", text),
+      scrollInfo: (text: string) => theme.fg("dim", text),
+      noMatch: (text: string) => theme.fg("warning", text),
+    });
+    list.setCheckedValues(draft);
+    list.onToggle = (values) => {
+      draft = STATUS_BLOCK_OPTIONS.map((block) => block.id).filter((id) => values.includes(id));
+    };
+    list.onConfirm = (values) => {
+      const next = STATUS_BLOCK_OPTIONS.map((block) => block.id).filter((id) =>
+        values.includes(id),
+      );
+      done(next.length > 0 ? next : []);
+    };
+    list.onCancel = () => done(null);
+
+    container.addChild(list);
+    container.addChild(new Text(theme.fg("dim", "Space toggle • Enter save • Esc close"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      focused: true,
+      render(width: number): string[] {
+        return container.render(width);
+      },
+      invalidate(): void {
+        container.invalidate();
+      },
+      handleInput(data: string): void {
+        list.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
 }
 
 export default function statusTableExtension(pi: ExtensionAPI): void {
@@ -221,9 +304,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
             currentState.flags,
           );
 
-          return prefs.mode === "minimal"
-            ? renderMinimalTable(theme, width, snapshot)
-            : renderFullTable(theme, width, snapshot);
+          return renderMinimalTable(theme, width, snapshot, prefs.visibleBlocks);
         },
       }),
       { placement: "belowEditor" },
@@ -340,9 +421,9 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("status-table", {
-    description: "Toggle the status table or switch between full and minimal modes",
+    description: "Toggle status table or configure visible blocks",
     getArgumentCompletions: (prefix) => {
-      const options = ["full", "minimal"];
+      const options = ["config"];
       const filtered = options.filter((option) => option.startsWith(prefix.trim().toLowerCase()));
       if (filtered.length === 0) return null;
       return filtered.map((value) => ({ value, label: value }));
@@ -362,27 +443,24 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
           clearStatusTable(ctx);
         }
         if (ctx.hasUI) {
-          ctx.ui.notify(
-            next.enabled
-              ? `Status table enabled (${next.mode}).`
-              : `Status table disabled (${current.mode} preserved).`,
-            "info",
-          );
+          ctx.ui.notify(next.enabled ? "Status table enabled." : "Status table disabled.", "info");
         }
         scheduleGitRefresh(ctx);
         return;
       }
 
-      const mode = parseModeArg(trimmed);
-      if (!mode) {
-        if (ctx.hasUI) ctx.ui.notify("Usage: /status-table [full|minimal]", "warning");
+      if (trimmed !== "config") {
+        if (ctx.hasUI) ctx.ui.notify("Usage: /status-table [config]", "warning");
         return;
       }
 
-      const next = { enabled: true, mode };
+      const visibleBlocks = await openStatusTableConfig(ctx, current.visibleBlocks);
+      if (!visibleBlocks) return;
+
+      const next = { enabled: true, visibleBlocks };
       await setPrefs(ctx.cwd, next);
       scheduleUIRefresh(ctx);
-      if (ctx.hasUI) ctx.ui.notify(`Status table enabled (${mode}).`, "info");
+      if (ctx.hasUI) ctx.ui.notify("Status table config saved.", "info");
       scheduleGitRefresh(ctx);
     },
   });

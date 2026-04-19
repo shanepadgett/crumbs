@@ -1,6 +1,6 @@
 # Status Table Extension
 
-Attached status table for Pi that renders below the editor and replaces the built-in footer.
+Attached status table for Pi that renders below editor and replaces built-in footer.
 
 It shows:
 
@@ -31,3 +31,32 @@ Install/load the extension, then reload Pi:
 ```
 
 If you change files under `extensions/status-table/`, reload Pi before testing.
+
+## Commands
+
+- `/status-table` toggles widget on/off.
+- `/status-table config` opens multi-select config for visible blocks.
+
+## Config
+
+```json
+{
+  "extensions": {
+    "statusTable": {
+      "enabled": true,
+      "visibleBlocks": [
+        "path",
+        "git",
+        "provider",
+        "model",
+        "thinking",
+        "focus",
+        "fast",
+        "caveman",
+        "context",
+        "tokens"
+      ]
+    }
+  }
+}
+```
