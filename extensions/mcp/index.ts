@@ -22,10 +22,14 @@ import {
   connectAndDiscover,
   formatSourceKind,
   loadCavemanGateState,
+  readCachedServerTools,
   loadServerRecords,
+  removeCachedServerTools,
   removeServerRecord,
   updateServerRecord,
+  writeCachedServerTools,
 } from "./config.js";
+import { DirectMcpClient } from "./client.js";
 import {
   type CavemanGateState,
   errorMessage,
@@ -105,6 +109,27 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     }
   }
 
+  function hydrateServerFromCache(record: ServerConfigRecord): boolean {
+    if (!record.config || servers.has(record.name)) {
+      return false;
+    }
+
+    const tools = readCachedServerTools(record);
+
+    if (!tools || tools.length === 0) {
+      return false;
+    }
+
+    servers.set(record.name, {
+      client: new DirectMcpClient(),
+      config: record.config,
+      tools,
+      lastError: undefined,
+    });
+
+    return true;
+  }
+
   function buildToolViews(record: ServerConfigRecord): ManagerToolView[] {
     const state = servers.get(record.name);
     const discovered = new Map<string, McpTool>(
@@ -181,6 +206,12 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       return state.tools;
     }
 
+    if (hydrateServerFromCache(record)) {
+      claimUnownedTools();
+      syncActiveTools();
+      return servers.get(record.name)?.tools ?? [];
+    }
+
     const tools = await connectServer(record.name);
     if (record.config?.lifecycle !== "eager") await disconnectServer(record.name, false);
     return tools;
@@ -195,8 +226,12 @@ export default function mcpExtension(pi: ExtensionAPI): void {
         continue;
       }
 
+      hydrateServerFromCache(record);
+
       try {
-        await ensureServerReady(record);
+        if (record.config?.lifecycle === "eager" || !servers.has(record.name)) {
+          await ensureServerReady(record);
+        }
       } catch {
         continue;
       }
@@ -225,6 +260,8 @@ export default function mcpExtension(pi: ExtensionAPI): void {
 
     try {
       const { client, tools } = await connectAndDiscover(name, record.config);
+      writeCachedServerTools(record, tools);
+
       const nextState: ServerState = {
         client,
         config: record.config,
@@ -356,11 +393,19 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     );
     if (records.length === 0) return;
 
+    for (const record of records) {
+      hydrateServerFromCache(record);
+    }
+
+    claimUnownedTools();
+
     const results = await Promise.allSettled(
-      records.map(async (record) => ({
-        name: record.name,
-        toolCount: (await ensureServerReady(record)).length,
-      })),
+      records
+        .filter((record) => record.config?.lifecycle === "eager" || !servers.has(record.name))
+        .map(async (record) => ({
+          name: record.name,
+          toolCount: (await ensureServerReady(record)).length,
+        })),
     );
 
     let errorCount = 0;
@@ -487,6 +532,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
           releaseServerTools(serverName);
           await servers.get(serverName)?.client.close();
           servers.delete(serverName);
+          removeCachedServerTools(record);
           removeServerRecord(lastCwd, record.sourceKind, serverName);
           claimUnownedTools();
           syncActiveTools();

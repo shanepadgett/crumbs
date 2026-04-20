@@ -27,6 +27,10 @@ interface RawMcpFile {
   };
 }
 
+interface McpToolCacheFile {
+  servers?: Record<string, McpTool[]>;
+}
+
 interface ConfigSource {
   filePath: string;
   sourceKind: ServerSourceKind;
@@ -36,6 +40,10 @@ interface ConfigSource {
 
 function cloneServerConfig(raw: RawServerConfig): RawServerConfig {
   return JSON.parse(JSON.stringify(raw)) as RawServerConfig;
+}
+
+function cloneTools(tools: McpTool[]): McpTool[] {
+  return JSON.parse(JSON.stringify(tools)) as McpTool[];
 }
 
 function normalizeServerConfig(raw: RawServerConfig): ServerConfig | null {
@@ -82,6 +90,39 @@ function readJsonFile(path: string): RawMcpFile {
 }
 
 function writeJsonFile(path: string, data: RawMcpFile): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+
+function getToolCachePath(): string {
+  return join(homedir(), ".pi", "agent", "mcp-tools-cache.json");
+}
+
+function getToolCacheKey(record: ServerConfigRecord): string {
+  return JSON.stringify([
+    record.filePath,
+    record.sourceKind,
+    record.name,
+    record.config,
+  ]);
+}
+
+function readToolCacheFile(): McpToolCacheFile {
+  const path = getToolCachePath();
+
+  if (!existsSync(path)) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as McpToolCacheFile;
+  } catch {
+    return {};
+  }
+}
+
+function writeToolCacheFile(data: McpToolCacheFile): void {
+  const path = getToolCachePath();
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
@@ -225,4 +266,33 @@ export async function connectAndDiscover(
   await client.connect(name, config);
   const tools = await client.listTools();
   return { client, tools };
+}
+
+export function readCachedServerTools(record: ServerConfigRecord): McpTool[] | undefined {
+  const cache = readToolCacheFile();
+  const tools = cache.servers?.[getToolCacheKey(record)];
+
+  return Array.isArray(tools) ? cloneTools(tools) : undefined;
+}
+
+export function writeCachedServerTools(record: ServerConfigRecord, tools: McpTool[]): void {
+  const cache = readToolCacheFile();
+  const nextServers = {
+    ...(cache.servers ?? {}),
+    [getToolCacheKey(record)]: cloneTools(tools),
+  };
+
+  writeToolCacheFile({ servers: nextServers });
+}
+
+export function removeCachedServerTools(record: ServerConfigRecord): void {
+  const cache = readToolCacheFile();
+
+  if (!cache.servers) {
+    return;
+  }
+
+  const nextServers = { ...cache.servers };
+  delete nextServers[getToolCacheKey(record)];
+  writeToolCacheFile({ servers: nextServers });
 }
