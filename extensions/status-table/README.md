@@ -47,7 +47,6 @@ If you change files under `extensions/status-table/`, reload Pi before testing.
         "git",
         "provider",
         "model",
-        "focus",
         "caveman",
         "context",
         "tokens"

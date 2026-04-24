@@ -80,8 +80,6 @@ const KNOWN_TYPE_RULES: Array<{
   expected: string;
   validate: (value: unknown) => boolean;
 }> = [
-  { keyPath: "extensions.pathVisibility", expected: "object", validate: expectsObject },
-  { keyPath: "extensions.focusAdvanced", expected: "object", validate: expectsObject },
   { keyPath: "extensions.quietMarkdownlint", expected: "object", validate: expectsObject },
   { keyPath: "extensions.quietMiseTask", expected: "object", validate: expectsObject },
   { keyPath: "extensions.quietXcodeBuild", expected: "object", validate: expectsObject },
@@ -104,42 +102,6 @@ const KNOWN_TYPE_RULES: Array<{
   {
     keyPath: "extensions.caveman.enhancements",
     expected: "(improve|design)[]",
-    validate: expectsStringArray,
-  },
-  {
-    keyPath: "extensions.pathVisibility.sessionFocus",
-    expected: "object",
-    validate: expectsObject,
-  },
-  {
-    keyPath: "extensions.pathVisibility.sessionFocus.enabled",
-    expected: "boolean",
-    validate: expectsBoolean,
-  },
-  {
-    keyPath: "extensions.pathVisibility.sessionFocus.mode",
-    expected: "soft|hidden|hard",
-    validate: expectsStringEnum(["soft", "hidden", "hard"]),
-  },
-  {
-    keyPath: "extensions.pathVisibility.sessionFocus.roots",
-    expected: "string[]",
-    validate: expectsStringArray,
-  },
-  { keyPath: "extensions.focusAdvanced.sessionFocus", expected: "object", validate: expectsObject },
-  {
-    keyPath: "extensions.focusAdvanced.sessionFocus.enabled",
-    expected: "boolean",
-    validate: expectsBoolean,
-  },
-  {
-    keyPath: "extensions.focusAdvanced.sessionFocus.mode",
-    expected: "soft|hidden|hard",
-    validate: expectsStringEnum(["soft", "hidden", "hard"]),
-  },
-  {
-    keyPath: "extensions.focusAdvanced.sessionFocus.roots",
-    expected: "string[]",
     validate: expectsStringArray,
   },
 ];

@@ -28,24 +28,12 @@
     "extensions/codex-compat": {
       "name": "@crumbs-pi/codex-compat",
     },
-    "extensions/memory": {
-      "name": "@crumbs-pi/memory",
-      "version": "0.1.0",
-    },
     "extensions/notify": {
       "name": "@crumbs-pi/notify",
       "version": "0.1.0",
     },
-    "extensions/questionnaire": {
-      "name": "@crumbs-pi/questionnaire",
-      "version": "0.1.0",
-    },
     "extensions/web": {
       "name": "@crumbs-pi/web",
-      "version": "0.1.0",
-    },
-    "extensions/workspaces": {
-      "name": "@crumbs-pi/workspaces",
       "version": "0.1.0",
     },
   },
@@ -127,15 +115,9 @@
 
     "@crumbs-pi/codex-compat": ["@crumbs-pi/codex-compat@workspace:extensions/codex-compat"],
 
-    "@crumbs-pi/memory": ["@crumbs-pi/memory@workspace:extensions/memory"],
-
     "@crumbs-pi/notify": ["@crumbs-pi/notify@workspace:extensions/notify"],
 
-    "@crumbs-pi/questionnaire": ["@crumbs-pi/questionnaire@workspace:extensions/questionnaire"],
-
     "@crumbs-pi/web": ["@crumbs-pi/web@workspace:extensions/web"],
-
-    "@crumbs-pi/workspaces": ["@crumbs-pi/workspaces@workspace:extensions/workspaces"],
 
     "@google/genai": ["@google/genai@1.50.0", "https://artifactory.aws.athenahealth.com/api/npm/npm/@google/genai/-/genai-1.50.0.tgz", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-oHv7JfdI6SLUitERptYoHqpn4Y2wWyPOBfWtpw8kfKTqqEiMJpUC6SEtiQPogb55Ip8fymj4bxGnGBTVV/Z9Ew=="],
 

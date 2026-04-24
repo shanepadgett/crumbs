@@ -16,12 +16,6 @@
     "extensions": {
       "type": "object",
       "properties": {
-        "pathVisibility": {
-          "$ref": "#/$defs/pathVisibilityConfig"
-        },
-        "focusAdvanced": {
-          "$ref": "#/$defs/focusAdvancedConfig"
-        },
         "quietMarkdownlint": {
           "$ref": "#/$defs/quietMarkdownlintConfig"
         },
@@ -60,162 +54,6 @@
   },
   "additionalProperties": true,
   "$defs": {
-    "pathVisibilityConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable or disable path visibility blocking."
-        },
-        "deny": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Legacy alias for hardDeny. Prefer hardDeny."
-        },
-        "hardDeny": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Glob patterns that are always blocked from direct reads and hidden from bash output."
-        },
-        "injectPromptHint": {
-          "type": "boolean",
-          "default": true,
-          "description": "Inject a short agent prompt hint that lists denied path patterns."
-        },
-        "focus": {
-          "$ref": "#/$defs/focusConfig"
-        },
-        "sessionFocus": {
-          "$ref": "#/$defs/sessionFocusConfig"
-        }
-      },
-      "additionalProperties": false,
-      "default": {
-        "enabled": true,
-        "hardDeny": [
-          ".env",
-          ".env.*",
-          "~/.ssh/**",
-          "~/.aws/**",
-          "~/.gnupg/**"
-        ],
-        "injectPromptHint": true,
-        "focus": {
-          "enabled": false,
-          "mode": "hidden",
-          "roots": [],
-          "alwaysAllow": []
-        }
-      }
-    },
-    "focusConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable focus steering for agent exploration scope."
-        },
-        "mode": {
-          "type": "string",
-          "enum": [
-            "soft",
-            "hidden",
-            "hard"
-          ],
-          "default": "hidden",
-          "description": "soft=prompt steering, hidden=steering+masking, hard=block outside focus roots."
-        },
-        "roots": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Preferred focus roots for exploration and edits."
-        },
-        "alwaysAllow": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Paths always allowed even in hard focus mode."
-        }
-      },
-      "additionalProperties": false,
-      "default": {
-        "enabled": false,
-        "mode": "hidden",
-        "roots": [],
-        "alwaysAllow": []
-      }
-    },
-    "focusAdvancedConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable Focus Advanced by default for this project."
-        },
-        "mode": {
-          "type": "string",
-          "enum": [
-            "soft",
-            "hidden",
-            "hard"
-          ],
-          "default": "hidden",
-          "description": "soft=prompt steering, hidden=custom discovery tools plus bash discovery blocking and permission prompts for outside paths, hard=requires permission prompts for outside path access."
-        },
-        "roots": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Default focus roots for Focus Advanced."
-        },
-        "alwaysAllow": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Extra paths allowed even when they sit outside focus roots."
-        },
-        "injectPromptHint": {
-          "type": "boolean",
-          "default": true,
-          "description": "Inject Focus Advanced tool guidance into the system prompt."
-        },
-        "sessionFocus": {
-          "$ref": "#/$defs/sessionFocusConfig"
-        }
-      },
-      "additionalProperties": false,
-      "default": {
-        "enabled": false,
-        "mode": "hidden",
-        "roots": [],
-        "alwaysAllow": [],
-        "injectPromptHint": true
-      }
-    },
     "quietMiseTaskConfig": {
       "type": "object",
       "properties": {
@@ -431,64 +269,12 @@
         }
       },
       "additionalProperties": true
-    },
-    "sessionFocusConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Override session focus enabled state for current session behavior."
-        },
-        "mode": {
-          "type": "string",
-          "enum": ["soft", "hidden", "hard"],
-          "default": "hidden",
-          "description": "Session focus override mode."
-        },
-        "roots": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "default": [],
-          "description": "Session focus override roots."
-        }
-      },
-      "additionalProperties": false,
-      "default": {
-        "enabled": false,
-        "mode": "hidden",
-        "roots": []
-      }
     }
   },
   "examples": [
     {
       "$schema": "https://crumbs.dev/schemas/crumbs.schema.json",
       "extensions": {
-        "pathVisibility": {
-          "enabled": true,
-          "hardDeny": [
-            "docs/_hidden/**",
-            ".env",
-            ".env.*",
-            "~/.ssh/**"
-          ],
-          "injectPromptHint": true,
-          "focus": {
-            "enabled": true,
-            "mode": "hidden",
-            "roots": [
-              "extensions/path-visibility"
-            ],
-            "alwaysAllow": [
-              ".pi/crumbs.json",
-              "schemas/crumbs.schema.json"
-            ]
-          }
-        },
         "quietMarkdownlint": {
           "enabled": true,
           "excludeGlobs": [

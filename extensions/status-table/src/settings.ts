@@ -15,13 +15,12 @@ import type { StatusBlockId, StatusFlags, StatusTablePrefs } from "./types.js";
 
 const DEFAULT_PREFS: StatusTablePrefs = {
   enabled: true,
-  visibleBlocks: ["path", "git", "provider", "model", "focus", "caveman", "context", "tokens"],
+  visibleBlocks: ["path", "git", "provider", "model", "caveman", "context", "tokens"],
 };
 
 const STATUS_TABLE_EXTENSION_KEY = "statusTable";
 const CODEX_COMPAT_EXTENSION_KEY = "codexCompat";
 const CAVEMAN_EXTENSION_KEY = "caveman";
-const FOCUS_ADV_EXTENSION_KEY = "focusAdvanced";
 
 const STATUS_BLOCK_IDS: readonly StatusBlockId[] = DEFAULT_PREFS.visibleBlocks;
 
@@ -40,11 +39,6 @@ function normalizeVisibleBlocks(value: unknown): StatusBlockId[] {
 
 function normalizeLegacyCavemanMode(value: unknown): CavemanEnhancement[] {
   return value === "improve" ? ["improve"] : [];
-}
-
-function normalizeFocusMode(value: unknown): "soft" | "hidden" | "hard" {
-  if (value === "soft" || value === "hidden" || value === "hard") return value;
-  return "hidden";
 }
 
 function readEnabled(section: JsonObject | null): boolean {
@@ -128,7 +122,6 @@ export async function loadStatusFlags(ctx: ExtensionContext): Promise<StatusFlag
   ]);
   const codexCompatSection = asObject(extensions[CODEX_COMPAT_EXTENSION_KEY]);
   const cavemanSection = asObject(extensions[CAVEMAN_EXTENSION_KEY]);
-  const focusSection = asObject(extensions[FOCUS_ADV_EXTENSION_KEY]);
   const globalCavemanSection = asObject(asObject(globalConfig.extensions)?.[CAVEMAN_EXTENSION_KEY]);
   const projectCavemanSection = asObject(
     asObject(projectConfig.extensions)?.[CAVEMAN_EXTENSION_KEY],
@@ -152,8 +145,6 @@ export async function loadStatusFlags(ctx: ExtensionContext): Promise<StatusFlag
     cavemanEnhancements: effectiveEnhancements,
     cavemanPowerSource,
     cavemanHasSessionOverride: branch.hasSessionOverride,
-    focusEnabled: readEnabled(focusSection),
-    focusMode: normalizeFocusMode(focusSection?.mode),
   };
 }
 

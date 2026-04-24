@@ -12,7 +12,6 @@ export type StatusBlockId =
   | "git"
   | "provider"
   | "model"
-  | "focus"
   | "caveman"
   | "context"
   | "tokens";
@@ -36,8 +35,6 @@ export type StatusSnapshot = {
   cavemanEnhancements: CavemanEnhancement[];
   cavemanPowerSource: "session" | "project" | "global" | "none";
   cavemanHasSessionOverride: boolean;
-  focus: string;
-  focusMode: "off" | FocusMode;
   contextSummary: string;
   tokenSummary: string;
   contextPercent: number | undefined;
@@ -48,8 +45,6 @@ export type SessionTokenTotals = {
   output: number;
 };
 
-export type FocusMode = "soft" | "hidden" | "hard";
-
 export type StatusFlags = {
   fastEnabled: boolean;
   cavemanName: string;
@@ -57,8 +52,6 @@ export type StatusFlags = {
   cavemanEnhancements: CavemanEnhancement[];
   cavemanPowerSource: "session" | "project" | "global" | "none";
   cavemanHasSessionOverride: boolean;
-  focusEnabled: boolean;
-  focusMode: FocusMode;
 };
 
 export type Cell = {

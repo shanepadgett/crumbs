@@ -8,7 +8,6 @@ import { GIT_REFRESH_INTERVAL_MS, WIDGET_KEY } from "./constants.js";
 import {
   CRUMBS_EVENT_CAVEMAN_CHANGED,
   CRUMBS_EVENT_FAST_CHANGED,
-  CRUMBS_EVENT_FOCUS_ADV_CHANGED,
   CRUMBS_EVENT_THINKING_CHANGED,
 } from "../../shared/crumbs-events.js";
 import { loadGitSummary } from "./git.js";
@@ -42,10 +41,6 @@ type CavemanFlagEvent = StatusFlagEvent & {
   enhancements?: CavemanEnhancement[];
   powerSource?: "session" | "project" | "global" | "none";
   hasSessionOverride?: boolean;
-};
-
-type FocusFlagEvent = StatusFlagEvent & {
-  mode?: "off" | "soft" | "hidden" | "hard";
 };
 
 function asStatusFlagEvent(value: unknown): StatusFlagEvent {
@@ -92,29 +87,11 @@ function asCwdEvent(value: unknown): { cwd?: string } {
   };
 }
 
-function asFocusFlagEvent(value: unknown): FocusFlagEvent {
-  if (!value || typeof value !== "object") return {};
-
-  const record = value as Record<string, unknown>;
-  return {
-    cwd: typeof record.cwd === "string" ? record.cwd : undefined,
-    enabled: typeof record.enabled === "boolean" ? record.enabled : undefined,
-    mode:
-      record.mode === "off" ||
-      record.mode === "soft" ||
-      record.mode === "hidden" ||
-      record.mode === "hard"
-        ? record.mode
-        : undefined,
-  };
-}
-
 const DEFAULT_VISIBLE_BLOCKS: StatusBlockId[] = [
   "path",
   "git",
   "provider",
   "model",
-  "focus",
   "caveman",
   "context",
   "tokens",
@@ -130,8 +107,6 @@ const DEFAULT_FLAGS: StatusFlags = {
   cavemanEnhancements: [],
   cavemanPowerSource: "none",
   cavemanHasSessionOverride: false,
-  focusEnabled: false,
-  focusMode: "hidden",
 };
 const DEFAULT_TOKEN_TOTALS: SessionTokenTotals = { input: 0, output: 0 };
 const DEFAULT_GIT: GitSummary = { branch: "no git", summary: "no git" };
@@ -162,7 +137,6 @@ const STATUS_BLOCK_OPTIONS: { id: StatusBlockId; label: string; description: str
     label: "Model",
     description: "Active model id with thinking level and fast mode",
   },
-  { id: "focus", label: "Focus", description: "focus-advanced state" },
   { id: "caveman", label: "Caveman", description: "Caveman state and powers" },
   { id: "context", label: "Context", description: "Current context usage" },
   { id: "tokens", label: "Tokens", description: "Accumulated session token totals" },
@@ -383,17 +357,6 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (ctx && ctx.cwd === targetCwd) refreshUI(ctx);
   }
 
-  function applyFocusEvent(ctx: ExtensionContext | undefined, event: FocusFlagEvent): void {
-    if (!ctx) return;
-    if (event.cwd && event.cwd !== ctx.cwd) return;
-
-    const flags = getWorkspaceState(ctx.cwd).flags;
-    if (typeof event.enabled === "boolean") flags.focusEnabled = event.enabled;
-    if (event.mode && event.mode !== "off") flags.focusMode = event.mode;
-    if (event.mode === "off") flags.focusEnabled = false;
-    refreshUI(ctx);
-  }
-
   async function hydrateContext(ctx: ExtensionContext): Promise<void> {
     await ensurePrefs(ctx.cwd);
     await refreshFlags(ctx);
@@ -414,10 +377,6 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (!lastContext) return;
     if (cwdEvent.cwd && cwdEvent.cwd !== lastContext.cwd) return;
     refreshUI(lastContext);
-  });
-
-  pi.events.on(CRUMBS_EVENT_FOCUS_ADV_CHANGED, (event) => {
-    applyFocusEvent(lastContext, asFocusFlagEvent(event));
   });
 
   pi.registerCommand("status-table", {

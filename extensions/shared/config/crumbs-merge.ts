@@ -1,18 +1,9 @@
 import { asObject, type JsonObject } from "../io/json-file.js";
 
 const UNION_ARRAY_PATHS = new Set([
-  "extensions.pathVisibility.hardDeny",
-  "extensions.pathVisibility.deny",
-  "extensions.pathVisibility.focus.alwaysAllow",
-  "extensions.focusAdvanced.alwaysAllow",
   "extensions.quietMarkdownlint.excludeGlobs",
   "extensions.quietMiseTask.excludeGlobs",
   "extensions.quietMiseTask.trackedExtensions",
-]);
-
-const ROOT_OVERRIDE_PATHS = new Set([
-  "extensions.pathVisibility.focus.roots",
-  "extensions.focusAdvanced.roots",
 ]);
 
 function normalizeTrackedExtension(value: string): string {
@@ -28,10 +19,6 @@ function uniqueStrings(values: string[]): string[] {
 function mergeArray(path: string, globalValue: unknown[], projectValue: unknown[]): unknown[] {
   const projectStrings = projectValue.filter((value): value is string => typeof value === "string");
   const globalStrings = globalValue.filter((value): value is string => typeof value === "string");
-
-  if (ROOT_OVERRIDE_PATHS.has(path)) {
-    return uniqueStrings(projectStrings);
-  }
 
   if (UNION_ARRAY_PATHS.has(path)) {
     const combined = [...globalStrings, ...projectStrings];

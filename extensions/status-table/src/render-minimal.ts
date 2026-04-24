@@ -94,14 +94,6 @@ const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     },
   },
   {
-    id: "focus",
-    placement: "right",
-    build: (theme, snapshot) =>
-      snapshot.focusMode !== "off"
-        ? buildTextPair(theme.fg("accent", `🎯 ${snapshot.focus}`), `🎯 ${snapshot.focus}`)
-        : null,
-  },
-  {
     id: "caveman",
     placement: "right",
     build: (theme, snapshot) => {
