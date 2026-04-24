@@ -1,0 +1,5 @@
+*** Begin Patch
+*** Replace File: notes/existing.md
++replacement line 1
++replacement line 2
+*** End Patch

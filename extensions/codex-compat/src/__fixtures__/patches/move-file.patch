@@ -1,0 +1,8 @@
+*** Begin Patch
+*** Update File: notes/old.md
+*** Move to: notes/new.md
+@@ heading
+ old heading
+-old body
++new body
+*** End Patch

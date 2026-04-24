@@ -1,0 +1,10 @@
+*** Begin Patch
+*** Add File: notes/new.md
++created
+*** Update File: notes/existing.md
+@@
+ keep
+-old
++new
+*** Delete File: notes/remove.md
+*** End Patch

@@ -68,14 +68,27 @@ Tests use Bun from root project tooling.
 mise run test
 ```
 
-Place unit tests beside source as `*.test.ts`. Scope tests by path when focused feedback is enough.
+Run tests for changed files and nearby extension scope when focused feedback is enough.
+
+```bash
+mise run test_targeted
+```
+
+Place unit tests beside source as `*.test.ts`. Scope tests by path when investigating one area.
 
 ```bash
 bun test extensions/<extension-name>
 bun test extensions/<extension-name>/src/example.test.ts
 ```
 
-Use root test tooling rather than per-extension test frameworks unless extension has distinct runtime needs.
+Testing conventions:
+
+- use root Bun test tooling rather than per-extension test frameworks unless extension has distinct runtime needs
+- prefer pure unit tests for parsers, matchers, normalizers, renderers, config coercion, and prompt builders
+- use `extensions/test-support/temp-dir.ts` for tests that mutate filesystem state
+- use fixtures when inline strings make tests harder to read
+- avoid live network, model, or Pi runtime tests by default
+- avoid snapshots unless output is stable public behavior
 
 ## Crumbs settings reload behavior
 

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run tests affected by changed files"
+
+set -euo pipefail
+
+bun run scripts/targeted-tests.ts
