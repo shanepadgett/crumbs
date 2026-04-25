@@ -13,9 +13,12 @@
  */
 
 import { access, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getGlobalCrumbsPath, getProjectCrumbsPath } from "../shared/config/crumbs-paths.js";
-import { asObject, type JsonObject } from "../shared/io/json-file.js";
+import { asObject, type JsonObject, writeJsonObject } from "../shared/io/json-file.js";
 
 type JsonStatus =
   | { exists: false; path: string }
@@ -25,6 +28,9 @@ type JsonStatus =
 type Finding =
   | { kind: "malformed-json"; filePath: string; error: string }
   | { kind: "type-conflict"; filePath: string; keyPath: string; expected: string; actual: string };
+
+const FALLBACK_SCHEMA_URL =
+  "https://raw.githubusercontent.com/shanepadgett/crumbs/refs/heads/main/schemas/crumbs.schema.json";
 
 function typeOfValue(value: unknown): string {
   if (Array.isArray(value)) return "array";
@@ -209,12 +215,69 @@ function renderReport(findings: Finding[]): string {
   return lines.join("\n");
 }
 
+async function readJsonObjectStrict(path: string): Promise<JsonObject> {
+  const raw = await readFile(path, "utf8");
+  return asObject(JSON.parse(raw)) ?? {};
+}
+
+async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
+  const candidateSettingsPaths = [
+    join(homedir(), ".pi", "agent", "settings.json"),
+    join(await getProjectCrumbsPath(cwd), "..", "settings.json"),
+  ];
+
+  for (const settingsPath of candidateSettingsPaths) {
+    if (!(await fileExists(settingsPath))) continue;
+
+    let settings: JsonObject;
+    try {
+      settings = await readJsonObjectStrict(settingsPath);
+    } catch {
+      continue;
+    }
+
+    const packagesValue = settings.packages;
+    if (!Array.isArray(packagesValue)) continue;
+
+    for (const entry of packagesValue) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const source = (entry as Record<string, unknown>).source;
+      if (typeof source !== "string" || source.trim().length === 0) continue;
+
+      const sourcePath = isAbsolute(source)
+        ? source
+        : resolve(dirname(settingsPath), source);
+      const schemaPath = join(sourcePath, "schemas", "crumbs.schema.json");
+      if (!(await fileExists(schemaPath))) continue;
+      return pathToFileURL(schemaPath).href;
+    }
+  }
+
+  return FALLBACK_SCHEMA_URL;
+}
+
+async function initProjectCrumbs(cwd: string, force: boolean): Promise<{ created: boolean; path: string }> {
+  const projectCrumbsPath = await getProjectCrumbsPath(cwd);
+
+  if (!force && (await fileExists(projectCrumbsPath))) {
+    return { created: false, path: projectCrumbsPath };
+  }
+
+  const schemaUrl = await resolveSchemaUrlFromPiSettings(cwd);
+  await writeJsonObject(projectCrumbsPath, {
+    $schema: schemaUrl,
+    extensions: {},
+  });
+
+  return { created: true, path: projectCrumbsPath };
+}
+
 export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
   pi.registerCommand("crumbs", {
-    description: "Crumbs utilities. Usage: /crumbs doctor",
+    description: "Crumbs utilities. Usage: /crumbs doctor | /crumbs init [--force]",
     getArgumentCompletions(prefix) {
       const value = prefix.trim();
-      const options = ["doctor"];
+      const options = ["doctor", "init"];
       const filtered = options.filter((option) => option.startsWith(value));
       return filtered.length > 0
         ? filtered.map((option) => ({ value: option, label: option }))
@@ -223,15 +286,30 @@ export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const tokens = args.trim().split(/\s+/).filter(Boolean);
 
-      if (tokens[0] !== "doctor") {
-        if (ctx.hasUI) ctx.ui.notify("Usage: /crumbs doctor", "warning");
-        return;
-      }
-
       try {
-        const { findings } = await inspect(ctx.cwd);
-        const report = renderReport(findings);
-        if (ctx.hasUI) ctx.ui.notify(report, findings.length > 0 ? "warning" : "info");
+        if (tokens[0] === "doctor") {
+          const { findings } = await inspect(ctx.cwd);
+          const report = renderReport(findings);
+          if (ctx.hasUI) ctx.ui.notify(report, findings.length > 0 ? "warning" : "info");
+          return;
+        }
+
+        if (tokens[0] === "init") {
+          const force = tokens.includes("--force");
+          const { created, path } = await initProjectCrumbs(ctx.cwd, force);
+          if (!ctx.hasUI) return;
+          if (!created) {
+            ctx.ui.notify(
+              `crumbs init skipped: ${path} already exists. Use /crumbs init --force to overwrite.`,
+              "warning",
+            );
+            return;
+          }
+          ctx.ui.notify(`crumbs init wrote ${path}`, "info");
+          return;
+        }
+
+        if (ctx.hasUI) ctx.ui.notify("Usage: /crumbs doctor | /crumbs init [--force]", "warning");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (ctx.hasUI) ctx.ui.notify(`[crumbs-doctor] failed: ${message}`, "error");
