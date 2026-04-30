@@ -244,9 +244,7 @@ async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
       const source = (entry as Record<string, unknown>).source;
       if (typeof source !== "string" || source.trim().length === 0) continue;
 
-      const sourcePath = isAbsolute(source)
-        ? source
-        : resolve(dirname(settingsPath), source);
+      const sourcePath = isAbsolute(source) ? source : resolve(dirname(settingsPath), source);
       const schemaPath = join(sourcePath, "schemas", "crumbs.schema.json");
       if (!(await fileExists(schemaPath))) continue;
       return pathToFileURL(schemaPath).href;
@@ -256,7 +254,10 @@ async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
   return FALLBACK_SCHEMA_URL;
 }
 
-async function initProjectCrumbs(cwd: string, force: boolean): Promise<{ created: boolean; path: string }> {
+async function initProjectCrumbs(
+  cwd: string,
+  force: boolean,
+): Promise<{ created: boolean; path: string }> {
   const projectCrumbsPath = await getProjectCrumbsPath(cwd);
 
   if (!force && (await fileExists(projectCrumbsPath))) {

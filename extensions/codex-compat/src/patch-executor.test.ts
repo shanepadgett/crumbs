@@ -62,4 +62,35 @@ describe("applyPatch", () => {
       expect(await readFile(join(dir, "existing.md"), "utf8")).toBe("alpha\nold\nomega\n");
     });
   });
+
+  test("applies pure move after unrelated add and update operations", async () => {
+    await withTempDir("crumbs-apply-patch-", async (dir) => {
+      await writeFile(join(dir, "edit.md"), "alpha\nold\nomega\n", "utf8");
+      await writeFile(join(dir, "source.md"), "move me\n", "utf8");
+
+      const summary = await applyPatch(
+        dir,
+        `*** Begin Patch
+*** Add File: added.md
++fresh
+*** Update File: edit.md
+@@
+ alpha
+-old
++new
+ omega
+*** Update File: source.md
+*** Move to: moved.md
+*** End Patch`,
+      );
+
+      expect(summary.status).toBe("completed");
+      expect(summary.added).toEqual(["added.md"]);
+      expect(summary.updated).toEqual(["edit.md", "source.md"]);
+      expect(summary.moved).toEqual([{ from: "source.md", to: "moved.md" }]);
+      expect(await readFile(join(dir, "added.md"), "utf8")).toBe("fresh\n");
+      expect(await readFile(join(dir, "edit.md"), "utf8")).toBe("alpha\nnew\nomega\n");
+      expect(await readFile(join(dir, "moved.md"), "utf8")).toBe("move me\n");
+    });
+  });
 });

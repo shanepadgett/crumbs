@@ -192,7 +192,7 @@ function parseUpdateBody(
   }
 
   finalizeChunk(current, chunks, operationPath);
-  if (chunks.length === 0) {
+  if (chunks.length === 0 && !movePath) {
     throw new Error(`Update file patch is missing chunk content: ${operationPath}`);
   }
 

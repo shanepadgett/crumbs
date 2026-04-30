@@ -177,13 +177,15 @@ async function applyUpdate(cwd: string, operation: Extract<PatchOperation, { typ
     : undefined;
   const current = await readFile(source.canonicalPath, "utf8");
 
-  let next: string;
-  try {
-    next = applyChunksWithChunkErrors(current, operation.chunks, source.inputPath);
-  } catch (error) {
-    if (error instanceof UpdateChunkApplyError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message);
+  let next = current;
+  if (operation.chunks.length > 0) {
+    try {
+      next = applyChunksWithChunkErrors(current, operation.chunks, source.inputPath);
+    } catch (error) {
+      if (error instanceof UpdateChunkApplyError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(message);
+    }
   }
 
   if (!target || target.canonicalPath === source.canonicalPath) {
