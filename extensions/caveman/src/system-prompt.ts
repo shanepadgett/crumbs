@@ -11,7 +11,6 @@ export const CAVEMAN_NAMES = [
   "Bongo",
   "Momo",
   "Pogo",
-  "Yorp",
   "Wobbo",
   "Tumble",
 ] as const;
