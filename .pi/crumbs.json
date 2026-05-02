@@ -4,7 +4,9 @@
     "caveman": {
       "enabled": true,
       "powers": [
-        "improve"
+        "improve",
+        "architecture",
+        "typescript"
       ]
     },
     "quietMarkdownlint": {
