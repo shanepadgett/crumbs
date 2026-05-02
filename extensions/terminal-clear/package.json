@@ -1,0 +1,8 @@
+{
+  "name": "@crumbs-pi/terminal-clear",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./terminal-clear.ts"]
+  }
+}
