@@ -58,7 +58,9 @@ function sortByName<T extends { name: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function getBranchEntries(ctx: ExtensionContext): ReturnType<ExtensionContext["sessionManager"]["getEntries"]> {
+function getBranchEntries(
+  ctx: ExtensionContext,
+): ReturnType<ExtensionContext["sessionManager"]["getEntries"]> {
   const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & {
     getBranch?: () => ReturnType<ExtensionContext["sessionManager"]["getEntries"]>;
   };
