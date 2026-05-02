@@ -16,8 +16,11 @@
  * - `{"mcpServers":{"pencil":{"url":"https://example.com/mcp","requiresCavemanPower":"design"}}}`
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { normalizeCavemanEnhancement } from "../caveman/src/system-prompt.js";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+  normalizeCavemanEnhancement,
+  normalizeCavemanEnhancements,
+} from "../caveman/src/system-prompt.js";
 import {
   connectAndDiscover,
   formatSourceKind,
@@ -49,8 +52,40 @@ import {
   type ManagerToolView,
 } from "./ui.js";
 
+const CAVEMAN_SESSION_POWERS_ENTRY = "caveman-session-powers";
+
 function sortByName<T extends { name: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getBranchEntries(ctx: ExtensionContext): ReturnType<ExtensionContext["sessionManager"]["getEntries"]> {
+  const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & {
+    getBranch?: () => ReturnType<ExtensionContext["sessionManager"]["getEntries"]>;
+  };
+
+  return typeof manager.getBranch === "function"
+    ? manager.getBranch()
+    : ctx.sessionManager.getEntries();
+}
+
+async function loadEffectiveCavemanGateState(ctx: ExtensionContext): Promise<CavemanGateState> {
+  const configState = await loadCavemanGateState(ctx.cwd);
+  let hasSessionOverride = false;
+  let sessionEnhancements: CavemanGateState["enhancements"] = [];
+
+  for (const entry of getBranchEntries(ctx)) {
+    if (entry.type !== "custom" || entry.customType !== CAVEMAN_SESSION_POWERS_ENTRY) continue;
+    hasSessionOverride = true;
+    const data = entry.data && typeof entry.data === "object" ? entry.data : undefined;
+    sessionEnhancements = normalizeCavemanEnhancements(
+      data && "powers" in data ? data.powers : undefined,
+    );
+  }
+
+  return {
+    enabled: configState.enabled,
+    enhancements: hasSessionOverride ? sessionEnhancements : configState.enhancements,
+  };
 }
 
 export default function mcpExtension(pi: ExtensionAPI): void {
@@ -387,7 +422,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     if (event.reason !== "startup" && event.reason !== "reload") return;
 
     lastCwd = ctx.cwd;
-    cavemanState = await loadCavemanGateState(ctx.cwd);
+    cavemanState = await loadEffectiveCavemanGateState(ctx);
     const records = sortByName(Object.values(getRecords())).filter((record) =>
       isRecordRuntimeEnabled(record),
     );
