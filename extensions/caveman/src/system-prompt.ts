@@ -10,15 +10,10 @@ export const CAVEMAN_NAMES = [
   "Clonk",
   "Bongo",
   "Momo",
-  "Rollo",
   "Pogo",
   "Yorp",
-  "Boppo",
   "Wobbo",
-  "Fizzle",
   "Tumble",
-  "Doodle",
-  "Jumble",
 ] as const;
 const CAVEMAN_ENHANCEMENT_ORDER = [
   "improve",
