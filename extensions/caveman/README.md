@@ -7,6 +7,7 @@ What it does:
 - replaces Pi system prompt when caveman enabled
 - keeps responses short, direct, no-fluff
 - adds optional powers for extra domain guidance
+- injects optional configured context file contents into the system prompt
 - supports project-scoped and session-scoped power selection
 
 ## Powers
@@ -63,14 +64,38 @@ Project or global crumbs config:
   "extensions": {
     "caveman": {
       "enabled": true,
-      "powers": ["architecture", "typescript"]
+      "powers": ["architecture", "typescript"],
+      "additionalContext": {
+        "all": ["AGENTS.md", "docs/repo-rules.md"],
+        "powers": {
+          "architecture": ["docs/architecture-rules.md"],
+          "typescript": ["docs/typescript-rules.md"]
+        }
+      }
     }
   }
 }
 ```
 
+`additionalContext` injects file contents directly into Caveman system prompt.
+
+- `all` files apply whenever Caveman is enabled
+- `powers.<power>` files apply only when that power is active
+- relative paths resolve from project root
+- `~` and absolute paths are supported
+- unavailable files are skipped with a warning
+- large files/context are truncated to protect prompt size
+
+Injected context is wrapped with lightweight tags:
+
+```text
+<context source="docs/architecture-rules.md">
+...file contents...
+</context>
+```
+
 ## Notes
 
 - Caveman replaces Pi base system prompt instead of appending to it.
-- Repo `AGENTS.md` content is not included in caveman prompt unless caveman prompt adds equivalent guidance itself.
+- Repo `AGENTS.md` content is not included in caveman prompt unless configured through `additionalContext` or caveman prompt adds equivalent guidance itself.
 - Reload Pi after changing extension files under `extensions/caveman/`.

@@ -181,9 +181,60 @@
           "uniqueItems": true,
           "default": [],
           "description": "Deprecated legacy alias for powers. Use powers instead."
+        },
+        "additionalContext": {
+          "type": "object",
+          "description": "Additional context files whose contents are injected into the Caveman system prompt.",
+          "properties": {
+            "all": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true,
+              "default": [],
+              "description": "Files injected whenever Caveman is enabled. Relative paths resolve from project root."
+            },
+            "powers": {
+              "type": "object",
+              "description": "Files injected only when matching Caveman power is active.",
+              "properties": {
+                "improve": {
+                  "$ref": "#/$defs/cavemanAdditionalContextPathList"
+                },
+                "design": {
+                  "$ref": "#/$defs/cavemanAdditionalContextPathList"
+                },
+                "architecture": {
+                  "$ref": "#/$defs/cavemanAdditionalContextPathList"
+                },
+                "swiftui": {
+                  "$ref": "#/$defs/cavemanAdditionalContextPathList"
+                },
+                "typescript": {
+                  "$ref": "#/$defs/cavemanAdditionalContextPathList"
+                }
+              },
+              "additionalProperties": false,
+              "default": {}
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "all": [],
+            "powers": {}
+          }
         }
       },
       "additionalProperties": false
+    },
+    "cavemanAdditionalContextPathList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "default": []
     },
     "mcpConfig": {
       "type": "object",

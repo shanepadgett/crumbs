@@ -24,6 +24,16 @@ const CAVEMAN_ENHANCEMENT_ORDER = [
 
 export type CavemanEnhancement = "improve" | "design" | "architecture" | "swiftui" | "typescript";
 
+export type AdditionalContextFile = {
+  source: string;
+  content: string;
+};
+
+export type AdditionalContextInput = {
+  all: AdditionalContextFile[];
+  powers: Partial<Record<CavemanEnhancement, AdditionalContextFile[]>>;
+};
+
 type BuildCavemanPromptInput = {
   name: string;
   cwd: string;
@@ -36,6 +46,7 @@ type BuildCavemanPromptInput = {
     docs: string;
     examples: string;
   };
+  additionalContext?: AdditionalContextInput;
 };
 
 export function normalizeCavemanEnhancement(value: unknown): CavemanEnhancement | undefined {
@@ -79,6 +90,51 @@ function toolList(tools: string[]): string {
 function enhancementList(enhancements: CavemanEnhancement[]): string {
   if (enhancements.length === 0) return "- (none)";
   return enhancements.map((enhancement) => `- ${enhancement}`).join("\n");
+}
+
+function escapeContextSource(source: string): string {
+  return source.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+function renderContextFiles(files: AdditionalContextFile[]): string[] {
+  return files.flatMap((file) => [
+    `<context source="${escapeContextSource(file.source)}">`,
+    file.content.trimEnd(),
+    "</context>",
+    "",
+  ]);
+}
+
+function buildGeneralAdditionalContextBlock(input: BuildCavemanPromptInput): string {
+  const files = input.additionalContext?.all ?? [];
+  if (files.length === 0) return "";
+
+  return [
+    "Additional context:",
+    "Follow this additional user-configured guidance.",
+    "",
+    ...renderContextFiles(files),
+  ]
+    .join("\n")
+    .trimEnd();
+}
+
+function buildPowerAdditionalContextBlock(
+  input: BuildCavemanPromptInput,
+  enhancement: CavemanEnhancement,
+  label: string,
+): string {
+  const files = input.additionalContext?.powers?.[enhancement] ?? [];
+  if (files.length === 0) return "";
+
+  return [
+    `${label} power additional context:`,
+    `Follow this additional user-configured guidance when ${enhancement} power is active.`,
+    "",
+    ...renderContextFiles(files),
+  ]
+    .join("\n")
+    .trimEnd();
 }
 
 function buildCoreCavemanRules(): string {
@@ -159,7 +215,11 @@ function buildImproveBlock(input: BuildCavemanPromptInput): string {
     "- Always prefer installed Pi docs/examples paths above over guessing repo-local copies.",
     "- Prefer extension APIs/hooks over internal hacks when possible.",
     "- For Pi TUI work, bias toward built-in components first: Text, Container, Spacer, Input, SelectList, TruncatedText, DynamicBorder. Use SelectList for simple picks, Input plus Text rows for search-heavy lists, DynamicBorder for Pi-style chrome, custom UI only when layout or behavior truly exceeds built-ins.",
-  ].join("\n");
+    "",
+    buildPowerAdditionalContextBlock(input, "improve", "Improve"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildDesignBlock(input: BuildCavemanPromptInput): string {
@@ -345,7 +405,11 @@ function buildDesignBlock(input: BuildCavemanPromptInput): string {
     "- State key tradeoffs briefly when useful.",
     "- Be direct about weak patterns and better alternatives.",
     "- Keep design reasoning concise, structured, and practical.",
-  ].join("\n");
+    "",
+    buildPowerAdditionalContextBlock(input, "design", "Design"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildArchitectureBlock(input: BuildCavemanPromptInput): string {
@@ -400,7 +464,11 @@ function buildArchitectureBlock(input: BuildCavemanPromptInput): string {
     "- Add protocol only when multiple concrete types need uniform call site, current task needs test fake, or concrete import breaks dependency direction.",
     "- If boundary issue forces protocol, define narrow protocol in owning domain and let outer layer conform.",
     "- If none apply, wire concrete type directly.",
-  ].join("\n");
+    "",
+    buildPowerAdditionalContextBlock(input, "architecture", "Architecture"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildSwiftUiBlock(input: BuildCavemanPromptInput): string {
@@ -428,7 +496,11 @@ function buildSwiftUiBlock(input: BuildCavemanPromptInput): string {
     "- If SwiftUI preview MCP tools exist, listing previews may batch in parallel when useful.",
     "- Render preview calls must stay strictly serial: one render at time, always wait for completion before next render.",
     "- Never fire multiple render preview calls concurrently, even if tool layer appears to allow it.",
-  ].join("\n");
+    "",
+    buildPowerAdditionalContextBlock(input, "swiftui", "SwiftUI"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildTypeScriptBlock(input: BuildCavemanPromptInput): string {
@@ -449,7 +521,11 @@ function buildTypeScriptBlock(input: BuildCavemanPromptInput): string {
     "- Keep runtime validation aligned with static types at IO boundaries.",
     "- Prefer simple objects and functions over class or interface ceremony unless existing area already depends on them.",
     "- Preserve readable error surfaces and function signatures; clever types do not excuse confusing callers.",
-  ].join("\n");
+    "",
+    buildPowerAdditionalContextBlock(input, "typescript", "TypeScript"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildCavemanSystemPrompt(input: BuildCavemanPromptInput): string {
@@ -474,6 +550,8 @@ export function buildCavemanSystemPrompt(input: BuildCavemanPromptInput): string
     "- Be concise.",
     "",
     buildCoreCavemanRules(),
+    "",
+    buildGeneralAdditionalContextBlock(input),
     "",
     `Caveman name: ${input.name}`,
     "Base power: terse caveman engineer.",

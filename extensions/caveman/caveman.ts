@@ -31,6 +31,11 @@ import {
 import { asObject, type JsonObject } from "../shared/io/json-file.js";
 import { MultiSelectList, type MultiSelectItem } from "../shared/ui/multi-select-list.js";
 import {
+  getAdditionalContextConfig,
+  loadAdditionalContext,
+  type AdditionalContextConfig,
+} from "./src/additional-context.js";
+import {
   buildCavemanSystemPrompt,
   CAVEMAN_NAME,
   normalizeCavemanEnhancement,
@@ -42,12 +47,17 @@ import {
 type CavemanState = {
   enabled: boolean;
   enhancements: CavemanEnhancement[];
+  additionalContext: AdditionalContextConfig;
 };
 
 type PowersScope = "project" | "session";
 type PowerSource = "session" | "project" | "global" | "none";
 
-const DEFAULT_STATE: CavemanState = { enabled: false, enhancements: [] };
+const DEFAULT_STATE: CavemanState = {
+  enabled: false,
+  enhancements: [],
+  additionalContext: { all: [], powers: {} },
+};
 const CAVEMAN_NAME_ENTRY = "caveman-name";
 const CAVEMAN_SESSION_POWERS_ENTRY = "caveman-session-powers";
 const ENHANCEMENTS: Array<{
@@ -91,13 +101,14 @@ function parseState(section: JsonObject | null): CavemanState {
 
   const enabled = typeof section.enabled === "boolean" ? section.enabled : DEFAULT_STATE.enabled;
   const enhancements = normalizeCavemanEnhancements(section.powers ?? section.enhancements);
-  if (enhancements.length > 0) return { enabled, enhancements };
+  const additionalContext = getAdditionalContextConfig(section);
+  if (enhancements.length > 0) return { enabled, enhancements, additionalContext };
 
   if (section.mode === "improve") {
-    return { enabled, enhancements: ["improve"] };
+    return { enabled, enhancements: ["improve"], additionalContext };
   }
 
-  return { enabled, enhancements: [] };
+  return { enabled, enhancements: [], additionalContext };
 }
 
 async function saveState(cwd: string, state: CavemanState): Promise<void> {
@@ -347,6 +358,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
   const stateByCwd = new Map<string, CavemanState>();
   const nameBySession = new Map<string, string>();
   const loadedCwds = new Set<string>();
+  const shownAdditionalContextWarnings = new Set<string>();
 
   function getSessionKey(ctx: ExtensionContext): string {
     return `${ctx.cwd}::${ctx.sessionManager.getSessionFile() ?? "ephemeral"}`;
@@ -422,6 +434,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
       enhancements: sessionState.hasOverride
         ? sessionState.enhancements
         : projectState.enhancements,
+      additionalContext: projectState.additionalContext,
     };
   }
 
@@ -577,6 +590,21 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
     if (!state.enabled) return undefined;
 
     const docs = getPiDocsPaths();
+    const additionalContext = await loadAdditionalContext({
+      cwd: ctx.cwd,
+      config: state.additionalContext,
+      enhancements: state.enhancements,
+    });
+    if (ctx.hasUI) {
+      const sessionKey = getSessionKey(ctx);
+      for (const warning of additionalContext.warnings) {
+        const warningKey = `${sessionKey}::${warning}`;
+        if (shownAdditionalContextWarnings.has(warningKey)) continue;
+        shownAdditionalContextWarnings.add(warningKey);
+        ctx.ui.notify(warning, "warning");
+      }
+    }
+
     const systemPrompt = buildCavemanSystemPrompt({
       name: assignCavemanName(ctx),
       cwd: ctx.cwd,
@@ -584,6 +612,7 @@ export default function cavemanExtension(pi: ExtensionAPI): void {
       enhancements: state.enhancements,
       tools: pi.getActiveTools(),
       docs,
+      additionalContext: additionalContext.context,
     });
 
     return { systemPrompt };
