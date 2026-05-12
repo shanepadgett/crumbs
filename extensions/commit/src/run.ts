@@ -8,8 +8,9 @@ import {
 
 const MODEL_PROVIDER = "openai-codex";
 const MODEL_ID = "gpt-5.5";
-const THINKING_LEVEL = "high";
+const THINKING_LEVEL = "medium";
 const ACTIVE_TOOLS = ["bash"];
+const HEARTBEAT_MS = 15_000;
 
 type AssistantMessage = {
   role?: string;
@@ -20,6 +21,13 @@ type AssistantMessage = {
 export interface CommitAgentResult {
   output: string;
   model: string;
+  thinkingLevel: typeof THINKING_LEVEL;
+  durationMs: number;
+}
+
+export interface CommitAgentUpdate {
+  message: string;
+  level?: "info" | "warning" | "error";
 }
 
 function getAssistantText(message: AssistantMessage | undefined): string {
@@ -55,10 +63,28 @@ function requireActiveTools(session: AgentSession): void {
   session.setActiveToolsByName(ACTIVE_TOOLS);
 }
 
+function truncateInline(text: string, maxLength = 120): string {
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
+}
+
+function extractBashCommand(args: unknown): string | undefined {
+  if (!args || typeof args !== "object") return undefined;
+  const command = (args as { command?: unknown }).command;
+  return typeof command === "string" && command.trim() ? command.trim() : undefined;
+}
+
+function formatToolDescription(toolName: string, args: unknown): string {
+  const command = toolName === "bash" ? extractBashCommand(args) : undefined;
+  if (command) return `bash: ${truncateInline(command)}`;
+  return toolName;
+}
+
 export async function runCommitAgent(
   cwd: string,
   systemPrompt: string,
+  onUpdate?: (update: CommitAgentUpdate) => void,
 ): Promise<CommitAgentResult> {
+  const startedAt = Date.now();
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
@@ -72,6 +98,11 @@ export async function runCommitAgent(
   });
 
   let session: AgentSession | undefined;
+  let unsubscribe = () => {};
+  let planned = false;
+  let lastStatus = "working";
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
   try {
     await loader.reload();
     const created = await createAgentSession({
@@ -86,6 +117,38 @@ export async function runCommitAgent(
     session.setThinkingLevel(THINKING_LEVEL);
     requireActiveTools(session);
 
+    onUpdate?.({ message: "/commit planning commits…" });
+    heartbeat = setInterval(() => {
+      onUpdate?.({ message: `/commit still ${lastStatus}…` });
+    }, HEARTBEAT_MS);
+
+    unsubscribe = session.subscribe((event) => {
+      if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
+        if (!planned) {
+          planned = true;
+          lastStatus = "planning commits";
+          onUpdate?.({ message: "/commit planning commits…" });
+        }
+        return;
+      }
+
+      if (event.type === "tool_execution_start") {
+        const description = formatToolDescription(event.toolName, event.args);
+        lastStatus = `running ${description}`;
+        onUpdate?.({ message: `/commit running ${description}` });
+        return;
+      }
+
+      if (event.type === "tool_execution_end") {
+        const level = event.isError ? "error" : "info";
+        lastStatus = event.isError ? `handling ${event.toolName} failure` : "working";
+        onUpdate?.({
+          message: `/commit ${event.isError ? "failed" : "finished"} ${event.toolName}`,
+          level,
+        });
+      }
+    });
+
     await session.prompt(
       "Create git commit(s) from injected /commit context only. First state intended commit groups, then execute those groups.",
     );
@@ -97,8 +160,12 @@ export async function runCommitAgent(
     return {
       output,
       model: `${MODEL_PROVIDER}/${MODEL_ID}`,
+      thinkingLevel: THINKING_LEVEL,
+      durationMs: Date.now() - startedAt,
     };
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    unsubscribe();
     try {
       session?.dispose();
     } catch {}

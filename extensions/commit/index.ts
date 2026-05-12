@@ -3,7 +3,7 @@
  *
  * What this does:
  * - Adds `/commit` command that collects compact git snapshot (status, summaries, staged+unstaged diffs).
- * - Runs commit work in clean child session using `openai-codex/gpt-5.5` with `high` thinking.
+ * - Runs commit work in clean child session using `openai-codex/gpt-5.5` with `medium` thinking.
  * - Reports child session result without injecting commit context into current chat.
  *
  * How to use:
@@ -29,6 +29,14 @@ function formatResult(output: string): string {
   return `${trimmed.slice(0, 3990)}…`;
 }
 
+function formatDuration(ms: number): string {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+}
+
 export default function commitExtension(pi: ExtensionAPI): void {
   pi.registerCommand("commit", {
     description: COMMAND_DESCRIPTION,
@@ -52,10 +60,14 @@ export default function commitExtension(pi: ExtensionAPI): void {
       const prompt = renderCommitPrompt(evidence);
 
       try {
-        ctx.ui.notify("/commit running in clean child session…", "info");
-        const result = await runCommitAgent(evidence.repoRoot, prompt);
+        ctx.ui.notify("/commit working…", "info");
+        const result = await runCommitAgent(evidence.repoRoot, prompt, (update) => {
+          ctx.ui.notify(update.message, update.level ?? "info");
+        });
         ctx.ui.notify(
-          formatResult(`/commit finished (${result.model})\n\n${result.output}`),
+          formatResult(
+            `/commit finished in ${formatDuration(result.durationMs)} (${result.model}, ${result.thinkingLevel})\n\n${result.output}`,
+          ),
           "info",
         );
       } catch (error) {
