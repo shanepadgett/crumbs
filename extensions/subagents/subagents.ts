@@ -23,7 +23,7 @@ import {
   renderWorkflow,
 } from "./src/render.js";
 import { executeWorkflow } from "./src/run.js";
-import type { AgentIssue, WorkflowResult } from "./src/types.js";
+import type { AgentIssue, AgentSpec, WorkflowResult } from "./src/types.js";
 import { TOOL_PARAMS, resolveWorkflow, workflowHasFailures } from "./src/workflow.js";
 
 function formatRegistryIssueNotice(
@@ -37,6 +37,32 @@ function formatRegistryIssueNotice(
     message: `subagents: found ${errors + warnings} agent issue(s) during ${phase}. Run /subagents doctor.`,
     level: errors ? "error" : "warning",
   };
+}
+
+function formatToolList(tools: string[] | undefined): string {
+  if (tools === undefined) return "inherits caller tools";
+  if (tools.length === 0) return "no tools";
+  return `tools: ${tools.join(", ")}`;
+}
+
+function formatAvailableAgentsPrompt(agents: AgentSpec[]): string {
+  const lines = [
+    "Subagent guidance:",
+    "- Use subagent when focused isolation or role specialization helps, not for trivial direct work.",
+    "- Pick the named agent whose description best matches the task.",
+    "- Keep task text explicit and scoped; include desired output shape.",
+    "- Use scout for repo discovery across multiple files, symbols, call paths, ownership, or unclear scope.",
+    "- Use web-research for multi-step web/code research and source-backed synthesis.",
+    "- Skip subagents when exact target file or one direct tool call is enough.",
+    "",
+    "Available subagents:",
+  ];
+
+  for (const agent of agents) {
+    lines.push(`- ${agent.name}: ${agent.description} (${formatToolList(agent.tools)})`);
+  }
+
+  return lines.join("\n");
 }
 
 export default function subagentsExtension(pi: ExtensionAPI): void {
@@ -68,18 +94,10 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
     if (!activeTools.has("subagent")) return undefined;
 
     const registry = await discoverAgents(ctx.cwd);
-    const hasScout = registry.agents.some((agent) => agent.name === "scout");
-    if (!hasScout) return undefined;
+    if (registry.agents.length === 0) return undefined;
 
     return {
-      systemPrompt:
-        event.systemPrompt +
-        "\n\nSubagent guidance:\n" +
-        "- Use subagent when focused isolation helps, not for trivial direct work.\n" +
-        "- Built-in scout is for repo discovery across multiple files, symbols, call paths, ownership, constraints, or unclear scope.\n" +
-        "- Skip scout when exact target file or one or two files already cover task.\n" +
-        "- Use parallel scouts when independent discovery lenses keep findings focused, such as frontend vs backend, read path vs write path, or implementation vs tests.\n" +
-        "- Keep parallel scout tasks distinct and narrow to avoid overlapping summaries.",
+      systemPrompt: `${event.systemPrompt}\n\n${formatAvailableAgentsPrompt(registry.agents)}`,
     };
   });
 
@@ -87,12 +105,15 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
     name: "subagent",
     label: "Subagent",
     description:
-      "Delegate focused repo discovery to isolated subagents. Built-in scout handles multi-file codebase recon. Supports single, chain, and parallel modes.",
-    promptSnippet: "Delegate focused work to isolated subagents",
+      "Delegate focused work to configured subagents. Supports single, chain, and parallel modes.",
+    promptSnippet: "Delegate focused work to configured subagents",
     promptGuidelines: [
       "Use subagent when context isolation or role specialization helps, not for trivial work you can do directly.",
+      "Use the Available subagents section in the system prompt to choose agent names.",
       "Built-in scout handles multi-file discovery, symbol tracing, data-flow lookup, ownership lookup, and scope clarification.",
+      "Built-in web-research handles multi-step web/code research and source-backed synthesis using websearch, codesearch, and webfetch.",
       "Use scout before direct work when task needs focused discovery across several files or unclear code paths.",
+      "Use web-research when task needs several searches/fetches, comparison, evaluation, or source synthesis.",
       "Use parallel scouts when discovery benefits from separate independent lenses, such as frontend vs backend, read path vs write path, or implementation vs tests.",
       "Keep parallel scout tasks narrowly scoped with distinct criteria so each returns focused findings instead of overlapping broad summaries.",
       "Skip scout when exact target files are already known or only one or two files need direct inspection.",

@@ -7,8 +7,8 @@
  *
  * How to use it:
  * - Use it directly in the current Pi session to inspect a specific URL.
- * - Prefer this when you need raw page content, not a synthesized research report.
- * - `webresearch` also uses this tool in its isolated child agent.
+ * - Prefer this when you need raw page content, not synthesized research.
+ * - The `web-research` subagent uses this tool for source inspection.
  *
  * Example:
  * - "Fetch https://bun.sh/docs and return markdown"
@@ -62,7 +62,7 @@ export default function webFetchExtension(pi: ExtensionAPI) {
       "Use webfetch when you already have a URL and want direct page content.",
       "Use webfetch after identifying a concrete URL to inspect.",
       "Prefer markdown or text format for summarization and citation tasks.",
-      "Do not use webresearch when you already know the page to read and only need its contents.",
+      "Use the web-research subagent instead when several searches/fetches and synthesis are needed.",
     ],
     parameters: WEBFETCH_PARAMS,
     renderCall(args, theme) {

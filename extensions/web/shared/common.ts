@@ -9,12 +9,7 @@ import {
 export const WEBFETCH_MAX_BYTES = 5 * 1024 * 1024;
 export const WEBFETCH_DEFAULT_TIMEOUT = 30;
 export const WEBSEARCH_DEFAULT_TIMEOUT = 25;
-export const WEBRESEARCH_DEFAULT_TIMEOUT = 120;
 export const WEBTOOLS_MAX_TIMEOUT = 600;
-
-export function shouldRegisterRawWebTools(): boolean {
-  return true;
-}
 
 export function clampTimeout(value: number | undefined, fallback: number): number {
   if (value === undefined) return fallback;

@@ -6,7 +6,6 @@ tools:
   - bash
   - write
   - edit
-  - webresearch
   - webfetch
   - websearch
 ---

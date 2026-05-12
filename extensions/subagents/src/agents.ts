@@ -113,7 +113,7 @@ function readTools(frontmatter: Record<string, unknown>, filePath: string): stri
     }
     return item.trim();
   });
-  return tools.length > 0 ? tools : undefined;
+  return tools;
 }
 
 function readThinkingLevel(
@@ -430,7 +430,9 @@ function formatModel(model: string | undefined): string {
 }
 
 function formatTools(tools: string[] | undefined): string {
-  return tools?.length ? tools.join(", ") : "inherit parent";
+  if (tools === undefined) return "inherit parent";
+  if (tools.length === 0) return "none";
+  return tools.join(", ");
 }
 
 export function renderListReport(registry: AgentRegistry): string {

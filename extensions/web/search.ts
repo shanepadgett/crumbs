@@ -18,7 +18,6 @@ import { Type } from "@sinclair/typebox";
 import {
   buildAbort,
   clampTimeout,
-  shouldRegisterRawWebTools,
   truncateInline,
   WEBSEARCH_DEFAULT_TIMEOUT,
   withTruncation,
@@ -112,8 +111,6 @@ function parseSearchText(raw: string): string | undefined {
 }
 
 export default function webSearchExtension(pi: ExtensionAPI) {
-  if (!shouldRegisterRawWebTools()) return;
-
   pi.registerTool({
     name: "websearch",
     label: "Web Search",
@@ -124,7 +121,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
       "Use websearch before webfetch when you need to discover relevant URLs.",
       "Prefer targeted queries with entities (project name, doc page, version).",
       "Use websearch for simple factual lookups like latest versions, release dates, and official doc URLs.",
-      "Do not use webresearch when one or two direct searches are likely enough.",
+      "Use the web-research subagent instead when several searches/fetches and synthesis are needed.",
     ],
     parameters: WEBSEARCH_PARAMS,
     renderCall(args, theme) {

@@ -18,7 +18,6 @@ import { Type } from "@sinclair/typebox";
 import {
   buildAbort,
   clampTimeout,
-  shouldRegisterRawWebTools,
   truncateInline,
   WEBSEARCH_DEFAULT_TIMEOUT,
   withTruncation,
@@ -92,8 +91,6 @@ function parseCodeSearchText(raw: string): string | undefined {
 }
 
 export default function codeSearchExtension(pi: ExtensionAPI) {
-  if (!shouldRegisterRawWebTools()) return;
-
   pi.registerTool({
     name: "codesearch",
     label: "Code Search",
@@ -104,7 +101,7 @@ export default function codeSearchExtension(pi: ExtensionAPI) {
       "Use codesearch for API usage patterns, code examples, and implementation-oriented queries.",
       "Use websearch when you need broad discovery of pages before fetching.",
       "Use codesearch for simple implementation lookups when you want examples or docs context without delegating a research task.",
-      "Do not use webresearch when a direct code/doc lookup is likely enough.",
+      "Use the web-research subagent instead when several searches/fetches and synthesis are needed.",
     ],
     parameters: CODESEARCH_PARAMS,
     renderCall(args, theme) {

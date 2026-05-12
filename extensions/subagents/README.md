@@ -12,7 +12,10 @@ Use subagents when one model run is not enough, but full orchestration would be 
 - fan out independent investigations in parallel
 - reuse built-in and custom agents across repos
 
-Starter agent included: `scout` for fast repo discovery.
+Starter agents included:
+
+- `scout` for fast repo discovery
+- `web-research` for multi-step web/code research with source-backed synthesis
 
 ## What you can do
 
@@ -29,6 +32,20 @@ Good for:
 - finding relevant files
 - tracing symbols or data flow
 - checking tests, config, or ownership
+
+### Run web/code research
+
+Use `web-research` when direct search or one fetch is not enough.
+
+```json
+{ "agent": "web-research", "task": "Compare current Vite SSR deployment options. Return bullets with source URLs." }
+```
+
+Good for:
+
+- comparing tools, APIs, or external recommendations
+- checking docs, examples, and issue context across sources
+- producing source-backed synthesis without filling main context with raw pages
 
 ### Run staged workflows
 
@@ -90,13 +107,14 @@ Limits:
 /subagents doctor
 ```
 
-### 3. Run built-in `scout`
+### 3. Run built-in agents
 
 Example prompts:
 
 - `Find entrypoints for billing logic.`
 - `Trace where this API response gets transformed.`
 - `List files most likely involved in this failing test.`
+- `Use web-research to investigate React Server Components cache invalidation. Return concise notes with sources.`
 
 ## Make your own agent
 
@@ -160,7 +178,9 @@ Easy customization path:
 
 Your copy shadows earlier source.
 
-## Built-in `scout`
+## Built-in agents
+
+### `scout`
 
 `scout` is for focused discovery across more than one or two files.
 
@@ -178,6 +198,23 @@ Bad use:
 - one file read answers question
 
 Then direct work is faster.
+
+### `web-research`
+
+`web-research` is for focused external research across search results, docs, source examples, and fetched pages.
+
+Best uses:
+
+- compare tools or approaches
+- verify behavior across docs, issues, and release notes
+- gather source-backed recommendations
+- inspect current external information without bloating main context
+
+Bad use:
+
+- one direct URL fetch is enough
+- one simple search answers the question
+- task only needs local repo inspection
 
 ## Practical patterns
 
