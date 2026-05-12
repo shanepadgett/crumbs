@@ -12,8 +12,11 @@
 
 ### Extension structure and shared code
 
-- Only extension entry files may live at `extensions/` root.
-- Put all other code in extension subfolders or `extensions/shared/`.
+- Each extension lives in `extensions/<name>/` with `package.json`, `index.ts`, `README.md`, and implementation under `src/`.
+- Each extension package manifest should set `pi.extensions` to `["./index.ts"]`.
+- Keep `index.ts` as the only Pi entry file. Use it for the short header and minimal registration/re-export wiring.
+- Put extension implementation in `extensions/<name>/src/`. Keep static assets in local folders like `assets/`.
+- `extensions/shared/` and `extensions/test-support/` are support folders, not extension packages.
 - Put truly reusable helpers in shared domains (for example `extensions/shared/io`, `extensions/shared/ui`, `extensions/shared/config`).
 - Avoid extracting trivial helpers by default.
 
