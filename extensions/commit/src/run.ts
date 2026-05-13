@@ -80,14 +80,13 @@ function formatToolDescription(toolName: string, args: unknown): string {
 
 export async function runCommitAgent(
   cwd: string,
-  systemPrompt: string,
+  commitPrompt: string,
   onUpdate?: (update: CommitAgentUpdate) => void,
 ): Promise<CommitAgentResult> {
   const startedAt = Date.now();
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
-    appendSystemPromptOverride: (base) => [...base, systemPrompt],
     extensionsOverride: (base) => ({
       ...base,
       extensions: base.extensions.filter(
@@ -140,9 +139,7 @@ export async function runCommitAgent(
       }
     });
 
-    await session.prompt(
-      "Create git commit(s) from injected /commit context only. First state intended commit groups, then execute those groups.",
-    );
+    await session.prompt(commitPrompt);
 
     const final = getFinalAssistant(session);
     const output =

@@ -1,11 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const COMMAND_TIMEOUT_MS = 10_000;
-const SUMMARY_MAX_CHARS = 4_000;
-const SUMMARY_MAX_LINES = 200;
-const DIFF_MAX_CHARS = 60_000;
-const DIFF_MAX_LINES = 800;
-const STATUS_MAX_LINES = 400;
 
 export interface CommitEvidence {
   repoRoot: string;
@@ -14,11 +11,18 @@ export interface CommitEvidence {
   headSubject: string;
   timestamp: string;
   changedPathCount: number;
+  recentSubjects: string;
   statusSnapshot: string;
+  stagedNameStatus: string;
+  unstagedNameStatus: string;
+  stagedNumstat: string;
+  unstagedNumstat: string;
   stagedSummary: string;
   unstagedSummary: string;
   stagedDiff: string;
   unstagedDiff: string;
+  untrackedFiles: string;
+  untrackedContents: string;
 }
 
 function cleanText(text: string): string {
@@ -28,29 +32,6 @@ function cleanText(text: string): string {
 function maybeText(text: string): string | null {
   const normalized = cleanText(text).trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-function truncateText(text: string, maxChars: number, maxLines: number): string {
-  const normalized = cleanText(text);
-  const lines = normalized.length > 0 ? normalized.split("\n") : [];
-
-  if (normalized.length <= maxChars && lines.length <= maxLines) return normalized;
-
-  const kept: string[] = [];
-  let usedChars = 0;
-
-  for (const line of lines) {
-    if (kept.length >= maxLines) break;
-    const separator = kept.length === 0 ? 0 : 1;
-    if (usedChars + separator + line.length > maxChars) break;
-    kept.push(line);
-    usedChars += separator + line.length;
-  }
-
-  let content = kept.join("\n");
-  if (!content) content = normalized.slice(0, Math.max(0, maxChars));
-
-  return `${content}\n[truncated: ${content.length}/${normalized.length} chars, ${Math.min(kept.length || 1, lines.length)}/${lines.length} lines]`;
 }
 
 function countStatusPaths(statusOutput: string): number {
@@ -99,6 +80,33 @@ async function tryGit(pi: ExtensionAPI, cwd: string, args: string[]): Promise<st
   }
 }
 
+function parseNulList(output: string): string[] {
+  return output.split("\0").filter(Boolean);
+}
+
+function formatUntrackedFiles(paths: string[]): string {
+  return paths.length > 0 ? paths.join("\n") : "(none)";
+}
+
+async function readUntrackedContents(repoRoot: string, paths: string[]): Promise<string> {
+  if (paths.length === 0) return "(none)";
+
+  const blocks = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const bytes = await readFile(join(repoRoot, path));
+        if (bytes.includes(0)) return `--- ${path}\n[binary file content not embedded]`;
+        return `--- ${path}\n${bytes.toString("utf8")}`;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return `--- ${path}\n[unable to read untracked file: ${message}]`;
+      }
+    }),
+  );
+
+  return blocks.join("\n\n");
+}
+
 export async function collectCommitEvidence(
   pi: ExtensionAPI,
   cwd: string,
@@ -121,6 +129,12 @@ export async function collectCommitEvidence(
     branch,
     headShort,
     headSubject,
+    recentSubjectsRaw,
+    untrackedFilesRaw,
+    stagedNameStatusRaw,
+    unstagedNameStatusRaw,
+    stagedNumstatRaw,
+    unstagedNumstatRaw,
     stagedSummaryRaw,
     unstagedSummaryRaw,
     stagedDiffRaw,
@@ -129,6 +143,20 @@ export async function collectCommitEvidence(
     tryGit(pi, repoRoot, ["branch", "--show-current"]),
     tryGit(pi, repoRoot, ["rev-parse", "--short", "HEAD"]),
     tryGit(pi, repoRoot, ["log", "-1", "--pretty=%s"]),
+    tryGit(pi, repoRoot, ["log", "-12", "--pretty=format:%s"]),
+    runGit(pi, repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]),
+    hasStaged
+      ? runGit(pi, repoRoot, ["diff", "--cached", "--name-status", "--find-renames", "--no-color"])
+      : Promise.resolve(""),
+    hasUnstaged
+      ? runGit(pi, repoRoot, ["diff", "--name-status", "--find-renames", "--no-color"])
+      : Promise.resolve(""),
+    hasStaged
+      ? runGit(pi, repoRoot, ["diff", "--cached", "--numstat", "--find-renames", "--no-color"])
+      : Promise.resolve(""),
+    hasUnstaged
+      ? runGit(pi, repoRoot, ["diff", "--numstat", "--find-renames", "--no-color"])
+      : Promise.resolve(""),
     hasStaged
       ? runGit(pi, repoRoot, [
           "diff",
@@ -173,6 +201,9 @@ export async function collectCommitEvidence(
       : Promise.resolve(""),
   ]);
 
+  const untrackedPaths = parseNulList(untrackedFilesRaw);
+  const untrackedContents = await readUntrackedContents(repoRoot, untrackedPaths);
+
   return {
     repoRoot,
     branch: branch ?? "(detached HEAD or unborn branch)",
@@ -180,22 +211,17 @@ export async function collectCommitEvidence(
     headSubject: headSubject ?? "(no commits yet)",
     timestamp: new Date().toISOString(),
     changedPathCount: countStatusPaths(statusText),
-    statusSnapshot: truncateText(statusText, SUMMARY_MAX_CHARS, STATUS_MAX_LINES),
-    stagedSummary: truncateText(
-      maybeText(stagedSummaryRaw) ?? "(none)",
-      SUMMARY_MAX_CHARS,
-      SUMMARY_MAX_LINES,
-    ),
-    unstagedSummary: truncateText(
-      maybeText(unstagedSummaryRaw) ?? "(none)",
-      SUMMARY_MAX_CHARS,
-      SUMMARY_MAX_LINES,
-    ),
-    stagedDiff: truncateText(maybeText(stagedDiffRaw) ?? "(none)", DIFF_MAX_CHARS, DIFF_MAX_LINES),
-    unstagedDiff: truncateText(
-      maybeText(unstagedDiffRaw) ?? "(none)",
-      DIFF_MAX_CHARS,
-      DIFF_MAX_LINES,
-    ),
+    recentSubjects: recentSubjectsRaw ?? "(no commits yet)",
+    statusSnapshot: statusText,
+    stagedNameStatus: maybeText(stagedNameStatusRaw) ?? "(none)",
+    unstagedNameStatus: maybeText(unstagedNameStatusRaw) ?? "(none)",
+    stagedNumstat: maybeText(stagedNumstatRaw) ?? "(none)",
+    unstagedNumstat: maybeText(unstagedNumstatRaw) ?? "(none)",
+    stagedSummary: maybeText(stagedSummaryRaw) ?? "(none)",
+    unstagedSummary: maybeText(unstagedSummaryRaw) ?? "(none)",
+    stagedDiff: maybeText(stagedDiffRaw) ?? "(none)",
+    unstagedDiff: maybeText(unstagedDiffRaw) ?? "(none)",
+    untrackedFiles: formatUntrackedFiles(untrackedPaths),
+    untrackedContents,
   };
 }
