@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { discoverAgents } from "../agents.js";
 import { THINKING_LEVEL_VALUES, type AgentRegistry, type AgentThinkingLevel } from "../types.js";
 import { generateAgentDefinition } from "./generate.js";

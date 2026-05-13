@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getGlobalCrumbsPath, getProjectCrumbsPath } from "../../shared/config/crumbs-paths.js";
 import { asObject, type JsonObject, writeJsonObject } from "../../shared/io/json-file.js";
 

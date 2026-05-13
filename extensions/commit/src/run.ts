@@ -4,7 +4,7 @@ import {
   getAgentDir,
   SessionManager,
   type AgentSession,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 const MODEL_PROVIDER = "openai-codex";
 const MODEL_ID = "gpt-5.5";

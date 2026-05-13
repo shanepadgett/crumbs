@@ -10,7 +10,7 @@ import {
   updateGlobalCrumbsConfig,
 } from "../../shared/config/crumbs-loader.js";
 import { asObject, type JsonObject } from "../../shared/io/json-file.js";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { StatusBlockId, StatusFlags, StatusTablePrefs } from "./types.js";
 
 const DEFAULT_PREFS: StatusTablePrefs = {

@@ -1,6 +1,6 @@
-import { getKeybindings } from "@mariozechner/pi-tui";
-import type { Component } from "@mariozechner/pi-tui";
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { getKeybindings } from "@earendil-works/pi-tui";
+import type { Component } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 export interface MultiSelectItem {
   value: string;

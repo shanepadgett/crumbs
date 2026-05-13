@@ -1,5 +1,5 @@
-import { keyHint } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import { keyHint } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { truncateMultilineText, truncateText } from "./text.js";
 
 export interface RenderCollapsibleTextResultOptions {

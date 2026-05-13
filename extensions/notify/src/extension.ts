@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const TITLE = "Pi";
 const MAC_SOUND_FILE = fileURLToPath(new URL("../assets/notification.mp3", import.meta.url));

@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { collectCommitEvidence } from "./evidence.js";
 import { renderCommitPrompt } from "./prompt.js";
 import { runCommitAgent } from "./run.js";

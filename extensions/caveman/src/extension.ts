@@ -6,8 +6,8 @@ import {
   DynamicBorder,
   type ExtensionAPI,
   type ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
-import { Container, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-coding-agent";
+import { Container, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
 import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../../shared/crumbs-events.js";
 import {
   loadEffectiveExtensionConfig,
@@ -125,9 +125,9 @@ function getPiDocsPaths(): { root: string; readme: string; docs: string; example
   try {
     const entryPath = (() => {
       if (typeof import.meta.resolve === "function") {
-        return fileURLToPath(import.meta.resolve("@mariozechner/pi-coding-agent"));
+        return fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"));
       }
-      return require.resolve("@mariozechner/pi-coding-agent/dist/index.js");
+      return require.resolve("@earendil-works/pi-coding-agent/dist/index.js");
     })();
 
     let root = dirname(entryPath);

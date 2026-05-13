@@ -6,7 +6,7 @@
  * Example: `apply_patch({ input: "*** Begin Patch\n...\n*** End Patch" })`
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import applyPatchExtension from "./src/apply-patch.js";
 import fastExtension from "./src/fast.js";
 import viewImageExtension from "./src/view-image.js";

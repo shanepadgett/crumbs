@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerQuietValidator } from "./core.js";
 import { markdownlintValidator } from "./markdownlint.js";
 import { miseTaskValidator } from "./mise-task.js";

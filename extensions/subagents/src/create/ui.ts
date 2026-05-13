@@ -2,7 +2,7 @@ import {
   DynamicBorder,
   getSelectListTheme,
   type ExtensionCommandContext,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import {
   Container,
   Input,
@@ -14,7 +14,7 @@ import {
   truncateToWidth,
   type Focusable,
   type SelectItem,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import { MultiSelectList, type MultiSelectItem } from "../../../shared/ui/multi-select-list.js";
 import type { InheritMode } from "./model.js";
 

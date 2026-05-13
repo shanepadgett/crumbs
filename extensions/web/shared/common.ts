@@ -4,7 +4,7 @@ import {
   formatSize,
   truncateHead,
   type TruncationResult,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 export const WEBFETCH_MAX_BYTES = 5 * 1024 * 1024;
 export const WEBFETCH_DEFAULT_TIMEOUT = 30;

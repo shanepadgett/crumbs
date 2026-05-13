@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SkillRoot } from "./types.js";
 
 export async function getRepoRoot(pi: ExtensionAPI, cwd: string): Promise<string> {

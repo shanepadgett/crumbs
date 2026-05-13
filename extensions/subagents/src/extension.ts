@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { renderCollapsibleTextResult } from "../../shared/ui/collapsible-text-result.js";
 import { notifyForSessionStart } from "../../shared/ui/notify.js";
 import {

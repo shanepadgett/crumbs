@@ -1,5 +1,5 @@
-import { parseFrontmatter, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { completeSimple, type Model } from "@mariozechner/pi-ai";
+import { parseFrontmatter, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { completeSimple, type Model } from "@earendil-works/pi-ai";
 import { readFile } from "node:fs/promises";
 import type { AgentRegistry } from "../types.js";
 import type { AgentConfig, GeneratedAgent } from "./model.js";

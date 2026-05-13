@@ -1,5 +1,5 @@
-import type { ExtensionCommandContext, ToolInfo } from "@mariozechner/pi-coding-agent";
-import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { readdir, readFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";

@@ -1,5 +1,5 @@
-import { StringEnum } from "@mariozechner/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { Workflow, WorkflowResult } from "./types.js";
 
 export const WORKFLOW_MODE_SCHEMA = StringEnum(["single", "chain", "parallel"] as const, {

@@ -1,5 +1,5 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { getSelectListTheme, keyHint, rawKeyHint } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { getSelectListTheme, keyHint, rawKeyHint } from "@earendil-works/pi-coding-agent";
 import {
   CURSOR_MARKER,
   Input,
@@ -12,7 +12,7 @@ import {
   type Component,
   type Focusable,
   type SelectItem,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 
 type ToolState = "enabled" | "disabled" | "conflict" | "missing";
 
