@@ -10,7 +10,6 @@ const MODEL_PROVIDER = "openai-codex";
 const MODEL_ID = "gpt-5.5";
 const THINKING_LEVEL = "medium";
 const ACTIVE_TOOLS = ["bash"];
-const HEARTBEAT_MS = 15_000;
 
 type AssistantMessage = {
   role?: string;
@@ -75,7 +74,7 @@ function extractBashCommand(args: unknown): string | undefined {
 
 function formatToolDescription(toolName: string, args: unknown): string {
   const command = toolName === "bash" ? extractBashCommand(args) : undefined;
-  if (command) return `bash: ${truncateInline(command)}`;
+  if (command) return `$ ${truncateInline(command)}`;
   return toolName;
 }
 
@@ -100,8 +99,7 @@ export async function runCommitAgent(
   let session: AgentSession | undefined;
   let unsubscribe = () => {};
   let planned = false;
-  let lastStatus = "working";
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let activeToolDescription: string | undefined;
 
   try {
     await loader.reload();
@@ -118,34 +116,27 @@ export async function runCommitAgent(
     requireActiveTools(session);
 
     onUpdate?.({ message: "/commit planning commits…" });
-    heartbeat = setInterval(() => {
-      onUpdate?.({ message: `/commit still ${lastStatus}…` });
-    }, HEARTBEAT_MS);
 
     unsubscribe = session.subscribe((event) => {
       if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
         if (!planned) {
           planned = true;
-          lastStatus = "planning commits";
           onUpdate?.({ message: "/commit planning commits…" });
         }
         return;
       }
 
       if (event.type === "tool_execution_start") {
-        const description = formatToolDescription(event.toolName, event.args);
-        lastStatus = `running ${description}`;
-        onUpdate?.({ message: `/commit running ${description}` });
+        activeToolDescription = formatToolDescription(event.toolName, event.args);
+        onUpdate?.({ message: `/commit ${activeToolDescription}` });
         return;
       }
 
       if (event.type === "tool_execution_end") {
-        const level = event.isError ? "error" : "info";
-        lastStatus = event.isError ? `handling ${event.toolName} failure` : "working";
-        onUpdate?.({
-          message: `/commit ${event.isError ? "failed" : "finished"} ${event.toolName}`,
-          level,
-        });
+        if (!event.isError) return;
+
+        const failedTool = activeToolDescription ?? event.toolName;
+        onUpdate?.({ message: `/commit failed ${failedTool}`, level: "error" });
       }
     });
 
@@ -164,7 +155,6 @@ export async function runCommitAgent(
       durationMs: Date.now() - startedAt,
     };
   } finally {
-    if (heartbeat) clearInterval(heartbeat);
     unsubscribe();
     try {
       session?.dispose();
