@@ -46,7 +46,7 @@ describe("mise checks", () => {
     expect(calls.length).toBe(1);
     expect((calls[0] as { command: string }).command).toBe("bash");
     expect(
-      (calls[0] as { args: string[] }).args[2].includes('mise tasks info "check:web" --json'),
+      (calls[0] as { args: string[] }).args[1].includes('mise tasks info "check:web" --json'),
     ).toBe(true);
   });
 
