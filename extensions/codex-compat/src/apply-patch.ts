@@ -8,6 +8,12 @@ import {
 } from "../../shared/ui/collapsible-text-result.js";
 import { applyPatch, type ApplyPatchSummary } from "./patch-executor.js";
 import { getCodexCompatCapabilities } from "./capabilities.js";
+import {
+  cleanupPatchReference,
+  resolvePatchInput,
+  saveFailedPatchAttempt,
+  type PatchRecoveryArtifact,
+} from "./patch-attempt-store.js";
 
 const COMPAT_TOOL_NAMES = new Set(["apply_patch", "view_image"]);
 const SUPPRESSED_BUILTINS = new Set(["edit", "write"]);
@@ -16,9 +22,14 @@ const KEPT_BUILTINS = ["read", "bash"] as const;
 const APPLY_PATCH_PARAMS = Type.Object({
   input: Type.String({
     description:
-      "Patch body or explicit apply_patch invocation. Use one coherent patch for all file changes in the task. Sections: Add File for new files, Replace File for full rewrites of existing files, Update File for contextual edits, Delete File for removals. Use *** Move to inside Update File for moves; move targets must not already exist. Do not include more than one Add/Replace/Update/Delete section for the same path.",
+      "Patch body, explicit apply_patch invocation, or @.pi/local/apply-patch-attempts/<id>.failed.patch retry reference. Use one coherent patch for all file changes in the task. Sections: Add File for new files, Replace File for full rewrites of existing files, Update File for contextual edits, Delete File for removals. Use *** Move to inside Update File for moves; move targets must not already exist. Do not include more than one Add/Replace/Update/Delete section for the same path.",
   }),
 });
+
+type ApplyPatchResultDetails = ApplyPatchSummary & {
+  recovery?: PatchRecoveryArtifact;
+  cleanedRecoveryPath?: string;
+};
 
 interface ToolInfo {
   name: string;
@@ -55,6 +66,7 @@ function buildCompatPromptDelta(): string {
     "- Use one Update File section with *** Move to for combined move+edit operations. Move targets must not already exist.",
     "- Do not include more than one Add/Replace/Update/Delete section for the same path in one patch. Use Replace File for full rewrites.",
     "- For Add File and Replace File sections, only lines prefixed with + are file content.",
+    "- If apply_patch reports a saved retry patch, retry with input set to @.pi/local/apply-patch-attempts/<id>.failed.patch after fixing that file.",
     '- Use view_image for local image inspection; pass detail: "original" only when the current model supports it.',
   ].join("\n");
 }
@@ -342,6 +354,18 @@ function buildCollapsedActivity(summary: ApplyPatchSummary): string {
   return visible.join("\n");
 }
 
+function buildRecoveryActivity(summary: ApplyPatchResultDetails): string[] {
+  const lines: string[] = [];
+  if (summary.recovery) {
+    lines.push(`Retry patch saved: ${summary.recovery.path}`);
+    lines.push(`Retry with input: @${summary.recovery.path}`);
+  }
+  if (summary.cleanedRecoveryPath) {
+    lines.push(`Cleaned retry patch: ${summary.cleanedRecoveryPath}`);
+  }
+  return lines;
+}
+
 function buildExpandedPatchText(_summary: ApplyPatchSummary, input: string | undefined): string {
   const normalizedInput = typeof input === "string" ? input.replace(/\r\n/g, "\n").trim() : "";
   return normalizedInput;
@@ -356,10 +380,17 @@ function formatStatus(theme: any, status: "pending" | "applied" | "failed"): str
 function renderCollapsedResultText(
   theme: any,
   preview: PatchPreviewOperation[],
-  summary: ApplyPatchSummary,
+  summary: ApplyPatchResultDetails,
 ): string {
   const lines = buildPreviewRows(preview, summary);
-  if (lines.length === 0) return theme.fg("muted", buildCollapsedActivity(summary));
+  if (lines.length === 0) {
+    return theme.fg(
+      "muted",
+      [...buildCollapsedActivity(summary).split("\n"), ...buildRecoveryActivity(summary)].join(
+        "\n",
+      ),
+    );
+  }
 
   const maxLines = 3;
   const visible = lines.slice(-maxLines).map((line) => truncateMultilineText(line, 1, 120));
@@ -369,13 +400,16 @@ function renderCollapsedResultText(
     return `${theme.fg("muted", `${label} `)}${formatStatus(theme, status as "pending" | "applied" | "failed")}`;
   });
   if (hidden > 0) rendered.push(theme.fg("muted", `... +${hidden} more`));
+  for (const line of buildRecoveryActivity(summary)) {
+    rendered.push(theme.fg("muted", truncateMultilineText(line, 1, 120)));
+  }
   return rendered.join("\n");
 }
 
 function renderExpandedResultText(
   theme: any,
   preview: PatchPreviewOperation[],
-  summary: ApplyPatchSummary,
+  summary: ApplyPatchResultDetails,
   input: string | undefined,
 ): string {
   const settled = buildExpandedResult(preview, summary);
@@ -395,6 +429,8 @@ function renderExpandedResultText(
       ].join("\n"),
     );
   }
+  const recovery = buildRecoveryActivity(summary);
+  if (recovery.length > 0) sections.push(theme.fg("muted", recovery.join("\n")));
   return sections.join("\n\n");
 }
 
@@ -404,7 +440,7 @@ function renderApplyPatchResult(
   theme: any,
   context: any,
 ) {
-  const summary = result.details as ApplyPatchSummary | undefined;
+  const summary = result.details as ApplyPatchResultDetails | undefined;
   if (!summary) return new Text("", 0, 0);
   const preview = parsePatchPreview(context?.args?.input);
 
@@ -439,7 +475,7 @@ function createInitialSummary(input: string): ApplyPatchSummary {
   };
 }
 
-function formatContent(summary: ApplyPatchSummary): string {
+function formatContent(summary: ApplyPatchResultDetails): string {
   const badge = formatBadge(summary);
   const lines: string[] = [];
 
@@ -469,6 +505,14 @@ function formatContent(summary: ApplyPatchSummary): string {
       const context = failure.contextHint ? ` (context: "${failure.contextHint}")` : "";
       lines.push(`- ${kind}${path}${chunk}: ${reason}${context}`.trim());
     }
+  }
+
+  if (summary.recovery) {
+    lines.push(`Retry patch saved: ${summary.recovery.path}`);
+    lines.push(`Retry with input: @${summary.recovery.path}`);
+  }
+  if (summary.cleanedRecoveryPath) {
+    lines.push(`Cleaned retry patch: ${summary.cleanedRecoveryPath}`);
   }
 
   return lines.join("\n");
@@ -534,7 +578,7 @@ export default function codexCompatApplyPatchExtension(pi: ExtensionAPI) {
     name: "apply_patch",
     label: "Apply Patch",
     description:
-      "Apply a multi-file patch with Codex-compatible parsing and matching. Accepts raw patch bodies and explicit apply_patch/applypatch invocation forms.",
+      "Apply a multi-file patch with Codex-compatible parsing and matching. Accepts raw patch bodies, explicit apply_patch/applypatch invocation forms, and saved retry patch references.",
     promptSnippet: "Apply focused multi-file text patches",
     promptGuidelines: [
       "Use apply_patch for file edits, file creation, file deletion, moves, and coordinated multi-file changes. Treat this as required unless a rare deterministic scripted transform is clearly better.",
@@ -547,6 +591,7 @@ export default function codexCompatApplyPatchExtension(pi: ExtensionAPI) {
       "Do not include more than one Add/Replace/Update/Delete section for the same path in one patch. Use Replace File for full rewrites.",
       "In Add File and Replace File sections, only + lines are treated as content.",
       "Use *** End of File in update chunks when the match should be EOF-sensitive.",
+      "If a patch fails and the result reports a saved retry patch, fix that file and retry by passing @.pi/local/apply-patch-attempts/<id>.failed.patch as input.",
       APPLY_PATCH_EXAMPLE,
       "Put the full patch text in the input field.",
     ],
@@ -558,7 +603,8 @@ export default function codexCompatApplyPatchExtension(pi: ExtensionAPI) {
       return renderApplyPatchResult(result, options, theme, context);
     },
     async execute(_toolCallId, params, _signal, onUpdate, ctx) {
-      const input = validatePatchInput(params.input);
+      const source = await resolvePatchInput(ctx.cwd, params.input);
+      const input = validatePatchInput(source.input);
       await onUpdate?.({
         content: [{ type: "text", text: "Applying patch..." }],
         details: createInitialSummary(input),
@@ -575,9 +621,18 @@ export default function codexCompatApplyPatchExtension(pi: ExtensionAPI) {
         });
       });
 
+      let details: ApplyPatchResultDetails = summary;
+      if (summary.status === "completed" && source.referencePath) {
+        await cleanupPatchReference(ctx.cwd, source.referencePath);
+        details = { ...summary, cleanedRecoveryPath: source.referencePath };
+      } else if (summary.status !== "completed") {
+        const recovery = await saveFailedPatchAttempt(ctx.cwd, input, summary);
+        if (recovery) details = { ...summary, recovery };
+      }
+
       return {
-        content: [{ type: "text", text: formatContent(summary) }],
-        details: summary,
+        content: [{ type: "text", text: formatContent(details) }],
+        details,
         isError: summary.status === "failed",
       };
     },
