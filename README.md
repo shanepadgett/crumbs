@@ -38,19 +38,45 @@ bun install
 - `mise install` installs the pinned project tools
 - `bun install` installs the package dependencies
 
-## Install extensions
+## Install package
+
+Install from GitHub to get the Crumbs Pi package. This loads bundled extensions and skills.
 
 ```bash
-pi install .
+pi install git:github.com/shanepadgett/crumbs
 ```
 
 Use `-l` to install into project settings (`.pi/settings.json`) instead of global settings.
 
 ```bash
+pi install -l git:github.com/shanepadgett/crumbs
+```
+
+Install without a ref so `pi update` can detect new commits on the default branch. Refs like `@main`, `@v1.0.0`, or commit SHAs are pinned and skipped by package updates.
+
+For local development from a checkout, install the current directory:
+
+```bash
+pi install .
+```
+
+```bash
 pi install -l .
 ```
 
-## Remove extensions
+## Remove package
+
+Remove the GitHub install:
+
+```bash
+pi remove git:github.com/shanepadgett/crumbs
+```
+
+```bash
+pi remove -l git:github.com/shanepadgett/crumbs
+```
+
+Remove a local checkout install:
 
 ```bash
 pi remove .

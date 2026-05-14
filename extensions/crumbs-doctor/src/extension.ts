@@ -1,10 +1,14 @@
 import { access, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getGlobalCrumbsPath, getProjectCrumbsPath } from "../../shared/config/crumbs-paths.js";
 import { asObject, type JsonObject, writeJsonObject } from "../../shared/io/json-file.js";
+
+const execFileAsync = promisify(execFile);
 
 type JsonStatus =
   | { exists: false; path: string }
@@ -17,6 +21,8 @@ type Finding =
 
 const FALLBACK_SCHEMA_URL =
   "https://raw.githubusercontent.com/shanepadgett/crumbs/refs/heads/main/schemas/crumbs.schema.json";
+
+const SCHEMA_RELATIVE_PATH = "schemas/crumbs.schema.json";
 
 function typeOfValue(value: unknown): string {
   if (Array.isArray(value)) return "array";
@@ -215,7 +221,85 @@ async function readJsonObjectStrict(path: string): Promise<JsonObject> {
   return asObject(JSON.parse(raw)) ?? {};
 }
 
+async function findPackageRoot(): Promise<string | null> {
+  let current = dirname(fileURLToPath(import.meta.url));
+
+  for (let depth = 0; depth < 8; depth += 1) {
+    const schemaPath = join(current, SCHEMA_RELATIVE_PATH);
+    if (await fileExists(schemaPath)) return current;
+
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  return null;
+}
+
+async function runGit(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", args, { cwd, timeout: 2000, encoding: "utf8" });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function githubPathFromRemote(remote: string): string | null {
+  const trimmed = remote.trim().replace(/\.git$/, "");
+
+  const scpLike = trimmed.match(/^git@github\.com:(.+\/.+)$/);
+  if (scpLike?.[1]) return scpLike[1];
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname !== "github.com") return null;
+    const path = url.pathname.replace(/^\/+/, "");
+    return path.split("/").length >= 2 ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveGitHubSchemaUrl(packageRoot: string): Promise<string | null> {
+  const remote = await runGit(packageRoot, ["remote", "get-url", "origin"]);
+  if (!remote) return null;
+
+  const githubPath = githubPathFromRemote(remote);
+  if (!githubPath) return null;
+
+  const branch = await runGit(packageRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (branch && branch !== "HEAD") {
+    return `https://raw.githubusercontent.com/${githubPath}/refs/heads/${branch}/${SCHEMA_RELATIVE_PATH}`;
+  }
+
+  const tag = await runGit(packageRoot, ["describe", "--tags", "--exact-match"]);
+  if (tag) {
+    return `https://raw.githubusercontent.com/${githubPath}/refs/tags/${tag}/${SCHEMA_RELATIVE_PATH}`;
+  }
+
+  const commit = await runGit(packageRoot, ["rev-parse", "HEAD"]);
+  if (commit)
+    return `https://raw.githubusercontent.com/${githubPath}/${commit}/${SCHEMA_RELATIVE_PATH}`;
+
+  return null;
+}
+
+async function resolveSchemaUrlFromPackageRoot(): Promise<string | null> {
+  const packageRoot = await findPackageRoot();
+  if (!packageRoot) return null;
+
+  const githubUrl = await resolveGitHubSchemaUrl(packageRoot);
+  if (githubUrl) return githubUrl;
+
+  const schemaPath = join(packageRoot, SCHEMA_RELATIVE_PATH);
+  return pathToFileURL(schemaPath).href;
+}
+
 async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
+  const packageSchemaUrl = await resolveSchemaUrlFromPackageRoot();
+  if (packageSchemaUrl) return packageSchemaUrl;
+
   const candidateSettingsPaths = [
     join(homedir(), ".pi", "agent", "settings.json"),
     join(await getProjectCrumbsPath(cwd), "..", "settings.json"),
@@ -240,7 +324,7 @@ async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
       if (typeof source !== "string" || source.trim().length === 0) continue;
 
       const sourcePath = isAbsolute(source) ? source : resolve(dirname(settingsPath), source);
-      const schemaPath = join(sourcePath, "schemas", "crumbs.schema.json");
+      const schemaPath = join(sourcePath, SCHEMA_RELATIVE_PATH);
       if (!(await fileExists(schemaPath))) continue;
       return pathToFileURL(schemaPath).href;
     }
