@@ -16,14 +16,8 @@
     "extensions": {
       "type": "object",
       "properties": {
-        "quietMarkdownlint": {
-          "$ref": "#/$defs/quietMarkdownlintConfig"
-        },
         "quietMiseTask": {
           "$ref": "#/$defs/quietMiseTaskConfig"
-        },
-        "quietXcodeBuild": {
-          "$ref": "#/$defs/quietXcodeBuildConfig"
         },
         "statusTable": {
           "$ref": "#/$defs/statusTableConfig"
@@ -88,21 +82,49 @@
             "minLength": 1
           },
           "default": []
+        },
+        "configs": {
+          "type": "array",
+          "description": "Multiple mise task configs. When present, these entries replace the legacy single-task fields above.",
+          "items": {
+            "$ref": "#/$defs/quietMiseTaskEntry"
+          },
+          "default": []
         }
       },
       "additionalProperties": false
     },
-    "quietMarkdownlintConfig": {
+    "quietMiseTaskEntry": {
       "type": "object",
       "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional display label for this task config. Defaults to task name."
+        },
         "enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable or disable the validator without removing its config."
         },
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "default": "check",
+          "description": "mise task name to run when tracked file extensions change."
+        },
+        "trackedExtensions": {
+          "type": "array",
+          "description": "File extensions that should trigger the task. Examples: .swift, .ts, .tsx, .js, .jsx, .java.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
         "excludeGlobs": {
           "type": "array",
-          "description": "Extra path globs to exclude from markdownlint tracking.",
+          "description": "Extra path globs to exclude from tracked file scanning.",
           "items": {
             "type": "string",
             "minLength": 1
@@ -110,23 +132,6 @@
           "default": []
         }
       },
-      "additionalProperties": false
-    },
-    "quietXcodeBuildConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable or disable the validator without removing its config."
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Base app name. Used to derive <name>/, <name>.xcodeproj, optional <name>.xcworkspace, and scheme <name>."
-        }
-      },
-      "required": ["name"],
       "additionalProperties": false
     },
     "statusTableConfig": {
@@ -364,31 +369,30 @@
     {
       "$schema": "https://crumbs.dev/schemas/crumbs.schema.json",
       "extensions": {
-        "quietMarkdownlint": {
-          "enabled": true,
-          "excludeGlobs": [
-            "docs/_hidden/**",
-            "external/**"
-          ]
-        },
         "quietMiseTask": {
           "enabled": true,
-          "task": "check",
-          "trackedExtensions": [
-            ".swift",
-            ".ts",
-            ".tsx",
-            ".js",
-            ".jsx",
-            ".java"
-          ],
-          "excludeGlobs": [
-            "external/**"
+          "configs": [
+            {
+              "name": "swift",
+              "task": "check:swift",
+              "trackedExtensions": [
+                ".swift"
+              ],
+              "excludeGlobs": [
+                "external/**"
+              ]
+            },
+            {
+              "name": "web",
+              "task": "check:web",
+              "trackedExtensions": [
+                ".ts",
+                ".tsx",
+                ".js",
+                ".jsx"
+              ]
+            }
           ]
-        },
-        "quietXcodeBuild": {
-          "enabled": true,
-          "name": "athenavoice"
         }
       }
     }

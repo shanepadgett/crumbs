@@ -6,4 +6,12 @@ bun = "1.3.11"
 
 [tasks.check]
 description = "Run format, lint, and typecheck"
-depends = ["format", "lint", "typecheck"]
+depends = ["check:ts", "check:config"]
+
+[tasks."check:ts"]
+description = "Run TypeScript format, lint, typecheck, and targeted tests"
+depends = ["format", "lint", "typecheck", "test_targeted"]
+
+[tasks."check:config"]
+description = "Run checks affected by repo config changes"
+depends = ["typecheck", "test_config"]

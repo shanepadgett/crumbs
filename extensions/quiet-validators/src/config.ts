@@ -1,7 +1,4 @@
-import {
-  loadEffectiveCrumbsExtensionsConfig,
-  loadProjectCrumbsConfig,
-} from "../../shared/config/crumbs-loader.js";
+import { loadEffectiveCrumbsExtensionsConfig } from "../../shared/config/crumbs-loader.js";
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -20,13 +17,6 @@ export function asBoolean(value: unknown, fallback = false): boolean {
 export async function readExtensionConfig(cwd: string): Promise<Record<string, unknown> | null> {
   const extensions = await loadEffectiveCrumbsExtensionsConfig(cwd);
   return asRecord(extensions);
-}
-
-export async function readProjectExtensionConfig(
-  cwd: string,
-): Promise<Record<string, unknown> | null> {
-  const projectConfig = await loadProjectCrumbsConfig(cwd);
-  return asRecord(projectConfig.extensions);
 }
 
 export function normalizePath(relativePath: string): string {

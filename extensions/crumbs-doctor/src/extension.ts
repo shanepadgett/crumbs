@@ -72,9 +72,7 @@ const KNOWN_TYPE_RULES: Array<{
   expected: string;
   validate: (value: unknown) => boolean;
 }> = [
-  { keyPath: "extensions.quietMarkdownlint", expected: "object", validate: expectsObject },
   { keyPath: "extensions.quietMiseTask", expected: "object", validate: expectsObject },
-  { keyPath: "extensions.quietXcodeBuild", expected: "object", validate: expectsObject },
   { keyPath: "extensions.statusTable", expected: "object", validate: expectsObject },
   { keyPath: "extensions.statusTable.enabled", expected: "boolean", validate: expectsBoolean },
   {

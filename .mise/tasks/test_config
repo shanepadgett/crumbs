@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Run config-focused tests"
+
+set -euo pipefail
+
+bun test \
+  extensions/shared/config \
+  extensions/quiet-validators/src/mise/config.test.ts \
+  extensions/quiet-validators/src/mise/checks.test.ts \
+  extensions/quiet-validators/src/core/snapshots.test.ts

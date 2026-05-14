@@ -15,19 +15,31 @@
         "powers": {}
       }
     },
-    "quietMarkdownlint": {
-      "excludeGlobs": [
-        "external/**",
-        "docs/_hidden/**"
-      ]
-    },
     "quietMiseTask": {
-      "task": "check",
-      "excludeGlobs": [
-        "external/**"
-      ],
-      "trackedExtensions": [
-        ".ts"
+      "configs": [
+        {
+          "name": "typescript",
+          "task": "check:ts",
+          "trackedExtensions": [
+            ".ts"
+          ],
+          "excludeGlobs": [
+            "external/**",
+            "node_modeules/**"
+          ]
+        },
+        {
+          "name": "config",
+          "task": "check:config",
+          "trackedExtensions": [
+            ".json",
+            ".toml"
+          ],
+          "excludeGlobs": [
+            "external/**",
+            "node_modeules/**"
+          ]
+        }
       ]
     },
     "mcp": {

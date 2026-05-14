@@ -1,7 +1,6 @@
 import { asObject, type JsonObject } from "../io/json-file.js";
 
 const UNION_ARRAY_PATHS = new Set([
-  "extensions.quietMarkdownlint.excludeGlobs",
   "extensions.quietMiseTask.excludeGlobs",
   "extensions.quietMiseTask.trackedExtensions",
 ]);
@@ -39,6 +38,18 @@ function mergeNode(path: string, globalValue: unknown, projectValue: unknown): u
   const globalObject = asObject(globalValue);
   const projectObject = asObject(projectValue);
   if (globalObject && projectObject) {
+    if (path === "extensions.quietMiseTask" && Array.isArray(projectObject.configs)) {
+      return projectObject;
+    }
+
+    if (
+      path === "extensions.quietMiseTask" &&
+      Array.isArray(globalObject.configs) &&
+      !Array.isArray(projectObject.configs)
+    ) {
+      return projectObject;
+    }
+
     const merged: JsonObject = { ...globalObject };
     for (const key of Object.keys(projectObject)) {
       const nextPath = path ? `${path}.${key}` : key;
