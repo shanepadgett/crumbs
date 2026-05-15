@@ -1,17 +1,13 @@
 [tools]
-bun = "1.3.11"
-"npm:oxfmt" = "0.44.0"
-"npm:oxlint" = "1.59.0"
-"npm:typescript" = "6.0.2"
-
-[tasks.check]
-description = "Run format, lint, and typecheck"
-depends = ["check:ts", "check:config"]
-
-[tasks."check:ts"]
-description = "Run TypeScript format, lint, typecheck, and targeted tests"
-depends = ["format", "lint", "typecheck", "test_targeted"]
+bun = "1.3.14"
+node = "26.1.0"
+"npm:oxfmt" = "0.49.0"
+"npm:oxlint" = "1.64.0"
+"npm:markdownlint-cli2" = "0.22.1"
+python = "3.14.5"
+uv = "0.11.14"
+"pipx:mdformat" = { version = "0.7.22", uvx_args = "--with mdformat-gfm==1.0.0 --with mdformat-frontmatter==2.0.8 --with mdformat-footnote==0.1.3 --with mdformat-gfm-alerts==2.0.0" }
 
 [tasks."check:config"]
 description = "Run checks affected by repo config changes"
-depends = ["typecheck", "test_config"]
+depends = ["typecheck:ts", "test_config"]

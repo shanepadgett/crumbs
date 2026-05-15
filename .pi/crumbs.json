@@ -3,42 +3,40 @@
   "extensions": {
     "caveman": {
       "enabled": true,
-      "powers": [
-        "improve",
-        "architecture",
-        "typescript"
-      ],
+      "powers": ["improve", "architecture", "typescript"],
       "additionalContext": {
-        "all": [
-          "AGENTS.md"
-        ],
+        "all": ["AGENTS.md"],
         "powers": {}
       }
     },
     "quietMiseTask": {
       "configs": [
         {
-          "name": "typescript",
-          "task": "check:ts",
-          "trackedExtensions": [
-            ".ts"
-          ],
-          "excludeGlobs": [
-            "external/**",
-            "node_modeules/**"
-          ]
-        },
-        {
           "name": "config",
           "task": "check:config",
-          "trackedExtensions": [
-            ".json",
-            ".toml"
-          ],
-          "excludeGlobs": [
-            "external/**",
-            "node_modeules/**"
-          ]
+          "trackedExtensions": [".json", ".toml"],
+          "excludeGlobs": ["external/**", "node_modules/**"]
+        },
+        {
+          "enabled": true,
+          "excludeGlobs": ["node_modules/**", "dist/**", "build/**"],
+          "name": "ts",
+          "task": "check:ts",
+          "trackedExtensions": [".js", ".jsx", ".ts", ".tsx"]
+        },
+        {
+          "enabled": true,
+          "excludeGlobs": ["node_modules/**"],
+          "name": "markdown",
+          "task": "check:markdown",
+          "trackedExtensions": [".md"]
+        },
+        {
+          "enabled": true,
+          "excludeGlobs": ["node_modules/**"],
+          "name": "yaml",
+          "task": "check:yaml",
+          "trackedExtensions": [".yml", ".yaml"]
         }
       ]
     },
@@ -46,10 +44,7 @@
       "mcpServers": {
         "pencil": {
           "command": "/Users/spadgett/.pencil/mcp/visual_studio_code/out/mcp-server-darwin-arm64",
-          "args": [
-            "--app",
-            "visual_studio_code"
-          ],
+          "args": ["--app", "visual_studio_code"],
           "lifecycle": "lazy",
           "requiresCavemanPower": "design"
         }

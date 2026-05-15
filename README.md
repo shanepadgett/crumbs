@@ -91,13 +91,13 @@ pi remove -l .
 Tests use Bun from root project tooling.
 
 ```bash
-mise run test
+mise run test:ts
 ```
 
-Run tests for changed files and nearby extension scope when focused feedback is enough.
+Run full TypeScript repo checks when format, lint, typecheck, and tests are needed together.
 
 ```bash
-mise run test_targeted
+mise run check:ts
 ```
 
 Place unit tests beside source as `*.test.ts`. Scope tests by path when investigating one area.

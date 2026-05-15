@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR"
+while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
+  ROOT="$(dirname "$ROOT")"
+done
+source "$ROOT/.mise/tasks/lib/scaffold.sh"
+
+run_step "format ts" mise run format:ts
+run_step "lint ts" mise run lint:ts
+run_step "typecheck ts" mise run typecheck:ts
+run_step "test ts" mise run test:ts

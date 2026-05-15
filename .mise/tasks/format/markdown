@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR"
+while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
+  ROOT="$(dirname "$ROOT")"
+done
+source "$ROOT/.mise/tasks/lib/scaffold.sh"
+
+MDFORMAT_ARGS=(.)
+while IFS= read -r pattern; do
+  MDFORMAT_ARGS+=(--exclude "$pattern")
+done < <(
+  node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const config = (await import(pathToFileURL(`${process.cwd()}/.markdownlint-cli2.mjs`).href)).default;
+    for (const pattern of config.ignores ?? []) console.log(pattern);
+  '
+)
+
+run_filtered "format markdown" "format markdown failed" mdformat "${MDFORMAT_ARGS[@]}"

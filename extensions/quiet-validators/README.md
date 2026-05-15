@@ -48,6 +48,25 @@ Multiple task configs use `configs`. When present, `configs` wins over legacy fi
 
 `name` is optional and only affects display labels.
 
+Set `enabled` to `false` to keep config present but inactive:
+
+```json
+{
+  "extensions": {
+    "quietMiseTask": {
+      "configs": [
+        {
+          "name": "xcode",
+          "enabled": false,
+          "task": "check:xcode",
+          "trackedExtensions": [".swift"]
+        }
+      ]
+    }
+  }
+}
+```
+
 ## How it works
 
 Each mise config gets its own file snapshot and dirty state. The extension runs only tasks whose tracked files changed, reports failures as steer messages, and stays silent when unsupported or unchanged.
