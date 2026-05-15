@@ -242,16 +242,6 @@
           "default": [],
           "description": "Optional Caveman powers. improve adds Pi self-improvement guidance. design adds UX and interface-shaping guidance. architecture adds stronger ownership and abstraction judgment. swiftui adds modern SwiftUI guidance. typescript adds stronger TypeScript guidance."
         },
-        "enhancements": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["improve", "design", "architecture", "swiftui", "typescript"]
-          },
-          "uniqueItems": true,
-          "default": [],
-          "description": "Deprecated legacy alias for powers. Use powers instead."
-        },
         "additionalContext": {
           "type": "object",
           "description": "Additional context files whose contents are injected into the Caveman system prompt.",
