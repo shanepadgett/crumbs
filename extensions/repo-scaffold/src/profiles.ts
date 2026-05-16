@@ -38,8 +38,8 @@ run_filtered() {
         /\\([0-9]+,[0-9]+\\): error TS[0-9]+:/ { print; next }
         /^error[: ]/ { print; next }
         /^warning[: ]/ { print; next }
-        /failed/i { print; next }
-        /not formatted/i { print; next }
+        tolower($0) ~ /failed/ { print; next }
+        tolower($0) ~ /not formatted/ { print; next }
       ' >"$filtered_file"
 
   if [[ "$show_warnings" == "0" ]]; then
