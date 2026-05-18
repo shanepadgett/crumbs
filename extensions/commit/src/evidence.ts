@@ -10,6 +10,10 @@ const MAX_UNTRACKED_FILE_CHARS = 8_000;
 const MAX_UNTRACKED_CONTENT_CHARS = 40_000;
 const MIN_FOLDER_RENAME_FILES = 3;
 
+export interface CommitEvidenceOptions {
+  signal?: AbortSignal;
+}
+
 export interface CommitEvidence {
   repoRoot: string;
   branch: string;
@@ -88,19 +92,39 @@ async function runGit(
   pi: ExtensionAPI,
   cwd: string,
   args: string[],
+  options: CommitEvidenceOptions = {},
   allowedCodes: number[] = [0],
 ): Promise<string> {
-  const result = await pi.exec("git", args, { cwd, timeout: COMMAND_TIMEOUT_MS });
+  throwIfAborted(options.signal);
+
+  const result = await pi.exec("git", args, {
+    cwd,
+    timeout: COMMAND_TIMEOUT_MS,
+    signal: options.signal,
+  });
+
+  throwIfAborted(options.signal);
   if (allowedCodes.includes(result.code)) return result.stdout;
 
   const detail = [maybeText(result.stderr), maybeText(result.stdout)].filter(Boolean).join("\n");
   throw new Error(detail || `git ${args.join(" ")} failed with exit code ${result.code}`);
 }
 
-async function tryGit(pi: ExtensionAPI, cwd: string, args: string[]): Promise<string | null> {
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  throw new Error("/commit cancelled.");
+}
+
+async function tryGit(
+  pi: ExtensionAPI,
+  cwd: string,
+  args: string[],
+  options: CommitEvidenceOptions = {},
+): Promise<string | null> {
   try {
-    return maybeText(await runGit(pi, cwd, args));
+    return maybeText(await runGit(pi, cwd, args, options));
   } catch {
+    throwIfAborted(options.signal);
     return null;
   }
 }
@@ -151,18 +175,25 @@ function summarizeFolderRenames(...nameStatusOutputs: string[]): string {
     .join("\n");
 }
 
-async function readUntrackedContents(repoRoot: string, paths: string[]): Promise<string> {
+async function readUntrackedContents(
+  repoRoot: string,
+  paths: string[],
+  options: CommitEvidenceOptions = {},
+): Promise<string> {
   if (paths.length === 0) return "(none)";
 
   let totalChars = 0;
   const blocks = await Promise.all(
     paths.map(async (path) => {
       try {
-        const bytes = await readFile(join(repoRoot, path));
+        throwIfAborted(options.signal);
+        const bytes = await readFile(join(repoRoot, path), { signal: options.signal });
+        throwIfAborted(options.signal);
         if (bytes.includes(0)) return `--- ${path}\n[binary file content not embedded]`;
         const contents = truncateSection(bytes.toString("utf8"), MAX_UNTRACKED_FILE_CHARS);
         return `--- ${path}\n${contents}`;
       } catch (error) {
+        throwIfAborted(options.signal);
         const message = error instanceof Error ? error.message : String(error);
         return `--- ${path}\n[unable to read untracked file: ${message}]`;
       }
@@ -192,15 +223,15 @@ async function readUntrackedContents(repoRoot: string, paths: string[]): Promise
 export async function collectCommitEvidence(
   pi: ExtensionAPI,
   cwd: string,
+  options: CommitEvidenceOptions = {},
 ): Promise<CommitEvidence | null> {
-  const repoRoot = await tryGit(pi, cwd, ["rev-parse", "--show-toplevel"]);
+  const repoRoot = await tryGit(pi, cwd, ["rev-parse", "--show-toplevel"], options);
   if (!repoRoot) return null;
 
-  const statusRaw = await runGit(pi, repoRoot, [
-    "status",
-    "--porcelain=v1",
-    "--untracked-files=all",
-  ]);
+  const git = (args: string[]) => runGit(pi, repoRoot, args, options);
+  const maybeGit = (args: string[]) => tryGit(pi, repoRoot, args, options);
+
+  const statusRaw = await git(["status", "--porcelain=v1", "--untracked-files=all"]);
   const statusText = maybeText(statusRaw);
   if (!statusText) return null;
 
@@ -222,25 +253,17 @@ export async function collectCommitEvidence(
     stagedDiffRaw,
     unstagedDiffRaw,
   ] = await Promise.all([
-    tryGit(pi, repoRoot, ["branch", "--show-current"]),
-    tryGit(pi, repoRoot, ["rev-parse", "--short", "HEAD"]),
-    tryGit(pi, repoRoot, ["log", "-1", "--pretty=%s"]),
-    tryGit(pi, repoRoot, ["log", "-12", "--pretty=format:%s"]),
-    runGit(pi, repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]),
+    maybeGit(["branch", "--show-current"]),
+    maybeGit(["rev-parse", "--short", "HEAD"]),
+    maybeGit(["log", "-1", "--pretty=%s"]),
+    maybeGit(["log", "-12", "--pretty=format:%s"]),
+    git(["ls-files", "--others", "--exclude-standard", "-z"]),
+    hasStaged ? git(["diff", "--cached", "--name-status", "--find-renames", "--no-color"]) : "",
+    hasUnstaged ? git(["diff", "--name-status", "--find-renames", "--no-color"]) : "",
+    hasStaged ? git(["diff", "--cached", "--numstat", "--find-renames", "--no-color"]) : "",
+    hasUnstaged ? git(["diff", "--numstat", "--find-renames", "--no-color"]) : "",
     hasStaged
-      ? runGit(pi, repoRoot, ["diff", "--cached", "--name-status", "--find-renames", "--no-color"])
-      : Promise.resolve(""),
-    hasUnstaged
-      ? runGit(pi, repoRoot, ["diff", "--name-status", "--find-renames", "--no-color"])
-      : Promise.resolve(""),
-    hasStaged
-      ? runGit(pi, repoRoot, ["diff", "--cached", "--numstat", "--find-renames", "--no-color"])
-      : Promise.resolve(""),
-    hasUnstaged
-      ? runGit(pi, repoRoot, ["diff", "--numstat", "--find-renames", "--no-color"])
-      : Promise.resolve(""),
-    hasStaged
-      ? runGit(pi, repoRoot, [
+      ? git([
           "diff",
           "--cached",
           "--stat",
@@ -249,19 +272,12 @@ export async function collectCommitEvidence(
           "--no-color",
           "--no-ext-diff",
         ])
-      : Promise.resolve(""),
+      : "",
     hasUnstaged
-      ? runGit(pi, repoRoot, [
-          "diff",
-          "--stat",
-          "--summary",
-          "--find-renames",
-          "--no-color",
-          "--no-ext-diff",
-        ])
-      : Promise.resolve(""),
+      ? git(["diff", "--stat", "--summary", "--find-renames", "--no-color", "--no-ext-diff"])
+      : "",
     hasStaged
-      ? runGit(pi, repoRoot, [
+      ? git([
           "diff",
           "--cached",
           "--unified=1",
@@ -270,9 +286,9 @@ export async function collectCommitEvidence(
           "--no-ext-diff",
           "--submodule=diff",
         ])
-      : Promise.resolve(""),
+      : "",
     hasUnstaged
-      ? runGit(pi, repoRoot, [
+      ? git([
           "diff",
           "--unified=1",
           "--find-renames",
@@ -280,12 +296,15 @@ export async function collectCommitEvidence(
           "--no-ext-diff",
           "--submodule=diff",
         ])
-      : Promise.resolve(""),
+      : "",
   ]);
 
+  throwIfAborted(options.signal);
+
   const untrackedPaths = parseNulList(untrackedFilesRaw);
-  const untrackedContents = await readUntrackedContents(repoRoot, untrackedPaths);
   const folderRenameSummary = summarizeFolderRenames(stagedNameStatusRaw, unstagedNameStatusRaw);
+  const untrackedContents = await readUntrackedContents(repoRoot, untrackedPaths, options);
+  throwIfAborted(options.signal);
 
   return {
     repoRoot,

@@ -29,6 +29,10 @@ export interface CommitAgentUpdate {
   level?: "info" | "warning" | "error";
 }
 
+export interface RunCommitAgentOptions {
+  signal?: AbortSignal;
+}
+
 function getAssistantText(message: AssistantMessage | undefined): string {
   if (message?.role !== "assistant") return "";
   for (const part of message.content ?? []) {
@@ -78,12 +82,20 @@ function formatToolDescription(toolName: string, args: unknown): string {
   return toolName;
 }
 
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  throw new Error("/commit cancelled.");
+}
+
 export async function runCommitAgent(
   cwd: string,
   commitPrompt: string,
   onUpdate?: (update: CommitAgentUpdate) => void,
+  options: RunCommitAgentOptions = {},
 ): Promise<CommitAgentResult> {
   const startedAt = Date.now();
+  throwIfAborted(options.signal);
+
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
@@ -97,11 +109,14 @@ export async function runCommitAgent(
 
   let session: AgentSession | undefined;
   let unsubscribe = () => {};
+  let removeAbortListener = () => {};
   let planned = false;
   let activeToolDescription: string | undefined;
 
   try {
     await loader.reload();
+    throwIfAborted(options.signal);
+
     const created = await createAgentSession({
       cwd,
       resourceLoader: loader,
@@ -109,8 +124,19 @@ export async function runCommitAgent(
     });
     session = created.session;
 
+    const abortSession = () => {
+      void session?.abort().catch(() => {});
+    };
+    if (options.signal?.aborted) abortSession();
+    else options.signal?.addEventListener("abort", abortSession, { once: true });
+    removeAbortListener = () => options.signal?.removeEventListener("abort", abortSession);
+
+    throwIfAborted(options.signal);
+
     const model = requireCommitModel(session);
     await session.setModel(model);
+    throwIfAborted(options.signal);
+
     session.setThinkingLevel(THINKING_LEVEL);
     requireActiveTools(session);
 
@@ -140,6 +166,7 @@ export async function runCommitAgent(
     });
 
     await session.prompt(commitPrompt);
+    throwIfAborted(options.signal);
 
     const final = getFinalAssistant(session);
     const output =
@@ -152,6 +179,7 @@ export async function runCommitAgent(
       durationMs: Date.now() - startedAt,
     };
   } finally {
+    removeAbortListener();
     unsubscribe();
     try {
       session?.dispose();
