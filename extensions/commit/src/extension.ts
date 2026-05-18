@@ -1,16 +1,15 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import {
+  BorderedLoader,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+} from "@earendil-works/pi-coding-agent";
 import { loadCommitConfig } from "./config.js";
 import { collectCommitEvidence } from "./evidence.js";
 import { renderCommitPrompt } from "./prompt.js";
 import { runCommitAgent } from "./run.js";
 
 const COMMAND_DESCRIPTION = "Create semantic git commit(s) from injected git snapshot";
-const ESCAPE_KEY = "\x1b";
-
-interface CommitCancelScope {
-  signal: AbortSignal;
-  dispose(): void;
-}
+type CommitCancelResult = "cancelled" | "done";
 
 function formatResult(output: string): string {
   const trimmed = output.trim();
@@ -30,29 +29,38 @@ function wasCancelled(signal: AbortSignal | undefined): boolean {
   return signal?.aborted ?? false;
 }
 
-function createCommitCancelScope(ctx: ExtensionCommandContext): CommitCancelScope {
+async function runWithCommitCancelUI(
+  ctx: ExtensionCommandContext,
+  run: (signal: AbortSignal) => Promise<void>,
+): Promise<void> {
   const controller = new AbortController();
   const parentSignal = ctx.signal;
+  let closeCancelUi: ((result: CommitCancelResult) => void) | undefined;
+
   const abort = () => {
     if (!controller.signal.aborted) controller.abort();
+    closeCancelUi?.("cancelled");
   };
 
   if (parentSignal?.aborted) abort();
   else parentSignal?.addEventListener("abort", abort, { once: true });
 
-  const removeTerminalInput = ctx.ui.onTerminalInput((data) => {
-    if (data !== ESCAPE_KEY) return undefined;
-    abort();
-    return { consume: true };
+  const cancelUi = ctx.ui.custom<CommitCancelResult>((tui, theme, _keybindings, done) => {
+    closeCancelUi = done;
+    const loader = new BorderedLoader(tui, theme, "/commit working…", { cancellable: true });
+    loader.onAbort = abort;
+    return loader;
   });
 
-  return {
-    signal: controller.signal,
-    dispose() {
-      parentSignal?.removeEventListener("abort", abort);
-      removeTerminalInput();
-    },
-  };
+  const work = run(controller.signal);
+  try {
+    const first = await Promise.race([cancelUi, work.then((): CommitCancelResult => "done")]);
+    if (first === "cancelled") abort();
+    await work;
+  } finally {
+    parentSignal?.removeEventListener("abort", abort);
+    closeCancelUi?.("done");
+  }
 }
 
 async function handleCommit(
@@ -130,13 +138,7 @@ export default function commitExtension(pi: ExtensionAPI): void {
     description: COMMAND_DESCRIPTION,
     handler: async (_args, ctx) => {
       await ctx.waitForIdle();
-
-      const cancelScope = createCommitCancelScope(ctx);
-      try {
-        await handleCommit(pi, ctx, cancelScope.signal);
-      } finally {
-        cancelScope.dispose();
-      }
+      await runWithCommitCancelUI(ctx, (signal) => handleCommit(pi, ctx, signal));
     },
   });
 }
