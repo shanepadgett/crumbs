@@ -94,7 +94,7 @@ function isSessionEntryLike(value: unknown): value is SessionEntryLike {
 }
 
 export function getSessionTokenTotals(ctx: ExtensionContext): SessionTokenTotals {
-  const entries = ctx.sessionManager.getEntries();
+  const entries = ctx.sessionManager.getBranch();
 
   let input = 0;
   let output = 0;
@@ -170,6 +170,7 @@ export function buildSnapshot(
 ): StatusSnapshot {
   const { contextSummary, tokenSummary, percent: contextPercent } = formatContextUsage(ctx, totals);
   const caveman = getCavemanDisplay(flags);
+  const thinking = ctx.model?.reasoning ? pi.getThinkingLevel() : "";
 
   return {
     git: git.summary,
@@ -177,7 +178,7 @@ export function buildSnapshot(
     path: shortenPath(ctx.cwd),
     provider: ctx.model?.provider ?? "none",
     model: ctx.model?.id ?? "none",
-    thinking: pi.getThinkingLevel(),
+    thinking,
     fast: flags.fastEnabled ? "on" : "off",
     caveman: caveman.label,
     cavemanName: flags.cavemanName,

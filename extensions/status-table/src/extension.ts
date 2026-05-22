@@ -8,7 +8,6 @@ import { GIT_REFRESH_INTERVAL_MS, WIDGET_KEY } from "./constants.js";
 import {
   CRUMBS_EVENT_CAVEMAN_CHANGED,
   CRUMBS_EVENT_FAST_CHANGED,
-  CRUMBS_EVENT_THINKING_CHANGED,
 } from "../../shared/crumbs-events.js";
 import { loadGitSummary } from "./git.js";
 import { renderMinimalTable } from "./render-minimal.js";
@@ -78,15 +77,6 @@ function asCavemanFlagEvent(value: unknown): CavemanFlagEvent {
   };
 }
 
-function asCwdEvent(value: unknown): { cwd?: string } {
-  if (!value || typeof value !== "object") return {};
-
-  const record = value as Record<string, unknown>;
-  return {
-    cwd: typeof record.cwd === "string" ? record.cwd : undefined,
-  };
-}
-
 const DEFAULT_VISIBLE_BLOCKS: StatusBlockId[] = [
   "path",
   "git",
@@ -111,10 +101,13 @@ const DEFAULT_FLAGS: StatusFlags = {
 const DEFAULT_TOKEN_TOTALS: SessionTokenTotals = { input: 0, output: 0 };
 const DEFAULT_GIT: GitSummary = { branch: "no git", summary: "no git" };
 
-function hideFooter(ctx: ExtensionContext): void {
+function hideFooter(ctx: ExtensionContext, onDispose?: () => void): void {
   if (!ctx.hasUI) return;
 
   ctx.ui.setFooter(() => ({
+    dispose(): void {
+      onDispose?.();
+    },
     invalidate() {},
     render(): string[] {
       return [];
@@ -139,7 +132,7 @@ const STATUS_BLOCK_OPTIONS: { id: StatusBlockId; label: string; description: str
   },
   { id: "caveman", label: "Caveman", description: "Caveman state and powers" },
   { id: "context", label: "Context", description: "Current context usage" },
-  { id: "tokens", label: "Tokens", description: "Accumulated session token totals" },
+  { id: "tokens", label: "Tokens", description: "Accumulated active-branch token totals" },
 ];
 
 async function openStatusTableConfig(
@@ -204,6 +197,10 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
   let lastContext: ExtensionContext | undefined;
   let lastCwd: string | undefined;
   let gitRefreshTimer: ReturnType<typeof setInterval> | undefined;
+  let requestWidgetRender: (() => void) | undefined;
+  let statusTableMounted = false;
+  let footerHidden = false;
+  const unsubscribeEventHandlers: Array<() => void> = [];
   const stateByCwd = new Map<string, WorkspaceState>();
 
   function getWorkspaceState(cwd: string): WorkspaceState {
@@ -264,7 +261,23 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     await saveStatusTablePrefs(cwd, prefs);
   }
 
-  function renderSnapshot(ctx: ExtensionContext): void {
+  function clearMountedStatusTable(ctx: ExtensionContext): void {
+    requestWidgetRender = undefined;
+    statusTableMounted = false;
+    footerHidden = false;
+    clearStatusTable(ctx);
+  }
+
+  function ensureFooterHidden(ctx: ExtensionContext): void {
+    if (footerHidden) return;
+
+    footerHidden = true;
+    hideFooter(ctx, () => {
+      footerHidden = false;
+    });
+  }
+
+  function syncStatusTable(ctx: ExtensionContext): void {
     if (!ctx.hasUI) return;
 
     setCurrentContext(ctx);
@@ -275,43 +288,98 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     const prefs = state.prefs ?? DEFAULT_PREFS;
 
     if (!prefs.enabled) {
-      clearStatusTable(ctx);
+      clearMountedStatusTable(ctx);
       return;
     }
 
-    hideFooter(ctx);
+    ensureFooterHidden(ctx);
 
-    const snapshot = buildSnapshot(pi, ctx, state.git, state.tokenTotals, state.flags);
+    if (statusTableMounted && requestWidgetRender) {
+      requestWidgetRender();
+      return;
+    }
+
+    statusTableMounted = false;
 
     ctx.ui.setWidget(
       WIDGET_KEY,
-      (_tui, theme) => ({
-        invalidate() {},
-        render(width: number): string[] {
-          return renderMinimalTable(theme, width, snapshot, prefs.visibleBlocks);
-        },
-      }),
+      (tui, theme) => {
+        const requestRender = () => tui.requestRender();
+        requestWidgetRender = requestRender;
+        statusTableMounted = true;
+
+        return {
+          dispose(): void {
+            if (requestWidgetRender === requestRender) requestWidgetRender = undefined;
+            statusTableMounted = false;
+          },
+          invalidate() {},
+          render(width: number): string[] {
+            const activeCtx = lastContext ?? ctx;
+
+            try {
+              const cwd = lastCwd ?? activeCtx.cwd;
+              const currentState = getWorkspaceState(cwd);
+              const currentPrefs = currentState.prefs ?? DEFAULT_PREFS;
+              if (!currentPrefs.enabled) return [];
+
+              const snapshot = buildSnapshot(
+                pi,
+                activeCtx,
+                currentState.git,
+                currentState.tokenTotals,
+                currentState.flags,
+              );
+
+              return renderMinimalTable(theme, width, snapshot, currentPrefs.visibleBlocks);
+            } catch {
+              clearCurrentContext(activeCtx);
+              return [];
+            }
+          },
+        };
+      },
       { placement: "belowEditor" },
     );
+
+    statusTableMounted = true;
   }
 
   function refreshUI(ctx: ExtensionContext): void {
     try {
-      renderSnapshot(ctx);
+      syncStatusTable(ctx);
     } catch {
       clearCurrentContext(ctx);
     }
   }
 
-  async function refreshGit(cwd: string, renderAfter: boolean): Promise<void> {
+  function requestActiveRender(ctx: ExtensionContext | undefined): void {
+    try {
+      if (requestWidgetRender) {
+        requestWidgetRender();
+        return;
+      }
+
+      if (ctx) refreshUI(ctx);
+    } catch {
+      clearCurrentContext(ctx);
+    }
+  }
+
+  function gitSummaryEquals(left: GitSummary, right: GitSummary): boolean {
+    return left.branch === right.branch && left.summary === right.summary;
+  }
+
+  async function refreshGit(cwd: string): Promise<void> {
     const state = getWorkspaceState(cwd);
     const nonce = ++state.gitRefreshNonce;
     const git = await loadGitSummary(pi, cwd);
     if (nonce !== state.gitRefreshNonce) return;
 
+    const changed = !gitSummaryEquals(state.git, git);
     state.git = git;
-    if (!renderAfter || lastCwd !== cwd || !lastContext) return;
-    refreshUI(lastContext);
+    if (!changed || lastCwd !== cwd) return;
+    requestActiveRender(lastContext);
   }
 
   function scheduleUIRefresh(ctx: ExtensionContext): void {
@@ -323,7 +391,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     setCurrentContext(ctx);
     const cwd = lastCwd;
     if (!cwd) return;
-    void refreshGit(cwd, true).catch(() => {});
+    void refreshGit(cwd).catch(() => {});
   }
 
   function startGitPolling(ctx: ExtensionContext): void {
@@ -331,7 +399,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
 
     gitRefreshTimer = setInterval(() => {
       if (!lastCwd) return;
-      void refreshGit(lastCwd, false).catch(() => {});
+      void refreshGit(lastCwd).catch(() => {});
     }, GIT_REFRESH_INTERVAL_MS);
     gitRefreshTimer.unref?.();
 
@@ -342,6 +410,12 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (!gitRefreshTimer) return;
     clearInterval(gitRefreshTimer);
     gitRefreshTimer = undefined;
+  }
+
+  function stopEventHandlers(): void {
+    for (const unsubscribe of unsubscribeEventHandlers.splice(0)) {
+      unsubscribe();
+    }
   }
 
   function applyFlagEvent(
@@ -356,7 +430,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (typeof event.enabled !== "boolean") return;
 
     getWorkspaceState(targetCwd).flags[key] = event.enabled;
-    if (ctx && cwd === targetCwd) refreshUI(ctx);
+    if (ctx && cwd === targetCwd) requestActiveRender(ctx);
   }
 
   function applyCavemanEvent(
@@ -375,7 +449,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     if (typeof event.hasSessionOverride === "boolean") {
       flags.cavemanHasSessionOverride = event.hasSessionOverride;
     }
-    if (ctx && cwd === targetCwd) refreshUI(ctx);
+    if (ctx && cwd === targetCwd) requestActiveRender(ctx);
   }
 
   async function hydrateContext(ctx: ExtensionContext): Promise<void> {
@@ -385,20 +459,17 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     setCurrentContext(ctx);
   }
 
-  pi.events.on(CRUMBS_EVENT_FAST_CHANGED, (event) => {
-    applyFlagEvent(lastContext, lastCwd, asStatusFlagEvent(event), "fastEnabled");
-  });
+  unsubscribeEventHandlers.push(
+    pi.events.on(CRUMBS_EVENT_FAST_CHANGED, (event) => {
+      applyFlagEvent(lastContext, lastCwd, asStatusFlagEvent(event), "fastEnabled");
+    }),
+  );
 
-  pi.events.on(CRUMBS_EVENT_CAVEMAN_CHANGED, (event) => {
-    applyCavemanEvent(lastContext, lastCwd, asCavemanFlagEvent(event));
-  });
-
-  pi.events.on(CRUMBS_EVENT_THINKING_CHANGED, (event) => {
-    const cwdEvent = asCwdEvent(event);
-    if (!lastContext || !lastCwd) return;
-    if (cwdEvent.cwd && cwdEvent.cwd !== lastCwd) return;
-    refreshUI(lastContext);
-  });
+  unsubscribeEventHandlers.push(
+    pi.events.on(CRUMBS_EVENT_CAVEMAN_CHANGED, (event) => {
+      applyCavemanEvent(lastContext, lastCwd, asCavemanFlagEvent(event));
+    }),
+  );
 
   pi.registerCommand("status-table", {
     description: "Toggle status table or configure visible blocks",
@@ -420,7 +491,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
         if (next.enabled) {
           scheduleUIRefresh(ctx);
         } else {
-          clearStatusTable(ctx);
+          clearMountedStatusTable(ctx);
         }
         if (ctx.hasUI) {
           ctx.ui.notify(next.enabled ? "Status table enabled." : "Status table disabled.", "info");
@@ -452,14 +523,7 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
     scheduleUIRefresh(ctx);
   });
 
-  (pi as any).on("session_switch", async (_event: unknown, ctx: ExtensionContext) => {
-    if (!ctx.hasUI) return;
-    await hydrateContext(ctx);
-    scheduleUIRefresh(ctx);
-    scheduleGitRefresh(ctx);
-  });
-
-  (pi as any).on("session_tree", async (_event: unknown, ctx: ExtensionContext) => {
+  pi.on("session_tree", async (_event, ctx) => {
     if (!ctx.hasUI) return;
     await hydrateContext(ctx);
     scheduleUIRefresh(ctx);
@@ -468,6 +532,10 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
 
   pi.on("model_select", async (_event, ctx) => {
     await hydrateContext(ctx);
+    scheduleUIRefresh(ctx);
+  });
+
+  pi.on("thinking_level_select", async (_event, ctx) => {
     scheduleUIRefresh(ctx);
   });
 
@@ -488,8 +556,9 @@ export default function statusTableExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    stopEventHandlers();
     stopGitPolling();
     clearCurrentContext();
-    clearStatusTable(ctx);
+    clearMountedStatusTable(ctx);
   });
 }

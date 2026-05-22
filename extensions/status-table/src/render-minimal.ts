@@ -38,7 +38,8 @@ function abbreviateThinking(value: string): string {
 }
 
 function buildModelSuffix(snapshot: StatusSnapshot): string {
-  const parts = [abbreviateThinking(snapshot.thinking)];
+  const parts: string[] = [];
+  if (snapshot.thinking) parts.push(abbreviateThinking(snapshot.thinking));
   if (snapshot.fast === "on") parts.push("⚡");
   return parts.join(", ");
 }
