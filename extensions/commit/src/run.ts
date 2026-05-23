@@ -51,7 +51,7 @@ function getFinalAssistant(session: AgentSession): AssistantMessage | undefined 
 
 function requireCommitModel(session: AgentSession) {
   const model = session.modelRegistry.find(MODEL_PROVIDER, MODEL_ID);
-  if (!model) throw new Error(`Unable to find /commit model ${MODEL_PROVIDER}/${MODEL_ID}.`);
+  if (!model) throw new Error(`Unable to find commit model ${MODEL_PROVIDER}/${MODEL_ID}.`);
   return model;
 }
 
@@ -60,7 +60,7 @@ function requireActiveTools(session: AgentSession): void {
   const missing = ACTIVE_TOOLS.filter((tool) => !available.has(tool));
   if (missing.length > 0) {
     throw new Error(
-      `Unable to run /commit because required tool(s) are unavailable: ${missing.join(", ")}.`,
+      `Unable to run commit because required tool(s) are unavailable: ${missing.join(", ")}.`,
     );
   }
   session.setActiveToolsByName(ACTIVE_TOOLS);
@@ -140,20 +140,20 @@ export async function runCommitAgent(
     session.setThinkingLevel(THINKING_LEVEL);
     requireActiveTools(session);
 
-    onUpdate?.({ message: "/commit planning commits…" });
+    onUpdate?.({ message: "Planning commits…" });
 
     unsubscribe = session.subscribe((event) => {
       if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
         if (!planned) {
           planned = true;
-          onUpdate?.({ message: "/commit planning commits…" });
+          onUpdate?.({ message: "Planning commits…" });
         }
         return;
       }
 
       if (event.type === "tool_execution_start") {
         activeToolDescription = formatToolDescription(event.toolName, event.args);
-        onUpdate?.({ message: `/commit ${activeToolDescription}` });
+        onUpdate?.({ message: activeToolDescription });
         return;
       }
 
@@ -161,7 +161,7 @@ export async function runCommitAgent(
         if (!event.isError) return;
 
         const failedTool = activeToolDescription ?? event.toolName;
-        onUpdate?.({ message: `/commit failed ${failedTool}`, level: "error" });
+        onUpdate?.({ message: `Failed: ${failedTool}`, level: "error" });
       }
     });
 
