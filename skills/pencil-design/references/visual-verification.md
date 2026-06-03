@@ -19,7 +19,7 @@ Final          -> Screenshot full page -> Final review
 ### 1. Screenshot
 
 ```javascript
-pencil_get_screenshot({ filePath: "...", nodeId: "sectionNodeId" })
+pencil_get_screenshot({ filePath: "...", nodeId: "sectionNodeId" });
 ```
 
 ### 2. Analyze
@@ -33,7 +33,12 @@ pencil_get_screenshot({ filePath: "...", nodeId: "sectionNodeId" })
 ### 3. Layout Check (parallel with screenshot)
 
 ```javascript
-pencil_snapshot_layout({ filePath: "...", parentId: "sectionNodeId", maxDepth: 3, problemsOnly: true })
+pencil_snapshot_layout({
+  filePath: "...",
+  parentId: "sectionNodeId",
+  maxDepth: 3,
+  problemsOnly: true,
+});
 ```
 
 Catches: clipped elements, overlapping siblings, out-of-bounds positioning.

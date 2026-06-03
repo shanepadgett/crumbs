@@ -11,7 +11,7 @@ Hardcoding `fill: "#3b82f6"` or `cornerRadius: 8` instead of variables -> broken
 At start of every design task:
 
 ```javascript
-pencil_get_variables({ filePath: "path/to/file.pen" })
+pencil_get_variables({ filePath: "path/to/file.pen" });
 ```
 
 ### 2. Map Values to Variables
@@ -34,8 +34,8 @@ Bind properties to variables per schema from `pencil_get_editor_state`.
 ```javascript
 pencil_set_variables({
   filePath: "path/to/file.pen",
-  variables: { "accent": { "value": "#f59e0b" }, "accent-foreground": { "value": "#ffffff" } }
-})
+  variables: { accent: { value: "#f59e0b" }, "accent-foreground": { value: "#ffffff" } },
+});
 ```
 
 ## Theme Support

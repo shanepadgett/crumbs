@@ -132,6 +132,7 @@ Then output findings in priority order:
 ## Verdict: BLOCK
 
 ### Blockers
+
 1. **Finding title** — `path/to/file.ts:123`
    - Evidence: ...
    - Impact: ...
@@ -139,9 +140,11 @@ Then output findings in priority order:
    - Fallback: ...
 
 ### Major
+
 ...
 
 ### Follow-up
+
 ...
 ```
 

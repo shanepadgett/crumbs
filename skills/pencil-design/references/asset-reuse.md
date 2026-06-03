@@ -14,8 +14,8 @@ Before generating any image:
 pencil_batch_get({
   filePath: "path/to/file.pen",
   patterns: [{ name: "logo" }, { name: "brand" }, { name: "icon" }, { name: "image" }],
-  searchDepth: 5
-})
+  searchDepth: 5,
+});
 ```
 
 ### 2. Copy Existing Asset

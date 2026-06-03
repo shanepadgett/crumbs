@@ -15,8 +15,8 @@ pencil_batch_get({
   filePath: "path/to/file.pen",
   patterns: [{ reusable: true }],
   readDepth: 2,
-  searchDepth: 3
-})
+  searchDepth: 3,
+});
 ```
 
 ### 2. Identify Match

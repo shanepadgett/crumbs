@@ -38,7 +38,7 @@ card = I(container, { type: "ref", ref: "CardComponent", width: "fill_container"
 After inserting content:
 
 ```javascript
-pencil_snapshot_layout({ filePath: "...", parentId: "screenId", maxDepth: 3, problemsOnly: true })
+pencil_snapshot_layout({ filePath: "...", parentId: "screenId", maxDepth: 3, problemsOnly: true });
 ```
 
 ### Fixes
