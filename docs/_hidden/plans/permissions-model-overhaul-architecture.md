@@ -166,9 +166,9 @@ The developer opens a new checkout and asks the agent to edit `src/index.ts`.
 Crumbs response:
 
 1. detects repo is untrusted
-2. ignores repo-shared relaxations from `.pi/crumbs.json`
-3. blocks the write under the untrusted `read-only` preset
-4. shows a prompt with two separate choices:
+1. ignores repo-shared relaxations from `.pi/crumbs.json`
+1. blocks the write under the untrusted `read-only` preset
+1. shows a prompt with two separate choices:
    - trust this repo
    - allow this write once without trusting
 
@@ -515,16 +515,16 @@ interface EffectivePermissionState {
 Every tool call goes through one pipeline.
 
 1. normalize the tool input into `PermissionOperation`
-2. resolve repo scope and trust state
-3. canonicalize lexical and real paths
-4. build the baseline capability profile from the active preset
-5. merge user, project, session, and once grants
-6. apply protected path and destructive command checks
-7. compute the exact missing capability delta
-8. if there is no missing delta, allow
-9. if there is a missing delta and prompts are available, show a category-specific prompt
-10. if approved, store the grant in the selected scope and rerun
-11. compile the exact sandbox spec and execute
+1. resolve repo scope and trust state
+1. canonicalize lexical and real paths
+1. build the baseline capability profile from the active preset
+1. merge user, project, session, and once grants
+1. apply protected path and destructive command checks
+1. compute the exact missing capability delta
+1. if there is no missing delta, allow
+1. if there is a missing delta and prompts are available, show a category-specific prompt
+1. if approved, store the grant in the selected scope and rerun
+1. compile the exact sandbox spec and execute
 
 The key point is that prompts happen for missing capability deltas, not because a tool happened to be `bash`.
 
@@ -820,14 +820,14 @@ After the rewrite, developers get:
 ## Build sequence
 
 1. replace the current mode config loader with preset plus capability config
-2. add repo trust store and project-local grant store
-3. build the shared operation normalizer and decision engine
-4. move `read`, `write`, `edit`, and `apply_patch` onto the new engine
-5. move web tools onto shared network authorization
-6. add shell classification and capability-delta prompts
-7. add the grant manager UI and revoke flows
-8. add tool descriptors for MCP and extension tools
-9. remove the old flat direct-mutation and network-mode logic
+1. add repo trust store and project-local grant store
+1. build the shared operation normalizer and decision engine
+1. move `read`, `write`, `edit`, and `apply_patch` onto the new engine
+1. move web tools onto shared network authorization
+1. add shell classification and capability-delta prompts
+1. add the grant manager UI and revoke flows
+1. add tool descriptors for MCP and extension tools
+1. remove the old flat direct-mutation and network-mode logic
 
 ## Final call
 

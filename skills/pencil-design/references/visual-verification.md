@@ -8,7 +8,7 @@ Layout/spacing issues are invisible in node tree. Only screenshots reveal: misal
 
 ### Section-by-Section (NOT whole screen at end)
 
-```
+```text
 Build header   -> Screenshot -> Fix
 Build hero     -> Screenshot -> Fix
 Build features -> Screenshot -> Fix
@@ -18,7 +18,7 @@ Final          -> Screenshot full page -> Final review
 
 ### 1. Screenshot
 
-```
+```javascript
 pencil_get_screenshot({ filePath: "...", nodeId: "sectionNodeId" })
 ```
 
@@ -32,7 +32,7 @@ pencil_get_screenshot({ filePath: "...", nodeId: "sectionNodeId" })
 
 ### 3. Layout Check (parallel with screenshot)
 
-```
+```javascript
 pencil_snapshot_layout({ filePath: "...", parentId: "sectionNodeId", maxDepth: 3, problemsOnly: true })
 ```
 

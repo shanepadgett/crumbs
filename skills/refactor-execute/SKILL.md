@@ -1,6 +1,6 @@
 ---
 name: refactor-execute
-description: "Execute verified refactor work units from refactor-opportunities. Builds dependency graph, dispatches parallel subagents per work unit, validates results."
+description: Execute verified refactor work units from refactor-opportunities. Builds dependency graph, dispatches parallel subagents per work unit, validates results.
 ---
 
 # Refactor Execute

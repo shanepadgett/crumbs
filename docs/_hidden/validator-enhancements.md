@@ -87,10 +87,10 @@ Not for current implementation. Parking lot for future `quiet-validators` additi
 ## Recommended order
 
 1. `quiet-tests`
-2. `quiet-xcassets`
-3. `quiet-plist-check`
-4. `quiet-localization-check`
-5. `quiet-package-resolve-check`
+1. `quiet-xcassets`
+1. `quiet-plist-check`
+1. `quiet-localization-check`
+1. `quiet-package-resolve-check`
 
 ## Shared backbone expectations
 

@@ -103,14 +103,14 @@ The core engine is ordered and layered. The important implementation fact is not
 The observed order is:
 
 1. Pre-tool hooks run before permission resolution and may modify input or propose allow/deny/ask.
-2. Rule-based resolution evaluates deny rules before ask rules.
-3. Tool-specific permission logic runs.
-4. Safety checks run.
-5. Mode-based bypass can apply.
-6. Explicit always-allow logic can apply.
-7. Passthrough decisions can be converted back to `ask`.
-8. Internal auto mode can call the classifier, but only if the decision is still `ask`.
-9. In `dontAsk`, any remaining `ask` becomes `deny`.
+1. Rule-based resolution evaluates deny rules before ask rules.
+1. Tool-specific permission logic runs.
+1. Safety checks run.
+1. Mode-based bypass can apply.
+1. Explicit always-allow logic can apply.
+1. Passthrough decisions can be converted back to `ask`.
+1. Internal auto mode can call the classifier, but only if the decision is still `ask`.
+1. In `dontAsk`, any remaining `ask` becomes `deny`.
 
 Evidence: [toolExecution.ts](/Users/spadgett/dev/personal/crumbs-github/external/claude-code/src/services/tools/toolExecution.ts#L800), [toolHooks.ts](/Users/spadgett/dev/personal/crumbs-github/external/claude-code/src/services/tools/toolHooks.ts#L321), [permissions.ts](/Users/spadgett/dev/personal/crumbs-github/external/claude-code/src/utils/permissions/permissions.ts#L518), [permissions.ts](/Users/spadgett/dev/personal/crumbs-github/external/claude-code/src/utils/permissions/permissions.ts#L929), [permissions.ts](/Users/spadgett/dev/personal/crumbs-github/external/claude-code/src/utils/permissions/permissions.ts#L1238)
 
@@ -442,14 +442,14 @@ The visible code relies on several invariants that should not be simplified away
 A practical build order would be:
 
 1. Implement the core type system: modes, rule sources, update destinations, permission-decision envelope.
-2. Implement source loading, precedence, persistence, and mode transitions.
-3. Implement filesystem policy and path normalization first, because both shell analyzers and sandbox projection depend on it.
-4. Implement Bash analysis and its conservative path and read-only validators.
-5. Implement PowerShell analysis separately.
-6. Implement the sandbox policy compiler and execution wrapper.
-7. Add remote and swarm approval transport.
-8. Add MCP surfaces: channel approvals, server approvals, and computer-use grants.
-9. Add classifier or auto-review only after the deterministic rule engine is already correct.
+1. Implement source loading, precedence, persistence, and mode transitions.
+1. Implement filesystem policy and path normalization first, because both shell analyzers and sandbox projection depend on it.
+1. Implement Bash analysis and its conservative path and read-only validators.
+1. Implement PowerShell analysis separately.
+1. Implement the sandbox policy compiler and execution wrapper.
+1. Add remote and swarm approval transport.
+1. Add MCP surfaces: channel approvals, server approvals, and computer-use grants.
+1. Add classifier or auto-review only after the deterministic rule engine is already correct.
 
 ## Planning Inputs For A Future Implementation Chat
 

@@ -10,14 +10,14 @@ Create one self-contained HTML file for rich visual communication. Default outpu
 ## Workflow
 
 1. If artifact claims repo behavior, inspect relevant source/data first. Do not invent facts.
-2. Pick concise kebab-case slug from user intent.
-3. If target file exists, ask before overwrite unless user explicitly asks to update it.
-4. Copy `assets/template.html` to target path, then edit copied file.
-5. Keep artifact single-file unless user explicitly asks otherwise.
-6. Read the single most relevant reference below before editing. Read another only when artifact explicitly combines modes. Do not browse references for inspiration; unused references waste context and attention.
-7. Use existing semantic classes first. Add artifact-specific CSS only below template marker.
-8. Preserve design tokens. Do not change token values unless explicitly asked.
-9. Final response: path plus one-line summary. Do not paste full HTML in chat.
+1. Pick concise kebab-case slug from user intent.
+1. If target file exists, ask before overwrite unless user explicitly asks to update it.
+1. Copy `assets/template.html` to target path, then edit copied file.
+1. Keep artifact single-file unless user explicitly asks otherwise.
+1. Read the single most relevant reference below before editing. Read another only when artifact explicitly combines modes. Do not browse references for inspiration; unused references waste context and attention.
+1. Use existing semantic classes first. Add artifact-specific CSS only below template marker.
+1. Preserve design tokens. Do not change token values unless explicitly asked.
+1. Final response: path plus one-line summary. Do not paste full HTML in chat.
 
 ## Reference routing
 

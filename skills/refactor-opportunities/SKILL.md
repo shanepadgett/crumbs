@@ -1,6 +1,6 @@
 ---
 name: refactor-opportunities
-description: "Refactor and code review across hygiene, over-engineering, runtime lenses. Supports target review and uncommitted-changes review. Reconciles conflicts, checks churn, emits ordered work units, uses language overlays."
+description: Refactor and code review across hygiene, over-engineering, runtime lenses. Supports target review and uncommitted-changes review. Reconciles conflicts, checks churn, emits ordered work units, uses language overlays.
 ---
 
 # Refactor Opportunities
@@ -20,11 +20,11 @@ No full discovery first.
 Order:
 
 1. Root topology scan
-2. Scope-mode confirmation
-3. Scope confirmation
-4. Effort confirmation
-5. Scoped language discovery
-6. Setup + dispatch
+1. Scope-mode confirmation
+1. Scope confirmation
+1. Effort confirmation
+1. Scoped language discovery
+1. Setup + dispatch
 
 ## Scope modes
 

@@ -5,8 +5,8 @@ After all findings are compiled and normalized.
 ## Priority
 
 1. runtime risk
-2. over-engineering simplification
-3. hygiene clarity/searchability
+1. over-engineering simplification
+1. hygiene clarity/searchability
 
 ## Rules
 

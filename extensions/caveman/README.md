@@ -46,9 +46,9 @@ What it does:
 When caveman is enabled, powers resolve like this:
 
 1. session powers, if session override exists
-2. project powers from `<projectRoot>/.pi/crumbs.json`
-3. global powers from `~/.pi/agent/crumbs.json`
-4. no powers
+1. project powers from `<projectRoot>/.pi/crumbs.json`
+1. global powers from `~/.pi/agent/crumbs.json`
+1. no powers
 
 Important:
 

@@ -45,7 +45,7 @@ This is one committable and testable unit because it covers everything that happ
 ## User test at exit
 
 1. Run `/interview` in a clean chat and confirm the chooser offers the expected actions.
-2. Run `/interview` in a dirty chat and confirm the user must choose a clean-chat path or cancel.
-3. Explore an objective, then cancel, and confirm no session files were created.
-4. Confirm a session is created only after objective confirmation and that the new clean chat is attached to the interview.
-5. Confirm the attached chat writes `interview.chat_attachment` with a non-null `interviewSessionId`, and detaching/ending clears it to `null`.
+1. Run `/interview` in a dirty chat and confirm the user must choose a clean-chat path or cancel.
+1. Explore an objective, then cancel, and confirm no session files were created.
+1. Confirm a session is created only after objective confirmation and that the new clean chat is attached to the interview.
+1. Confirm the attached chat writes `interview.chat_attachment` with a non-null `interviewSessionId`, and detaching/ending clears it to `null`.

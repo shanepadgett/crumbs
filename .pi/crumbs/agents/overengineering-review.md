@@ -24,10 +24,10 @@ Scope rules:
 Priorities:
 
 1. one-use abstractions
-2. speculative extensibility
-3. flow fragmentation across too many files or layers
-4. infrastructure inflation beyond task need
-5. boilerplate that expands routine change surface
+1. speculative extensibility
+1. flow fragmentation across too many files or layers
+1. infrastructure inflation beyond task need
+1. boilerplate that expands routine change surface
 
 Flag examples:
 

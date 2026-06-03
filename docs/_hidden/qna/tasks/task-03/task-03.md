@@ -113,7 +113,7 @@ This is one committable and testable unit because it completes the runtime seman
 ## User test at exit
 
 1. Open a form with nested follow-ups, shared follow-up nodes, and dependency-gated questions.
-2. Activate the same follow-up through more than one current parent and confirm it appears once with combined provenance.
-3. Activate and deactivate branches by changing answers, then confirm hidden drafts return when the branch reactivates.
-4. Submit a partial response and confirm untouched visible questions stay `open` while inactive branches do not block submission.
-5. Cancel after edits and confirm the returned `draftSnapshot` can restore hidden inactive branch drafts on reopen.
+1. Activate the same follow-up through more than one current parent and confirm it appears once with combined provenance.
+1. Activate and deactivate branches by changing answers, then confirm hidden drafts return when the branch reactivates.
+1. Submit a partial response and confirm untouched visible questions stay `open` while inactive branches do not block submission.
+1. Cancel after edits and confirm the returned `draftSnapshot` can restore hidden inactive branch drafts on reopen.

@@ -63,11 +63,11 @@ interface RepoContext {
 
 1. Run `git rev-parse --show-toplevel` from the current cwd.
    - This gives the current checkout root.
-2. Run `git rev-parse --git-common-dir` from the current cwd.
+1. Run `git rev-parse --git-common-dir` from the current cwd.
    - Resolve the result to an absolute real path.
-3. Compute `lobbyPath` as the parent directory of `commonGitDir`.
+1. Compute `lobbyPath` as the parent directory of `commonGitDir`.
    - For a normal non-bare repo, that is the base checkout path.
-4. Compare `realpath(currentPath)` with `realpath(lobbyPath)`.
+1. Compare `realpath(currentPath)` with `realpath(lobbyPath)`.
    - equal = lobby session
    - different = workspace session
 
@@ -120,12 +120,12 @@ Example:
 ### Path derivation
 
 1. Take the lobby repo basename, for example `crumbs`
-2. Take the branch name, for example `feature/a`
-3. Slug it for filesystem use
+1. Take the branch name, for example `feature/a`
+1. Slug it for filesystem use
    - replace `/` with `-`
    - collapse repeated separators
    - remove characters that are awkward in paths
-4. Join as `<repo-name>-<branch-slug>` beside the lobby path
+1. Join as `<repo-name>-<branch-slug>` beside the lobby path
 
 ```ts
 targetPath = join(dirname(lobbyPath), `${basename(lobbyPath)}-${slug(branchName)}`);
@@ -142,9 +142,9 @@ Pi session files are how workspace switching works.
 When the user opens a workspace:
 
 1. call `SessionManager.list(workspacePath)`
-2. sort by modified time if needed
-3. take the most recent session file for that cwd
-4. if one exists, call `ctx.switchSession(session.path)`
+1. sort by modified time if needed
+1. take the most recent session file for that cwd
+1. if one exists, call `ctx.switchSession(session.path)`
 
 This gives the desired behavior without inventing a second session index.
 
@@ -154,9 +154,9 @@ If no existing session exists for the workspace path:
 
 1. create a new persisted session manager for that path
    - `const sm = SessionManager.create(workspacePath)`
-2. optionally set a friendly session name
+1. optionally set a friendly session name
    - `sm.appendSessionInfo(label)`
-3. switch Pi into it
+1. switch Pi into it
    - `await ctx.switchSession(sm.getSessionFile()!)`
 
 Using `SessionManager.create()` keeps session storage aligned with Pi's existing per-cwd layout.
@@ -171,7 +171,7 @@ Use two resolution levels:
    - keep `Map<string, string>` keyed by `lobbyPath`
    - whenever the current session is the lobby and has a session file, remember it
    - while the current Pi process lives, this lets workspace sessions return to the exact lobby session the user last had open
-2. **Fallback lobby session lookup**
+1. **Fallback lobby session lookup**
    - if no remembered lobby session exists, call `SessionManager.list(lobbyPath)`
    - switch to the most recent lobby session if found
    - otherwise create a new lobby session with `SessionManager.create(lobbyPath)` and switch to it
@@ -322,47 +322,47 @@ Recommended extension layout:
 ### Open workspaces UI
 
 1. Resolve `RepoContext`
-2. Load workspace list from Git
-3. Build derived UI rows
-4. Open selector overlay
-5. Refresh the list after any mutating action
+1. Load workspace list from Git
+1. Build derived UI rows
+1. Open selector overlay
+1. Refresh the list after any mutating action
 
 If the current cwd is not in a Git worktree, the command should fail immediately with a clear notification.
 
 ### Create workspace
 
 1. Prompt for branch name
-2. Validate with `git check-ref-format --branch <name>`
-3. Derive sibling target path
-4. Run `git -C <lobbyPath> worktree add -b <branch> <targetPath> HEAD`
-5. Create or resume the Pi session for `targetPath`
-6. Switch into that session
+1. Validate with `git check-ref-format --branch <name>`
+1. Derive sibling target path
+1. Run `git -C <lobbyPath> worktree add -b <branch> <targetPath> HEAD`
+1. Create or resume the Pi session for `targetPath`
+1. Switch into that session
 
 If Git reports that the branch already exists, is already checked out elsewhere, or the path conflicts, Pi should surface that error plainly instead of inventing custom rules.
 
 ### Open workspace
 
 1. Resolve selected workspace path
-2. Look for the most recent Pi session whose cwd matches that path
-3. If found, switch to it
-4. Otherwise create a new session for that path and switch to it
+1. Look for the most recent Pi session whose cwd matches that path
+1. If found, switch to it
+1. Otherwise create a new session for that path and switch to it
 
 ### Return to lobby
 
 1. Resolve lobby path from the current repo context
-2. Prefer the remembered lobby session for that repo if it still exists
-3. Otherwise switch to the most recent lobby session for that path
-4. If no lobby session exists yet, create one and switch to it
+1. Prefer the remembered lobby session for that repo if it still exists
+1. Otherwise switch to the most recent lobby session for that path
+1. If no lobby session exists yet, create one and switch to it
 
 ### Remove workspace
 
 1. Reject removal if the selected item is the lobby
-2. Reject removal if the selected item is the current active workspace
-3. Check dirty state
-4. If dirty, block removal with a clear message
-5. Confirm removal
-6. Run `git -C <lobbyPath> worktree remove <workspacePath>`
-7. Refresh the list
+1. Reject removal if the selected item is the current active workspace
+1. Check dirty state
+1. If dirty, block removal with a clear message
+1. Confirm removal
+1. Run `git -C <lobbyPath> worktree remove <workspacePath>`
+1. Refresh the list
 
 This keeps Pi from deleting the directory it is currently operating in and avoids surprising loss of uncommitted work.
 

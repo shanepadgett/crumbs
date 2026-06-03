@@ -77,7 +77,7 @@ Everything here is specific to ordinary QnA state discovery and reconciliation w
 ## User test at exit
 
 1. Run `/qna` on a branch with unresolved questions and confirm items land in a hidden branch-local ledger.
-2. Run `/qna` again after new chat and confirm only content after the durable boundary is scanned.
-3. Answer a question naturally in chat, rerun `/qna`, and confirm the prior open ledger item silently closes.
-4. Fork the chat and confirm the new branch inherits the ordinary QnA ledger, scan boundary, and unsent edits.
-5. Run `/qna` again with no new assistant or user transcript and confirm it only advances the boundary and shows a notification.
+1. Run `/qna` again after new chat and confirm only content after the durable boundary is scanned.
+1. Answer a question naturally in chat, rerun `/qna`, and confirm the prior open ledger item silently closes.
+1. Fork the chat and confirm the new branch inherits the ordinary QnA ledger, scan boundary, and unsent edits.
+1. Run `/qna` again with no new assistant or user transcript and confirm it only advances the boundary and shows a notification.

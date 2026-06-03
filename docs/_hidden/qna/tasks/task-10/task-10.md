@@ -40,6 +40,6 @@ This is one committable and testable unit because it completes the multi-chat be
 ## User test at exit
 
 1. Pause or interrupt an interview session, then resume it from a different clean chat.
-2. Confirm the new chat is seeded from objective plus canonical summary and jumps straight to the next question form.
-3. Advance the same session from one chat, then try to continue from the older chat and confirm a refresh is required.
-4. Confirm paused or interrupted sessions are visible in the chooser and status line with stale indicators.
+1. Confirm the new chat is seeded from objective plus canonical summary and jumps straight to the next question form.
+1. Advance the same session from one chat, then try to continue from the older chat and confirm a refresh is required.
+1. Confirm paused or interrupted sessions are visible in the chooser and status line with stale indicators.

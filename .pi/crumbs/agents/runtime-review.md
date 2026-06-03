@@ -24,10 +24,10 @@ Scope rules:
 Priorities:
 
 1. runtime correctness
-2. concurrency and async ordering risk
-3. resilience and recovery gaps
-4. common-path performance waste when materially user-visible
-5. resource or lifecycle leaks tied to changed work
+1. concurrency and async ordering risk
+1. resilience and recovery gaps
+1. common-path performance waste when materially user-visible
+1. resource or lifecycle leaks tied to changed work
 
 Flag examples:
 

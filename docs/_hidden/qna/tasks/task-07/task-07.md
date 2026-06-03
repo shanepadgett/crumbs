@@ -68,6 +68,6 @@ Everything here is persistence and serialization. It is one committable and test
 ## User test at exit
 
 1. Create a test interview session and confirm the expected directory and file set appears under `.pi/interviews/<interviewSessionId>/`.
-2. Confirm `.pi/local/interviews/<interviewSessionId>.json` stores only local runtime state and interview-owned persisted drafts.
-3. Edit canonical question state, regenerate derived files, and confirm `meta.json` revision and stale markers update correctly.
-4. Scan `.pi/interviews/*/meta.json` and confirm sessions can be discovered without a committed index file.
+1. Confirm `.pi/local/interviews/<interviewSessionId>.json` stores only local runtime state and interview-owned persisted drafts.
+1. Edit canonical question state, regenerate derived files, and confirm `meta.json` revision and stale markers update correctly.
+1. Scan `.pi/interviews/*/meta.json` and confirm sessions can be discovered without a committed index file.

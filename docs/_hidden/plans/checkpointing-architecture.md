@@ -441,12 +441,12 @@ That is the right mental model for undo:
 ### Sequence
 
 1. wait for idle
-2. resolve the target checkpoint
-3. capture current workspace as redo snapshot
-4. restore workspace to `beforeRef`
-5. navigate the session tree to `parentLeafId`
-6. preload the original user message text into the editor
-7. append a restore state entry
+1. resolve the target checkpoint
+1. capture current workspace as redo snapshot
+1. restore workspace to `beforeRef`
+1. navigate the session tree to `parentLeafId`
+1. preload the original user message text into the editor
+1. append a restore state entry
 
 If tree navigation fails after the workspace restore, restore the redo snapshot immediately and abort the operation.
 
@@ -455,10 +455,10 @@ If tree navigation fails after the workspace restore, restore the redo snapshot 
 `/checkpoint-redo` should:
 
 1. wait for idle
-2. resolve the latest active restore state
-3. restore the workspace from `redoRef`
-4. navigate back to `previousLeafId`
-5. append a restore clear entry
+1. resolve the latest active restore state
+1. restore the workspace from `redoRef`
+1. navigate back to `previousLeafId`
+1. append a restore clear entry
 
 Redo is single-depth. A new restore replaces the previous redo state.
 
@@ -633,19 +633,19 @@ Suggested coverage:
 ## Build order
 
 1. `git/identity.ts`
-2. `git/repo.ts`
-3. `git/capture.ts`
-4. `git/diff.ts`
-5. `session-index.ts`
-6. `runtime.ts`
-7. `shared/workspace-mutation.ts`
-8. `hooks/agent.ts`
-9. `git/restore.ts`
-10. `commands.ts`
-11. `ui/picker.ts`
-12. `hooks/tree.ts`
-13. `hooks/fork.ts`
-14. `maintenance.ts`
+1. `git/repo.ts`
+1. `git/capture.ts`
+1. `git/diff.ts`
+1. `session-index.ts`
+1. `runtime.ts`
+1. `shared/workspace-mutation.ts`
+1. `hooks/agent.ts`
+1. `git/restore.ts`
+1. `commands.ts`
+1. `ui/picker.ts`
+1. `hooks/tree.ts`
+1. `hooks/fork.ts`
+1. `maintenance.ts`
 
 ## Implementation decisions
 

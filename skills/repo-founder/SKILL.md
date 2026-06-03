@@ -1,6 +1,6 @@
 ---
 name: repo-founder
-description: "Interview user, then set up agent-friendly repository guidance and tooling: sane .gitignore, repo-specific AGENTS.md, and optional mise.toml with runtime and check tasks. Use when user wants to start a new repo, prepare repo automation, create AGENTS.md guidance, or set up repo tooling from requirements."
+description: 'Interview user, then set up agent-friendly repository guidance and tooling: sane .gitignore, repo-specific AGENTS.md, and optional mise.toml with runtime and check tasks. Use when user wants to start a new repo, prepare repo automation, create AGENTS.md guidance, or set up repo tooling from requirements.'
 ---
 
 # Repo Founder
@@ -62,13 +62,13 @@ If key inputs missing, interview user with `references/interview.md`.
 ## Workflow
 
 1. Read user brief
-2. Run interview from `references/interview.md` until stack, runtimes, repo tooling, and agent guidance needs are clear
-3. Pick only matching language refs
-4. Inspect existing `.gitignore`, `AGENTS.md`, `mise.toml`, package/runtime files if present
-5. Build repo setup plan using `references/principles.md`
-6. Present plan before writing unless user already asked for direct creation
-7. Create or patch files from `references/outputs.md`
-8. Summarize decisions, assumptions, and next setup steps
+1. Run interview from `references/interview.md` until stack, runtimes, repo tooling, and agent guidance needs are clear
+1. Pick only matching language refs
+1. Inspect existing `.gitignore`, `AGENTS.md`, `mise.toml`, package/runtime files if present
+1. Build repo setup plan using `references/principles.md`
+1. Present plan before writing unless user already asked for direct creation
+1. Create or patch files from `references/outputs.md`
+1. Summarize decisions, assumptions, and next setup steps
 
 ## Deliverables
 

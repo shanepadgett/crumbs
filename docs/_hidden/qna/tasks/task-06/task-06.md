@@ -62,7 +62,7 @@ This is one committable and testable unit because it is the complete maintenance
 ## User test at exit
 
 1. Open `/qna-ledger` and filter the current branch's questions by state, including transcript-closed items.
-2. Edit an answered or closed item and confirm the ledger updates immediately.
-3. Trigger `Send updates` and confirm only changed items are batched into one payload.
-4. Export the ledger and confirm a timestamped Markdown file is written under `docs/qna/`.
-5. Trigger `Send updates` with at least one `needs_clarification` item and confirm the agent gets the batch plus an active `qna` loop for follow-up, while structured `qna` review remains limited to currently `open` items.
+1. Edit an answered or closed item and confirm the ledger updates immediately.
+1. Trigger `Send updates` and confirm only changed items are batched into one payload.
+1. Export the ledger and confirm a timestamped Markdown file is written under `docs/qna/`.
+1. Trigger `Send updates` with at least one `needs_clarification` item and confirm the agent gets the batch plus an active `qna` loop for follow-up, while structured `qna` review remains limited to currently `open` items.

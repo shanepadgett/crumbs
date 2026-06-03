@@ -50,5 +50,5 @@ Set up only when useful:
 When choices fight:
 
 1. runtime risk
-2. over-engineering reduction
-3. hygiene clarity
+1. over-engineering reduction
+1. hygiene clarity

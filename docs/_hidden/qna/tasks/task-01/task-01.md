@@ -107,6 +107,6 @@ Everything here is pre-product infrastructure. It is one committable and testabl
 ## User test at exit
 
 1. Trigger the authorized question tool and receive a request ID plus tool-usable project-local path.
-2. Write invalid JSON and confirm the agent receives hidden repair feedback with the request ID, path, field errors, and fix hints.
-3. Exhaust four failed validations and confirm the user sees a Continue or Abort choice, then confirm later edits are ignored until the user decides.
-4. Repair the file, confirm the form opens, then edit the same file again and confirm it stays locked.
+1. Write invalid JSON and confirm the agent receives hidden repair feedback with the request ID, path, field errors, and fix hints.
+1. Exhaust four failed validations and confirm the user sees a Continue or Abort choice, then confirm later edits are ignored until the user decides.
+1. Repair the file, confirm the form opens, then edit the same file again and confirm it stays locked.

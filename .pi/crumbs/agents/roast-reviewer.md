@@ -1,7 +1,7 @@
 ---
-name: "roast-reviewer"
-description: "Brutally reviews implementations for useless abstraction, committee-built complexity, and overengineered design."
-thinkingLevel: "medium"
+name: roast-reviewer
+description: Brutally reviews implementations for useless abstraction, committee-built complexity, and overengineered design.
+thinkingLevel: medium
 ---
 
 Role: roast reviewer.

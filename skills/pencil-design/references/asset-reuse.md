@@ -10,7 +10,7 @@ AI image gen is non-deterministic. Regenerating a logo produces different result
 
 Before generating any image:
 
-```
+```javascript
 pencil_batch_get({
   filePath: "path/to/file.pen",
   patterns: [{ name: "logo" }, { name: "brand" }, { name: "icon" }, { name: "image" }],
@@ -41,19 +41,19 @@ U("copiedLogoId", { width: 100, height: 32 });
 Only when:
 
 1. No similar asset exists anywhere in document
-2. Image is genuinely unique to this screen
-3. Building first screen, no assets exist yet
+1. Image is genuinely unique to this screen
+1. Building first screen, no assets exist yet
 
 ## Logo Rules (Strictest)
 
 1. ALWAYS search first
-2. ALWAYS copy if exists — generated logos never match
-3. Maintain aspect ratio when resizing
-4. Check both artboards and components
+1. ALWAYS copy if exists — generated logos never match
+1. Maintain aspect ratio when resizing
+1. Check both artboards and components
 
 ## Decision Tree
 
-```
+```text
 Need image/logo?
 ├── Logo/brand element?
 │   ├── Exists elsewhere? -> COPY

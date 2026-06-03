@@ -64,6 +64,6 @@ This is one committable and testable unit because it completes the user-facing `
 ## User test at exit
 
 1. Start `/qna` and confirm the `qna` tool activates only for that loop.
-2. Leave one visible question untouched, submit, and confirm it remains `open` in the ledger.
-3. Submit a manual run with no explicit outcomes and confirm the system persists state and only shows a notification.
-4. Run `/qna` when there are no unresolved questions and confirm there is no empty popup.
+1. Leave one visible question untouched, submit, and confirm it remains `open` in the ledger.
+1. Submit a manual run with no explicit outcomes and confirm the system persists state and only shows a notification.
+1. Run `/qna` when there are no unresolved questions and confirm there is no empty popup.

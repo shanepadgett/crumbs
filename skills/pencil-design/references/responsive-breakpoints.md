@@ -20,7 +20,7 @@ Multiple artboards at different widths must map to correct CSS breakpoints. Wron
 
 ### Read All Artboards
 
-```
+```javascript
 pencil_batch_get({ filePath: "...", patterns: [{ type: "frame", name: "Mobile|Tablet|Desktop" }], readDepth: 4 })
 ```
 

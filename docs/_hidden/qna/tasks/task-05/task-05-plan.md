@@ -4,7 +4,7 @@
 - `Task Title:` `Task 05 — /qna loop control, scoped tool activation, and no-results behavior`
 - `Task Signature:` `task-05-qna-loop-control-scoped-tool-activation-no-results-behavior`
 - `Primary Code Scope:` `extensions/qna.ts`, `extensions/qna/command.ts`, `extensions/qna/types.ts`, `extensions/qna/branch-state.ts`, `extensions/qna/reconcile.ts`, `extensions/qna/transcript-scan.ts`, `extensions/qna/model-reconcile.ts`, `extensions/qna/loop-controller.ts`, `extensions/qna/loop-control-message.ts`, `extensions/qna/runtime-submit.ts`, `extensions/qna/tool.ts`, `extensions/qna/interview-attachment.ts`, `extensions/qna/*.test.ts`, `extensions/question-runtime/types.ts`, `extensions/question-runtime/form-state.ts`, `extensions/question-runtime/form-shell.ts`, `extensions/question-runtime/request-validator.ts`
-- `Excluded Scope:` `external/`, `extensions/permissions/`, `README.md`, `/qna-ledger` overlay and send/export work from task-06+, and net-new interview persistence/chooser/active-runtime implementation beyond reading the shared chat-attachment marker contract`
+- `Excluded Scope:` `external/`, `extensions/permissions/`, `README.md`, `/qna-ledger` overlay and send/export work from task-06+, and net-new interview persistence/chooser/active-runtime implementation beyond reading the shared chat-attachment marker contract\`
 
 ### 2. Executive Summary
 
@@ -15,131 +15,158 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
 ### 3. Requirement Map
 
 1. **Requirement:** `/qna` shall be user initiated.
+
    - `Status:` `already satisfied`
    - `Current files/functions/types that relate:` `extensions/qna/command.ts:registerQnaCommand`, `extensions/qna.ts`
    - `Planned implementation move:` Preserve the command entrypoint as the only public trigger for the manual ordinary-QnA loop; do not auto-start `/qna` loops from session lifecycle hooks.
 
-2. **Requirement:** `/qna` shall run in smart merged mode without a mode picker.
+1. **Requirement:** `/qna` shall run in smart merged mode without a mode picker.
+
    - `Status:` `partially satisfied`
    - `Current files/functions/types that relate:` `extensions/qna/command.ts:runQnaCommand` already has no picker, but it exits after the discovery pass and does not merge that pass with older open backlog for review.
    - `Planned implementation move:` Change command orchestration so one `/qna` run always does both phases in one flow: reconcile new transcript if needed, then evaluate the full current open ledger set and either start the loop or no-op with a notification.
 
-3. **Requirement:** When the user starts `/qna`, the system shall activate the agent-facing `qna` tool only for the current QnA loop.
+1. **Requirement:** When the user starts `/qna`, the system shall activate the agent-facing `qna` tool only for the current QnA loop.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna.ts` registers no tool; current `/qna` never changes active tools.
    - `Planned implementation move:` Add an in-memory `QnaLoopController` that temporarily adds `qna` to the active tool set, hides the low-level runtime tool for the loop, and restores tool visibility when the loop settles or the session context resets. The controller must also enforce the baseline invariant that `qna` is removed whenever no loop is active (startup/reload/tree/switch/shutdown).
 
-4. **Requirement:** The agent-facing `qna` tool shall remain distinct from the low-level shared question-runtime request tool and shall use that runtime only when structured forms are needed.
+1. **Requirement:** The agent-facing `qna` tool shall remain distinct from the low-level shared question-runtime request tool and shall use that runtime only when structured forms are needed.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/question-runtime/tool.ts:registerQuestionRuntimeRequestTool`, `extensions/question-runtime/form-shell.ts:showQuestionRuntimeFormShell`, `extensions/question-runtime/request-validator.ts:validateAuthorizedQuestionRequest`
    - `Planned implementation move:` Add a product-owned `extensions/qna/tool.ts` that accepts only product-level batch input (`questionIds` + completion action), validates IDs against currently open ledger records, then compiles an internal `AuthorizedQuestionRequest` and launches the shared form shell without exposing low-level request-ticket workflow or runtime authoring schema to the model.
 
-5. **Requirement:** While the agent-facing `qna` tool is active for `/qna`, the system shall still allow the agent to ask ordinary clarifying questions in chat when structured capture is unnecessary.
+1. **Requirement:** While the agent-facing `qna` tool is active for `/qna`, the system shall still allow the agent to ask ordinary clarifying questions in chat when structured capture is unnecessary.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` no existing `/qna` loop or per-turn prompt injection exists.
    - `Planned implementation move:` Use `before_agent_start` loop-context instructions that explicitly allow normal chat turns and only reserve the `qna` tool for structured review or explicit loop completion. Chat-only turns must keep the loop active until an explicit settle condition is reached.
 
-6. **Requirement:** When the current `/qna` loop settles, the system shall deactivate the agent-facing `qna` tool.
+1. **Requirement:** When the current `/qna` loop settles, the system shall deactivate the agent-facing `qna` tool.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` no loop state or cleanup hooks exist in `extensions/qna.ts`.
    - `Planned implementation move:` Have the loop controller mark the loop inactive immediately when settled, then restore the pre-loop tool visibility diff on `agent_end` plus `session_start`, `session_tree`, and `session_shutdown` cleanup paths.
 
-7. **Requirement:** When the current chat is attached to an interview session, the system shall block `/qna` and direct the user back to the interview instead of mixing the two systems in one chat.
+1. **Requirement:** When the current chat is attached to an interview session, the system shall block `/qna` and direct the user back to the interview instead of mixing the two systems in one chat.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` there is no interview command/runtime under `extensions/` on this branch, but task-07/08 specs define chat-attachment ownership.
    - `Planned implementation move:` Implement a concrete read-only attachment adapter in `extensions/qna/interview-attachment.ts` that reads the latest hidden branch marker entry `customType: "interview.chat_attachment"` with data `{ schemaVersion: 1, interviewSessionId: string | null }`. `runQnaCommand()` must block and notify when this adapter returns a non-null session id.
 
-8. **Requirement:** `/qna` shall consume the shared runtime’s structured submit result (`question_outcomes` or `no_user_response`) rather than parsing freeform text.
+1. **Requirement:** `/qna` shall consume the shared runtime’s structured submit result (`question_outcomes` or `no_user_response`) rather than parsing freeform text.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/question-runtime/types.ts:QuestionRuntimeStructuredSubmitResult`, `extensions/question-runtime/form-state.ts:buildStructuredSubmitResult`, `extensions/qna/branch-state.ts` only hydrates `draftSnapshot` side data today.
    - `Planned implementation move:` Add a pure QnA submit-result applier that takes `QuestionRuntimeStructuredSubmitResult` plus `draftSnapshot` and updates the authoritative branch-local ledger directly.
 
-9. **Requirement:** When `/qna` applies structured submit results, the affected ordinary QnA records shall adopt authoritative ledger states `answered`, `skipped`, or `needs_clarification` without reparsing freeform text.
+1. **Requirement:** When `/qna` applies structured submit results, the affected ordinary QnA records shall adopt authoritative ledger states `answered`, `skipped`, or `needs_clarification` without reparsing freeform text.
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/types.ts:QnaLedgerQuestionRecord`, `extensions/qna/reconcile.ts` only handles transcript-model actions like `answered_in_chat` or `replace`.
    - `Planned implementation move:` Introduce `applyQnaStructuredSubmitResult(...)` to transition matching open records into `answered`, `skipped`, or `needs_clarification`, store the exact submitted outcome payload, and bump `sendState.localRevision` only for records whose authoritative state changed.
 
-10. **Requirement:** When a shared runtime form closes or cancels during `/qna`, the system shall preserve the returned `draftSnapshot` in branch-local state without treating it as a send.
-    - `Status:` `partially satisfied`
-    - `Current files/functions/types that relate:` `extensions/qna/branch-state.ts:hydrateFromBranch` can already merge later `question-runtime.control` `draftSnapshot` updates, but `/qna` itself never launches the form shell or persists cancel results directly.
-    - `Planned implementation move:` Reuse the shared runtime form shell from the `qna` tool, persist returned `draftSnapshot` immediately into `runtimeDraftsByQuestionId`, and leave send metadata untouched on cancel-only or draft-only paths.
+1. **Requirement:** When a shared runtime form closes or cancels during `/qna`, the system shall preserve the returned `draftSnapshot` in branch-local state without treating it as a send.
 
-11. **Requirement:** When a visible ordinary QnA question is left untouched on submit, the system shall keep that question `open` in the branch-local ledger.
-    - `Status:` `needs implementation`
-    - `Current files/functions/types that relate:` `extensions/question-runtime/form-state.ts:buildStructuredSubmitResult` intentionally omits `open` outcomes; `/qna` has no applier for those omitted questions today.
-    - `Planned implementation move:` The submit applier should only close records mentioned in `submitResult.outcomes`; scoped form questions that are absent from the outcomes array remain `state: "open"` with updated drafts preserved.
+   - `Status:` `partially satisfied`
+   - `Current files/functions/types that relate:` `extensions/qna/branch-state.ts:hydrateFromBranch` can already merge later `question-runtime.control` `draftSnapshot` updates, but `/qna` itself never launches the form shell or persists cancel results directly.
+   - `Planned implementation move:` Reuse the shared runtime form shell from the `qna` tool, persist returned `draftSnapshot` immediately into `runtimeDraftsByQuestionId`, and leave send metadata untouched on cancel-only or draft-only paths.
 
-12. **Requirement:** When the form is submitted with no explicit outcomes in manual `/qna`, the system shall persist ledger state and notify the user without fabricating an agent response.
-    - `Status:` `needs implementation`
-    - `Current files/functions/types that relate:` `extensions/question-runtime/form-state.ts:buildStructuredSubmitResult` already produces `kind: "no_user_response"`; `/qna` never consumes that result.
-    - `Planned implementation move:` Treat `no_user_response` as a product-owned terminal path in the `qna` tool: persist the latest drafts, show a user notification, mark the current loop settled, and return a fixed structured tool result (`kind: "no_user_response_settled"`) with no synthesized answer narrative.
+1. **Requirement:** When a visible ordinary QnA question is left untouched on submit, the system shall keep that question `open` in the branch-local ledger.
 
-13. **Requirement:** When the agent signals completion for the current `/qna` loop, the system shall be allowed to end that loop even if older open ordinary QnA items remain in the ledger.
-    - `Status:` `needs implementation`
-    - `Current files/functions/types that relate:` no loop-completion tool action exists.
-    - `Planned implementation move:` Add a `qna` tool completion action that only settles the ephemeral loop controller and never mutates authoritative ledger records, so older open backlog remains durable for later work.
+   - `Status:` `needs implementation`
+   - `Current files/functions/types that relate:` `extensions/question-runtime/form-state.ts:buildStructuredSubmitResult` intentionally omits `open` outcomes; `/qna` has no applier for those omitted questions today.
+   - `Planned implementation move:` The submit applier should only close records mentioned in `submitResult.outcomes`; scoped form questions that are absent from the outcomes array remain `state: "open"` with updated drafts preserved.
 
-14. **Requirement:** When a `/qna` loop ends while older open ordinary QnA items remain, the system shall leave those items for future `/qna` or `/qna-ledger` work.
-    - `Status:` `needs implementation`
-    - `Current files/functions/types that relate:` `extensions/qna/types.ts` already supports durable `state: "open"` records, but the command has no loop lifecycle yet.
-    - `Planned implementation move:` Keep loop completion purely ephemeral: no pruning, no auto-close, and no scan-boundary rollback. The authoritative state simply stays persisted with those older records still open.
+1. **Requirement:** When the form is submitted with no explicit outcomes in manual `/qna`, the system shall persist ledger state and notify the user without fabricating an agent response.
 
-15. **Requirement:** When `/qna` finds no unresolved ordinary QnA questions, the system shall not open an empty review popup.
-    - `Status:` `partially satisfied`
-    - `Current files/functions/types that relate:` current `/qna` never opens any review popup, but once task-05 adds the loop and form-launch path this gate must become explicit.
-    - `Planned implementation move:` After every successful discovery pass or no-op boundary update, compute `getUnresolvedQnaQuestions(nextState)` before loop activation; if the set is empty, stop there and notify instead of starting the agent loop or allowing the tool to render an empty shared-runtime form.
+   - `Status:` `needs implementation`
+   - `Current files/functions/types that relate:` `extensions/question-runtime/form-state.ts:buildStructuredSubmitResult` already produces `kind: "no_user_response"`; `/qna` never consumes that result.
+   - `Planned implementation move:` Treat `no_user_response` as a product-owned terminal path in the `qna` tool: persist the latest drafts, show a user notification, mark the current loop settled, and return a fixed structured tool result (`kind: "no_user_response_settled"`) with no synthesized answer narrative.
 
-16. **Requirement:** When `/qna` finds no unresolved ordinary QnA questions, the system shall record the successful scan boundary update and show a notification.
-    - `Status:` `partially satisfied`
-    - `Current files/functions/types that relate:` `extensions/qna/command.ts` already advances the boundary and notifies on transcript no-op success, but it does not yet handle the broader “reconciled to zero open questions” case.
-    - `Planned implementation move:` Preserve task-04 boundary semantics, then add a dedicated no-unresolved notification path that runs after both incremental reconciliation and pure no-op runs.
+1. **Requirement:** When the agent signals completion for the current `/qna` loop, the system shall be allowed to end that loop even if older open ordinary QnA items remain in the ledger.
+
+   - `Status:` `needs implementation`
+   - `Current files/functions/types that relate:` no loop-completion tool action exists.
+   - `Planned implementation move:` Add a `qna` tool completion action that only settles the ephemeral loop controller and never mutates authoritative ledger records, so older open backlog remains durable for later work.
+
+1. **Requirement:** When a `/qna` loop ends while older open ordinary QnA items remain, the system shall leave those items for future `/qna` or `/qna-ledger` work.
+
+   - `Status:` `needs implementation`
+   - `Current files/functions/types that relate:` `extensions/qna/types.ts` already supports durable `state: "open"` records, but the command has no loop lifecycle yet.
+   - `Planned implementation move:` Keep loop completion purely ephemeral: no pruning, no auto-close, and no scan-boundary rollback. The authoritative state simply stays persisted with those older records still open.
+
+1. **Requirement:** When `/qna` finds no unresolved ordinary QnA questions, the system shall not open an empty review popup.
+
+   - `Status:` `partially satisfied`
+   - `Current files/functions/types that relate:` current `/qna` never opens any review popup, but once task-05 adds the loop and form-launch path this gate must become explicit.
+   - `Planned implementation move:` After every successful discovery pass or no-op boundary update, compute `getUnresolvedQnaQuestions(nextState)` before loop activation; if the set is empty, stop there and notify instead of starting the agent loop or allowing the tool to render an empty shared-runtime form.
+
+1. **Requirement:** When `/qna` finds no unresolved ordinary QnA questions, the system shall record the successful scan boundary update and show a notification.
+
+   - `Status:` `partially satisfied`
+   - `Current files/functions/types that relate:` `extensions/qna/command.ts` already advances the boundary and notifies on transcript no-op success, but it does not yet handle the broader “reconciled to zero open questions” case.
+   - `Planned implementation move:` Preserve task-04 boundary semantics, then add a dedicated no-unresolved notification path that runs after both incremental reconciliation and pure no-op runs.
 
 ### 4. Current Architecture Deep Dive
 
 #### Relevant files and roles
 
 - `extensions/qna.ts`
+
   - Thin extension entrypoint.
   - Currently registers only `/qna`; there is no tool, no event hook, and no loop state.
 
 - `extensions/qna/command.ts`
+
   - Current task-04 orchestrator.
   - Hydrates branch state, scans transcript since the durable boundary, runs the model reconciliation loader, applies transcript reconciliation, persists `qna.state`, and shows a summary notification.
   - It stops after discovery. It never starts an agent turn.
 
 - `extensions/qna/branch-state.ts`
+
   - Product-owned hidden storage layer for `qna.state` snapshots.
   - Rehydrates the latest valid snapshot from the current branch and overlays later `question-runtime.control` `draftSnapshot` messages onto `runtimeDraftsByQuestionId`.
 
 - `extensions/qna/reconcile.ts`
+
   - Pure transcript-reconciliation state transition layer for task-04.
   - Owns stable question fingerprints, new-question ID allocation, `answered_in_chat`, replacement/supersede transitions, and recovery-scan dedupe.
 
 - `extensions/qna/transcript-scan.ts`
+
   - Boundary-aware transcript collector.
   - Only includes user messages and completed assistant messages.
 
 - `extensions/qna/model-reconcile.ts`
+
   - LLM-facing transcript reconciliation prompt and response normalization.
   - Produces only transcript-owned actions (`answered_in_chat`, `replace`, new questions).
 
 - `extensions/question-runtime/types.ts`
+
   - Shared runtime request, draft, outcome, and structured submit-result contracts.
   - Defines the exact machine-readable payloads task-05 must consume.
 
 - `extensions/question-runtime/form-state.ts`
+
   - Shared runtime submit-result constructor.
   - Important because it guarantees `no_user_response` when the user leaves every visible question `open`.
 
 - `extensions/question-runtime/form-shell.ts`
+
   - Shared tabbed TUI form shell.
   - Already exported and directly reusable from product-owned tools.
 
 - `extensions/question-runtime/request-validator.ts`
+
   - Shared validation for `AuthorizedQuestionRequest` payloads.
   - Useful as a read-only validation seam so `/qna` does not fork runtime request rules.
 
 - `extensions/question-runtime/index.ts`
+
   - Low-level file-backed runtime request orchestration.
   - Important as read-only contrast: the current shared runtime tool is file-request based and separate from the product-level `qna` tool that task-05 needs.
 
@@ -148,20 +175,20 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
 ##### Current `/qna` flow
 
 1. User runs `/qna`.
-2. `QnaBranchStateStore` hydrates the latest `qna.state` snapshot and overlays later shared-runtime draft updates.
-3. `collectQnaTranscriptSinceBoundary()` collects user/assistant transcript entries after the durable boundary.
-4. If new transcript exists, `reconcileQnaTranscript()` asks the model for transcript-owned changes.
-5. `applyQnaReconciliation()` updates branch-local ledger records and allocates new question IDs.
-6. The command persists the updated `qna.state`, advances the durable boundary, and shows a notification.
-7. Execution stops. There is no agent loop, no form shell, no `qna` tool, and no product-owned submit-result path.
+1. `QnaBranchStateStore` hydrates the latest `qna.state` snapshot and overlays later shared-runtime draft updates.
+1. `collectQnaTranscriptSinceBoundary()` collects user/assistant transcript entries after the durable boundary.
+1. If new transcript exists, `reconcileQnaTranscript()` asks the model for transcript-owned changes.
+1. `applyQnaReconciliation()` updates branch-local ledger records and allocates new question IDs.
+1. The command persists the updated `qna.state`, advances the durable boundary, and shows a notification.
+1. Execution stops. There is no agent loop, no form shell, no `qna` tool, and no product-owned submit-result path.
 
 ##### Current shared question-runtime flow
 
 1. An agent calls the low-level `question_runtime_request` tool.
-2. The shared runtime issues a JSON ticket path.
-3. The agent authors a request file; the watcher validates it and opens `showQuestionRuntimeFormShell()`.
-4. The shell returns `QuestionRuntimeFormResult` with `draftSnapshot` and either `question_outcomes` or `no_user_response`.
-5. The shared runtime emits hidden `question-runtime.control` messages for submit/cancel so product code can persist drafts or outcomes.
+1. The shared runtime issues a JSON ticket path.
+1. The agent authors a request file; the watcher validates it and opens `showQuestionRuntimeFormShell()`.
+1. The shell returns `QuestionRuntimeFormResult` with `draftSnapshot` and either `question_outcomes` or `no_user_response`.
+1. The shared runtime emits hidden `question-runtime.control` messages for submit/cancel so product code can persist drafts or outcomes.
 
 #### Current data/model shapes
 
@@ -178,6 +205,7 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
   ```
 
 - `QnaLedgerQuestionRecord`
+
   - Product-owned authoritative states: `open`, `answered`, `skipped`, `needs_clarification`, `answered_in_chat`, `superseded`.
   - Shared runtime outcomes already fit inside the `answered` / `skipped` / `needs_clarification` variants via `submittedOutcome`.
 
@@ -208,10 +236,12 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
 #### Current UI/rendering flow
 
 - `/qna` uses only one visible UI phase today:
+
   - a `BorderedLoader` while transcript reconciliation runs.
   - then a `ctx.ui.notify(...)` summary.
 
 - The shared runtime already has the right structured review UI:
+
   - tabbed question editor
   - review tab with counts for `answered`, `open`, `skipped`, and `needs_clarification`
   - submit validation and `no_user_response` semantics
@@ -242,6 +272,7 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
 #### Proposed modules and responsibilities
 
 - `command.ts` stays the user-initiated orchestrator.
+
   - Owns the task-04 discovery pass.
   - Enforces the interview-attachment guard before any discovery work.
   - Decides whether the successful result is:
@@ -249,10 +280,12 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
     - unresolved questions exist → start or refresh the `/qna` loop
 
 - `interview-attachment.ts` owns read-only interview-guard detection.
+
   - Reads current-branch hidden entries for `interview.chat_attachment`.
   - Returns the currently attached `interviewSessionId` or `null`.
 
 - `loop-controller.ts` owns ephemeral loop scope.
+
   - Tracks whether a `/qna` loop is active.
   - Applies the active-tool diff (`+qna`, `-question_runtime_request` if it was previously active).
   - Enforces baseline non-loop cleanup (`qna` removed when inactive).
@@ -261,11 +294,13 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
   - Restores tools when the loop settles or the session context changes.
 
 - `loop-control-message.ts` owns hidden kickoff protocol contracts.
+
   - Defines `QNA_LOOP_CONTROL_CUSTOM_TYPE = "qna.loop.control"`.
   - Defines kickoff details shape with `loopId`, `openQuestionIds`, and optional discovery summary.
   - Exposes parser/type-guard helpers so context filtering is deterministic.
 
 - `tool.ts` owns the agent-facing `qna` tool.
+
   - Validates that the agent only asks about currently open ordinary-QnA records.
   - Accepts product-owned `questionIds` and compiles an internal shared-runtime request shape.
   - Launches the shared runtime form shell only when structured capture is needed.
@@ -273,56 +308,77 @@ The clean architecture is to keep task-04’s branch-local ledger pipeline intac
   - Applies structured outcomes to the authoritative ledger or settles the loop on `no_user_response` / explicit completion.
 
 - `runtime-submit.ts` owns pure state transitions from shared runtime results.
+
   - No UI.
   - No active-tool logic.
   - No command orchestration.
 
 - `branch-state.ts` remains the storage boundary.
+
   - The command and the tool both hydrate current state through it and persist complete snapshots back through it.
 
 #### Data flow from command entry to final persisted or emitted result
 
 1. User runs `/qna`.
-2. Command checks interview attachment via `getAttachedInterviewSessionIdFromBranch(branch)`.
+
+1. Command checks interview attachment via `getAttachedInterviewSessionIdFromBranch(branch)`.
+
    - if attached, notify and stop before any discovery or loop activation.
-3. Command hydrates branch-local state and runs the existing transcript discovery pass.
-4. Command persists the successful post-discovery snapshot, including durable boundary updates.
-5. Command computes `open` ledger items from the resulting state.
-6. If zero open items remain:
+
+1. Command hydrates branch-local state and runs the existing transcript discovery pass.
+
+1. Command persists the successful post-discovery snapshot, including durable boundary updates.
+
+1. Command computes `open` ledger items from the resulting state.
+
+1. If zero open items remain:
+
    - show a no-results notification
    - do not start the loop
    - do not render the shared runtime form
-7. If open items remain:
+
+1. If open items remain:
+
    - require an interactive model-backed loop
    - call `loopController.startLoop(...)`
    - if this starts a new loop, activate scoped tools and send one hidden kickoff message
    - if a loop is already active, refresh open-question context only (no duplicate kickoff)
-8. On each later user prompt while the loop is active:
+
+1. On each later user prompt while the loop is active:
+
    - `before_agent_start` adds current `/qna` loop guidance and the current open-question summary
    - the agent can either ask normal clarifying chat questions or call `qna`
-9. If the agent calls `qna` with `action: "question_batch"`:
+
+1. If the agent calls `qna` with `action: "question_batch"`:
+
    - validate requested `questionIds` against the current open ledger
    - compile a shared runtime request
    - launch `showQuestionRuntimeFormShell()`
    - on cancel: persist `draftSnapshot` only
    - on submit with `question_outcomes`: apply authoritative ledger transitions and persist drafts
    - on submit with `no_user_response`: persist drafts, notify, settle the current loop, and return fixed result kind `no_user_response_settled`
-10. If the agent calls `qna` with `action: "complete"`:
-    - settle the current loop without mutating the ledger
 
-11. On `agent_end`, if the loop is settled:
-    - remove the `qna` tool from the active set
-    - restore the low-level runtime tool if it was active before the loop
+1. If the agent calls `qna` with `action: "complete"`:
+
+   - settle the current loop without mutating the ledger
+
+1. On `agent_end`, if the loop is settled:
+
+   - remove the `qna` tool from the active set
+   - restore the low-level runtime tool if it was active before the loop
 
 #### Reusable abstractions to introduce or strengthen
 
 - **Ephemeral loop controller** instead of burying tool activation inside command code.
+
   - Reusable for task-06 “reactivate the loop-scoped `qna` tool”.
 
 - **Pure submit-result applier** instead of mixing runtime outcome logic into the tool implementation.
+
   - Reusable from future `/qna-ledger` edit paths if they later choose to reuse shared runtime forms.
 
 - **Product-owned batch compiler** that reuses the shared validator and form shell instead of copying runtime rules.
+
   - Keeps `/qna` distinct from the low-level request-ticket tool.
 
 #### Clear boundaries between runtime, validation, storage, UI, and command orchestration
@@ -391,13 +447,17 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
 #### File Plan — `Path:` `extensions/qna.ts`
 
 - `Action:` `modify`
+
 - `Why:` Root extension wiring must now register both the command and the loop-scoped agent tool, plus loop lifecycle hooks.
+
 - `Responsibilities:`
+
   - Construct one shared `QnaLoopController` instance.
   - Register `/qna` with that controller plus the concrete interview-attachment resolver.
   - Register the agent-facing `qna` tool.
   - Register lifecycle hooks that clean up stale loop state.
   - Ensure `qna` is not active outside an active loop right after extension init.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -405,22 +465,29 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Replace single `registerQnaCommand(pi)` call with controller-backed wiring.
   - Pass `getAttachedInterviewSessionIdFromBranch` from `interview-attachment.ts` into command registration.
   - Update extension header comments to reflect merged discovery+loop behavior.
   - Keep the root file thin; do not move orchestration logic here.
+
 - `Dependencies:` `extensions/qna/command.ts`, `extensions/qna/tool.ts`, `extensions/qna/loop-controller.ts`, `extensions/qna/interview-attachment.ts`
+
 - `Risks / notes:` Tool registration order is low risk, but the root file must stay declarative so task-06 can extend the same controller without re-splitting the extension.
 
 #### File Plan — `Path:` `extensions/qna/types.ts`
 
 - `Action:` `modify`
+
 - `Why:` Task-05 needs explicit contracts for loop-scoped tool input/output and loop lifecycle state without changing the task-04 authoritative ledger model.
+
 - `Responsibilities:`
+
   - Preserve the existing ledger snapshot and record unions.
   - Add shared named shapes for open-question references.
   - Add product-level `qna` tool payload/result contracts.
   - Add loop-finish reason types.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -464,19 +531,26 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Keep `qna` tool payload product-owned (`questionIds`) and leave runtime authoring types internal to `tool.ts`.
   - Keep task-04 record-state tags unchanged.
+
 - `Dependencies:` `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` Do not widen the ordinary-QnA authoritative state union beyond the task-04 model.
 
 #### File Plan — `Path:` `extensions/qna/loop-control-message.ts`
 
 - `Action:` `add`
+
 - `Why:` The hidden kickoff/control protocol must be explicit and reusable so kickoff emission and stale-context filtering do not depend on ad-hoc string matching.
+
 - `Responsibilities:`
+
   - Define the hidden custom message type for `/qna` loop control.
   - Define kickoff payload shape and parser/type-guard helpers.
   - Keep loop-control messages non-display and deterministic.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -500,19 +574,26 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Keep message parsing strict (`custom` role, expected `customType`, valid details schema).
   - Do not put user-facing text in the kickoff `content`; it is control-only context.
+
 - `Dependencies:` `extensions/qna/types.ts`
+
 - `Risks / notes:` Keep this protocol small; task-06 can add new detail variants only if needed.
 
 #### File Plan — `Path:` `extensions/qna/interview-attachment.ts`
 
 - `Action:` `add`
+
 - `Why:` Requirement 7 needs a concrete, testable source-of-truth reader now, without pulling interview persistence into task-05.
+
 - `Responsibilities:`
+
   - Read the latest hidden branch entry for `customType: "interview.chat_attachment"`.
   - Parse `{ schemaVersion: 1, interviewSessionId: string | null }`.
   - Return attached `interviewSessionId` or `null`.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -522,16 +603,22 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Use “latest valid entry wins” semantics.
   - Ignore malformed payloads rather than throwing.
+
 - `Dependencies:` `extensions/qna/types.ts`
+
 - `Risks / notes:` This is read-only; writing this marker remains interview-track work in task-08.
 
 #### File Plan — `Path:` `extensions/qna/loop-controller.ts`
 
 - `Action:` `add`
+
 - `Why:` Scoped tool activation, loop prompt injection, and cleanup are all ephemeral session concerns that do not belong in `command.ts` or `tool.ts`.
+
 - `Responsibilities:`
+
   - Track whether a `/qna` loop is active.
   - Apply and restore the active-tool diff.
   - Emit a hidden kickoff message for the first loop turn.
@@ -539,6 +626,7 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   - Inject per-turn loop instructions while active.
   - Enforce that `qna` is removed whenever no loop is active.
   - Restore tool scope on settle or session reset.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -567,6 +655,7 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Store only ephemeral data: active flag, current `loopId`, open-question summary cache, whether `question_runtime_request` was active before the loop, and settle-after-turn state.
   - On activation, add `qna` to `pi.getActiveTools()`, remove `question_runtime_request` only if it was active, and send one hidden kickoff message via `pi.sendMessage(..., { deliverAs: "steer", triggerTurn: true })`.
   - On rerun while active, refresh cached open questions but do not enqueue another kickoff message.
@@ -574,18 +663,24 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   - On startup/reload/tree/switch/shutdown, enforce non-loop baseline by removing any stray `qna` activation.
   - Build a system-prompt delta listing current open ordinary-QnA records and the rules: normal chat is allowed, `qna` is for structured capture, `complete` ends only the current loop.
   - Filter stale hidden `qna.loop.control` messages from non-loop context so old kickoff messages do not leak into unrelated prompts.
+
 - `Dependencies:` `extensions/qna/branch-state.ts`, `extensions/qna/reconcile.ts`, `extensions/qna/types.ts`, `extensions/qna/loop-control-message.ts`
+
 - `Risks / notes:` Tool restoration should preserve unrelated tool toggles done during the loop; restore only the `qna` / `question_runtime_request` diff rather than clobbering the whole active-tool set.
 
 #### File Plan — `Path:` `extensions/qna/runtime-submit.ts`
 
 - `Action:` `add`
+
 - `Why:` Shared runtime submit or cancel results need a pure product-owned translation layer into the authoritative task-04 ledger state model.
+
 - `Responsibilities:`
+
   - Merge returned `draftSnapshot` data into `runtimeDraftsByQuestionId`.
   - Apply `question_outcomes` directly to open QnA records.
   - Leave untouched visible questions `open`.
   - Keep durable boundary and send markers unchanged except for semantic record revisions.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -613,26 +708,33 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Clone the incoming snapshot before mutation.
   - Upsert each returned draft by `questionId` without deleting unrelated entries.
   - Reject duplicate or out-of-scope outcome question IDs.
   - Transition only referenced open records into `answered`, `skipped`, or `needs_clarification` and store the exact `submittedOutcome` payload.
   - Bump `sendState.localRevision` only for changed records.
   - For `submitResult.kind === "no_user_response"`, return an unchanged ledger with updated drafts and a non-zero `remainingOpenQuestionIds` list.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` This helper must stay deterministic and side-effect free so command and tool tests can trust it without mocking UI.
 
 #### File Plan — `Path:` `extensions/qna/tool.ts`
 
 - `Action:` `add`
+
 - `Why:` Task-05 requires a dedicated agent-facing `qna` tool that sits above the shared runtime and owns product-specific loop semantics.
+
 - `Responsibilities:`
+
   - Register the `qna` tool.
   - Validate `question_batch` vs `complete` actions.
   - Build a shared runtime request from selected ledger `questionIds` plus saved drafts.
   - Launch the shared form shell only for `question_batch`.
   - Persist draft-only or submitted results.
   - Settle the loop on explicit completion, `no_user_response`, or zero remaining open items.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -650,6 +752,7 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Throw if the tool is called when the `/qna` loop is not active.
   - Throw if the tool is called without interactive UI (`ctx.hasUI === false`).
   - Rehydrate the latest branch-local state on every tool call so stale loop context cannot mutate closed or superseded records.
@@ -661,18 +764,24 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   - On submit with `question_outcomes`: `applyQnaStructuredSubmitResult()` and persist.
   - On submit with `no_user_response`: persist, notify with fixed copy, mark the loop settled, and return `details.kind = "no_user_response_settled"` with no freeform answer summary text.
   - On `action: "complete"`: settle the loop without touching the ledger.
+
 - `Dependencies:` `extensions/qna/branch-state.ts`, `extensions/qna/runtime-submit.ts`, `extensions/qna/loop-controller.ts`, `extensions/qna/types.ts`, `extensions/question-runtime/form-shell.ts`, `extensions/question-runtime/request-validator.ts`, `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` Keep tool result text minimal and structured so the agent does not invent freeform “answer summaries” after `no_user_response`.
 
 #### File Plan — `Path:` `extensions/qna/command.ts`
 
 - `Action:` `modify`
+
 - `Why:` The command must keep task-04 discovery behavior but now decide between loop start and no-results exit instead of always stopping after discovery.
+
 - `Responsibilities:`
+
   - Preserve task-04 transcript reconciliation and boundary persistence behavior.
   - Add a concrete interview-attachment guard seam.
   - Compute unresolved open questions after the discovery pass.
   - Start or refresh the loop, or show a no-results notification.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -691,6 +800,7 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   ```
 
 - `Key logic to add or change:`
+
   - Resolve interview attachment before discovery; when attached, notify and stop with no boundary mutation.
   - Keep `persistHydratedStateIfNeeded()` for failure paths.
   - Preserve the current model-reconciliation loader and task-04 error handling.
@@ -700,7 +810,9 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
   - If unresolved is non-empty, require a model-backed loop and call `loopController.startLoop(...)`.
   - On `/qna` rerun while loop is already active, refresh open-question context without emitting a duplicate kickoff.
   - If the model is missing in the “open backlog but no new transcript” path, keep the successful boundary persistence but notify that the interactive loop cannot start.
+
 - `Dependencies:` `extensions/qna/branch-state.ts`, `extensions/qna/transcript-scan.ts`, `extensions/qna/model-reconcile.ts`, `extensions/qna/reconcile.ts`, `extensions/qna/loop-controller.ts`, `extensions/qna/interview-attachment.ts`
+
 - `Risks / notes:` Do not regress task-04’s “do not advance the boundary on discovery failure” rule while restructuring the success path.
 
 #### File Plan — `Path:` `extensions/qna/command.test.ts`
@@ -906,41 +1018,49 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
 ### 8. Stepwise Execution Plan
 
 1. **Lock shared task-05 contracts first.**
+
    - Update `extensions/qna/types.ts` with named open-question references, product-level `qna` tool payloads/results, and loop finish enums.
    - Add `extensions/qna/loop-control-message.ts` contracts and tests.
    - Checkpoint: existing qna task-04 tests should still compile after import updates.
 
-2. **Add interview-attachment guard reader.**
+1. **Add interview-attachment guard reader.**
+
    - Create `extensions/qna/interview-attachment.ts` and `extensions/qna/interview-attachment.test.ts`.
    - Lock marker parsing (`interview.chat_attachment`, latest-valid-wins).
 
-3. **Add the pure shared-runtime-result applier.**
+1. **Add the pure shared-runtime-result applier.**
+
    - Create `extensions/qna/runtime-submit.ts` and `extensions/qna/runtime-submit.test.ts`.
    - Cover cancel, `question_outcomes`, `no_user_response`, untouched visible questions, and `sendState.localRevision` bumps.
    - Safe to do in parallel with step 4 after steps 1-2.
 
-4. **Add loop-scope infrastructure.**
+1. **Add loop-scope infrastructure.**
+
    - Create `extensions/qna/loop-controller.ts` and `extensions/qna/loop-controller.test.ts`.
    - Implement tool diff activation/restoration, hidden kickoff message emission/filtering, per-turn loop instructions, idempotent refresh on rerun, and session-reset cleanup.
    - Safe to do in parallel with step 3 after steps 1-2.
 
-5. **Add the agent-facing `qna` tool.**
+1. **Add the agent-facing `qna` tool.**
+
    - Create `extensions/qna/tool.ts` and `extensions/qna/tool.test.ts`.
    - Wire it to the shared runtime form shell plus the pure submit/draft appliers.
    - Keep tool input as `questionIds` and runtime request compilation internal.
    - Depends on steps 1, 3, and 4.
 
-6. **Refactor `/qna` command orchestration onto the new loop decision tree.**
+1. **Refactor `/qna` command orchestration onto the new loop decision tree.**
+
    - Update `extensions/qna/command.ts` and `extensions/qna/command.test.ts`.
    - Preserve task-04 discovery semantics, enforce interview guard, then branch into `no unresolved` vs `start/refresh loop` behavior.
    - Depends on steps 2 and 4; uses the submit layer only indirectly.
 
-7. **Wire the root extension entrypoint.**
+1. **Wire the root extension entrypoint.**
+
    - Update `extensions/qna.ts` to construct the controller once and register command/tool/lifecycle hooks.
    - Pass concrete interview-attachment resolver into command wiring and keep baseline `qna` inactive outside loop.
    - Depends on steps 2, 4, 5, and 6.
 
-8. **Run focused tests and reload for manual verification.**
+1. **Run focused tests and reload for manual verification.**
+
    - Run targeted qna tests.
    - Reload the extension because files under `extensions/` changed.
    - Manual verification after reload is sequential and should happen only after the automated tests pass.
@@ -963,6 +1083,7 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
 #### Unit / integration / manual verification needed
 
 - **Focused automated tests**
+
   - `bun test extensions/qna/*.test.ts`
   - This should cover:
     - interview attachment marker parsing
@@ -976,13 +1097,14 @@ agent_end --> settled? --> restore tool scope --> future backlog stays in qna.st
     - tool cancel / submit / complete behavior
 
 - **Manual interactive verification after reload**
+
   1. Start `/qna` on a branch with existing open ordinary-QnA items and confirm the `qna` tool becomes active while `question_runtime_request` is hidden for that loop.
-  2. Let the agent ask a normal chat clarification without opening the form and confirm the loop stays active for the next user reply.
-  3. Have the agent open a structured batch, leave one visible question untouched, submit, and inspect the latest hidden `qna.state` entry to confirm that question remains `open`.
-  4. Submit a structured batch with no explicit outcomes and confirm only fixed notification/result text appears, drafts persist, and the loop settles.
-  5. Run `/qna` again while the loop is active and confirm open-question context refreshes without duplicate kickoff spam.
-  6. Run `/qna` when the ledger has zero unresolved ordinary-QnA items and confirm there is no empty form shell or empty review popup.
-  7. Add a hidden `interview.chat_attachment` marker entry with non-null `interviewSessionId` and confirm `/qna` refuses to start and points the user back to `/interview`.
+  1. Let the agent ask a normal chat clarification without opening the form and confirm the loop stays active for the next user reply.
+  1. Have the agent open a structured batch, leave one visible question untouched, submit, and inspect the latest hidden `qna.state` entry to confirm that question remains `open`.
+  1. Submit a structured batch with no explicit outcomes and confirm only fixed notification/result text appears, drafts persist, and the loop settles.
+  1. Run `/qna` again while the loop is active and confirm open-question context refreshes without duplicate kickoff spam.
+  1. Run `/qna` when the ledger has zero unresolved ordinary-QnA items and confirm there is no empty form shell or empty review popup.
+  1. Add a hidden `interview.chat_attachment` marker entry with non-null `interviewSessionId` and confirm `/qna` refuses to start and points the user back to `/interview`.
 
 #### Expected user-visible behavior
 

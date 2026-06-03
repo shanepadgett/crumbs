@@ -24,10 +24,10 @@ Scope rules:
 Priorities:
 
 1. naming and searchability problems that block tracing
-2. needless indirection obscuring ownership or flow
-3. duplicate logic or pattern drift in touched areas
-4. weak feature or module boundaries around changed work
-5. stale docs, dead code, or structure drift that materially raises change cost
+1. needless indirection obscuring ownership or flow
+1. duplicate logic or pattern drift in touched areas
+1. weak feature or module boundaries around changed work
+1. stale docs, dead code, or structure drift that materially raises change cost
 
 Flag examples:
 

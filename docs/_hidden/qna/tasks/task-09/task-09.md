@@ -50,6 +50,6 @@ This is one committable and testable unit because it completes the active in-cha
 ## User test at exit
 
 1. Start an interview and confirm the agent asks at most three questions and prefers fewer when possible.
-2. Confirm substantive interview turns flow through the dedicated interview tool, while question batches render through the shared runtime form.
-3. Drive a `screen: "final_resolution"` attempt and confirm it uses the dedicated confirm screen rather than the shared runtime form.
-4. Pause the session and confirm a visible distillation pass refreshes `resume-packet.json` before status becomes `paused`.
+1. Confirm substantive interview turns flow through the dedicated interview tool, while question batches render through the shared runtime form.
+1. Drive a `screen: "final_resolution"` attempt and confirm it uses the dedicated confirm screen rather than the shared runtime form.
+1. Pause the session and confirm a visible distillation pass refreshes `resume-packet.json` before status becomes `paused`.

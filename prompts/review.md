@@ -59,8 +59,8 @@ Tell every subagent:
 After parallel review finishes:
 
 1. read all three output files
-2. synthesize final findings report into `$REVIEW_DIR/final-findings.md`
-3. reconcile and trim before writing final report:
+1. synthesize final findings report into `$REVIEW_DIR/final-findings.md`
+1. reconcile and trim before writing final report:
    - prioritize runtime risk
    - then over-engineering simplification
    - then hygiene clarity and changeability
@@ -68,8 +68,8 @@ After parallel review finishes:
    - drop low-value, weak-evidence, or non-actionable findings
    - keep only findings worth actual follow-up work
    - call out conflicts or tradeoffs when remedies may fight each other
-4. write final report to that path
-5. after writing final report, do not spend more tokens on long chat summary
+1. write final report to that path
+1. after writing final report, do not spend more tokens on long chat summary
 
 Final report must include:
 

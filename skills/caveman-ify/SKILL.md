@@ -17,8 +17,8 @@ If no path given, ask.
 ## Workflow
 
 1. Read entire skill: `SKILL.md`, all `references/*.md`, all `scripts/` file comments
-2. Show token estimate before/after (rough line count as proxy)
-3. Rewrite everything. Wait for user confirmation before writing files.
+1. Show token estimate before/after (rough line count as proxy)
+1. Rewrite everything. Wait for user confirmation before writing files.
 
 ## Compression Rules
 

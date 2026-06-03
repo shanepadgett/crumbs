@@ -56,6 +56,6 @@ This is one committable and testable unit because it closes the interview lifecy
 ## User test at exit
 
 1. Drive a session to `screen: "final_resolution"`, reject it with a note, and confirm the interview stays active with a structured rejection payload.
-2. Accept a final resolution and confirm the session becomes `completed` with only the accepted resolution persisted.
-3. Reopen the completed session and confirm the accepted resolution remains visible as baseline context.
-4. Open the interview explorer and verify tabs, ordering, filters, lifecycle actions, and confirmed deletion of both committed and local runtime files.
+1. Accept a final resolution and confirm the session becomes `completed` with only the accepted resolution persisted.
+1. Reopen the completed session and confirm the accepted resolution remains visible as baseline context.
+1. Open the interview explorer and verify tabs, ordering, filters, lifecycle actions, and confirmed deletion of both committed and local runtime files.

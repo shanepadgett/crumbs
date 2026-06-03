@@ -113,6 +113,6 @@ This is one committable and testable unit because it delivers the complete answe
 ## User test at exit
 
 1. Open one form containing all three question kinds.
-2. Confirm recommendations, justifications, and freeform suggested answers render in the right places.
-3. Confirm reserved `yes` / `no` / `other` behavior, `Other` text requirements, multi-select behavior, and note restrictions.
-4. Mark questions `skipped` and `needs_clarification`, then reopen and answer them normally.
+1. Confirm recommendations, justifications, and freeform suggested answers render in the right places.
+1. Confirm reserved `yes` / `no` / `other` behavior, `Other` text requirements, multi-select behavior, and note restrictions.
+1. Mark questions `skipped` and `needs_clarification`, then reopen and answer them normally.

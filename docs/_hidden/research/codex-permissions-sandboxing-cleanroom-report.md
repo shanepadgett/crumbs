@@ -167,25 +167,25 @@ To claim Codex-like permissioning and sandboxing in a meaningful way, the Pi ext
 1. Policy compiler
    Converts user config into approval policy, coarse sandbox mode, split filesystem policy, network policy, and trust-aware defaults.
 
-2. Command approval engine
+1. Command approval engine
    Combines approval mode, sandbox state, safe/dangerous command heuristics, and execpolicy rule evaluation into `skip`, `prompt`, or `forbid`.
 
-3. Structured approval protocol
+1. Structured approval protocol
    Carries exec approvals, patch approvals, request-permissions requests, reasons, available decisions, proposed amendments, and per-session decisions.
 
-4. Patch approval subsystem
+1. Patch approval subsystem
    Evaluates and presents file-targeted changes separately from shell commands and caches approvals per file target.
 
-5. Additional-permissions overlay
+1. Additional-permissions overlay
    Supports turn/session grants, normalization, intersection, and merging into the base sandbox.
 
-6. Runtime execution layer
+1. Runtime execution layer
    Runs shell commands and apply-patch under the currently effective sandbox permissions and understands sandbox-denied retry paths.
 
-7. Path policy engine
+1. Path policy engine
    Handles protected subpaths, carveouts, path canonicalization, rule precedence, and writable-root semantics.
 
-8. Persistence layer
+1. Persistence layer
    Stores session approval cache, persisted execpolicy prefix rules, and persisted network policy amendments.
 
 ### Full upstream parity
@@ -261,29 +261,29 @@ If the next chat is for actual design, these are the decisions that need to be m
 1. Scope target
    Is the goal shell/patch parity first, or full parity including managed network, MCP, and Guardian?
 
-2. Enforcement target
+1. Enforcement target
    Can the Pi extension call OS-specific helpers or sidecar binaries, or must enforcement stay inside the extension host?
 
-3. Platform target
+1. Platform target
    Is phase 1 cross-platform, or is it acceptable to ship one platform first?
 
-4. Rule model
+1. Rule model
    Should Pi clone the execpolicy DSL and persistent prefix-rule behavior, or use a Pi-native rule system with equivalent semantics?
 
-5. Persistence model
+1. Persistence model
    Where do session approvals, persisted prefix rules, and persisted network rules live?
 
-6. Approval transport
+1. Approval transport
    Is there one UI surface, or does the extension need a typed internal protocol because multiple frontends may exist later?
 
-7. Additional permissions
+1. Additional permissions
    Should `request_permissions` ship in phase 1, or can phase 1 limit itself to inline escalations on shell/apply-patch?
 
-8. Network story
+1. Network story
    Is interactive network approval required in phase 1, or can phase 1 stay at coarse on/off network policy?
 
-9. Protected roots
+1. Protected roots
    Which Pi-specific directories must be treated like Codex treats `.codex` and `.git` under writable roots?
 
-10. Compatibility level
-    Is the objective behavior parity, UX parity, or protocol parity with upstream Codex?
+1. Compatibility level
+   Is the objective behavior parity, UX parity, or protocol parity with upstream Codex?

@@ -127,10 +127,13 @@ Minimal valid example:
 #### 3.5 Retry behavior
 
 - Hidden retry budget is exactly `4` unique invalid contents per request.
+
 - Track:
+
   - `failureCount`
   - `extraRetryBlocksGranted`
   - `pendingRetryDecision`
+
 - Formula:
 
   ```ts
@@ -138,12 +141,17 @@ Minimal valid example:
   ```
 
 - Increment `failureCount` only for a new invalid content hash.
+
 - When `failureCount === allowedFailures`:
+
   - send the normal hidden validation-failure message
   - set `pendingRetryDecision = true`
   - queue one visible Continue/Abort prompt
+
 - While `pendingRetryDecision` is true, later edits for that same request are ignored completely.
+
 - `Continue` grants exactly one more block of `4`.
+
 - `Abort` stops the request permanently.
 
 #### 3.6 Visible queue behavior
@@ -152,7 +160,7 @@ Minimal valid example:
 - Only one visible modal may be active at a time.
 - Visible queue priority:
   1. retry decision prompt
-  2. ready shell launch
+  1. ready shell launch
 - Queue order within each priority is FIFO.
 
 ### 4. Requirement Coverage Map
@@ -185,25 +193,32 @@ Minimal valid example:
 ### 5. Current Architecture Deep Dive
 
 - `extensions/qna.ts`
+
   - useful as the current tab-strip and custom TUI reference
   - not reusable as-is because it mixes extraction, model prompting, answer entry, and freeform submission
 
 - `extensions/shared/option-picker.ts`
+
   - best current fit for the visible Continue/Abort retry prompt
 
 - `extensions/markdownlint-on-md.ts`
+
   - best current fit for hidden custom-message delivery via `pi.sendMessage(..., { deliverAs: "steer", triggerTurn: ... })`
 
 - `extensions/web/fetch.ts` and `extensions/codex-compat/index.ts`
+
   - best current fit for custom tool registration style and structured result details
 
 - `extensions/codex-compat/src/path-policy.ts`
+
   - confirms that relative file paths resolve from `cwd`, forcing an absolute authorized runtime path
 
 - `extensions/shared/tool-observation.ts`
+
   - confirms current repo conventions for stripping `@` and normalizing path strings
 
 - `extensions/workspaces/src/repo-context.ts`
+
   - best current reference for resolving git top-level from arbitrary session `cwd`
 
 Current gaps task 01 must fill:
@@ -235,6 +250,7 @@ Use `extensions/question-runtime/index.ts`, not `extensions/question-runtime.ts`
 #### 6.2 Module responsibilities
 
 - `index.ts`
+
   - extension entrypoint and orchestration only
   - holds current `ctx`, store, watcher, visible queues, and modal state
   - hydrates on `session_start`
@@ -243,39 +259,47 @@ Use `extensions/question-runtime/index.ts`, not `extensions/question-runtime.ts`
   - flushes retry prompts before shell launches
 
 - `types.ts`
+
   - shared request, validation, and runtime state types only
 
 - `request-paths.ts`
+
   - resolve project root
   - build request directory and request file paths
   - return absolute tool path and repo-relative display path
   - normalize canonical absolute paths for matching
 
 - `request-store.ts`
+
   - durable request lifecycle state via `pi.appendEntry()` snapshots
   - hydrate from `ctx.sessionManager.getBranch()` only
   - own dedupe, retry math, and state transitions
 
 - `request-validator.ts`
+
   - parse JSON safely
   - validate only task-01-known fields
   - emit stable ordered `ValidationIssue[]`
 
 - `repair-messages.ts`
+
   - build deterministic hidden control messages
   - no state mutation
 
 - `form-shell.ts`
+
   - read-only tabbed runtime shell
   - flatten authored inline questions in stable pre-order for task-01 display only
   - no answer controls or submit controls
 
 - `request-watcher.ts`
+
   - watch request directory only
   - debounce `rename` and `change`
   - read known request files, hash contents, invoke validator, return structured outcomes
 
 - `tool.ts`
+
   - register `question_runtime_request`
   - generate request IDs
   - ensure request directory exists
@@ -315,32 +339,36 @@ Persistence rules:
 #### 6.4 Data flow
 
 1. Agent calls `question_runtime_request`.
-2. Tool resolves project root, ensures request directory exists, creates `requestId`, persists `pending` record, and returns the ticket.
-3. Agent writes one JSON object to the issued absolute path.
-4. Watcher sees the change, filters to known request files, reads current contents, hashes them, and asks the store whether this hash should be processed.
-5. Validator parses and validates the text.
-6. If invalid:
+1. Tool resolves project root, ensures request directory exists, creates `requestId`, persists `pending` record, and returns the ticket.
+1. Agent writes one JSON object to the issued absolute path.
+1. Watcher sees the change, filters to known request files, reads current contents, hashes them, and asks the store whether this hash should be processed.
+1. Validator parses and validates the text.
+1. If invalid:
    - store records failure and computes `allowedFailures`
    - orchestrator sends hidden validation feedback
    - if exhaustion was hit, orchestrator queues Continue/Abort and freezes further edits for that request
-7. If valid:
+1. If valid:
    - store marks request `ready`
    - orchestrator queues shell launch for the parsed request
-8. When idle and no higher-priority prompt is active:
+1. When idle and no higher-priority prompt is active:
    - orchestrator locks the request
    - opens the shared read-only shell
-9. Later edits to the locked file are ignored.
+1. Later edits to the locked file are ignored.
 
 ### 7. File-by-File Implementation Plan
 
 - `Path:` `.gitignore`
+
   - `Action:` `modify`
   - `Change:` add exactly `.pi/local/`
   - `Reason:` runtime scratch stays out of git status
 
 - `Path:` `extensions/question-runtime/index.ts`
+
   - `Action:` `add`
+
   - `Responsibilities:`
+
     - required extension documentation header
     - store current context and modal state
     - start watcher on `session_start`
@@ -348,6 +376,7 @@ Persistence rules:
     - close watcher on `session_shutdown`
     - handle Continue/Abort via `showOptionPicker()`
     - lock immediately before shell launch
+
   - `Export:`
 
     ```ts
@@ -355,14 +384,17 @@ Persistence rules:
     ```
 
 - `Path:` `extensions/question-runtime/types.ts`
+
   - `Action:` `add`
   - `Responsibilities:` request model, validation issues, runtime state types
 
 - `Path:` `extensions/question-runtime/request-paths.ts`
+
   - `Action:` `add`
   - `Responsibilities:` project-root resolution, directory creation, absolute/display path building, absolute-path normalization
 
 - `Path:` `extensions/question-runtime/request-store.ts`
+
   - `Action:` `add`
   - `Responsibilities:` branch-aware hydrate/persist, dedupe, retry math, and lifecycle transitions
   - `Rules:`
@@ -371,15 +403,18 @@ Persistence rules:
     - watcher must not duplicate those rules
 
 - `Path:` `extensions/question-runtime/request-validator.ts`
+
   - `Action:` `add`
   - `Responsibilities:` safe parse, deterministic known-field validation, duplicate-ID checks
   - `Issue path format:` JSONPath-like, starting with `$`
 
 - `Path:` `extensions/question-runtime/repair-messages.ts`
+
   - `Action:` `add`
   - `Responsibilities:` build hidden `question-runtime.control` messages for validation failure, retry granted, and abort
 
 - `Path:` `extensions/question-runtime/form-shell.ts`
+
   - `Action:` `add`
   - `Responsibilities:`
     - tab strip
@@ -389,11 +424,13 @@ Persistence rules:
   - `Non-goals:` answer controls, recommendation/justification UI, submit behavior
 
 - `Path:` `extensions/question-runtime/request-watcher.ts`
+
   - `Action:` `add`
   - `Responsibilities:` request-directory watch, debounce, file read, hash, validator call, structured callback emission
   - `Ignore:` unknown files, locked requests, aborted requests, frozen requests, missing files after save events
 
 - `Path:` `extensions/question-runtime/tool.ts`
+
   - `Action:` `add`
   - `Responsibilities:` tool registration, request ID generation, pending-record creation, ticket/template result
   - `Tool schema:` empty object
@@ -404,9 +441,9 @@ Validation order must be fixed exactly like this:
 
 1. parse JSON text
    - on parse failure emit one issue at `$` and stop
-2. validate top-level object
-3. validate `questions`
-4. validate questions in stable pre-order
+1. validate top-level object
+1. validate `questions`
+1. validate questions in stable pre-order
    - `questionId`
    - `kind`
    - `prompt`
@@ -415,7 +452,7 @@ Validation order must be fixed exactly like this:
    - each option `optionId`
    - each option `label`
    - `followUps`
-5. after structural walk, run duplicate checks in discovery order
+1. after structural walk, run duplicate checks in discovery order
    - duplicate `questionId` across full request
    - duplicate `optionId` within each `multiple_choice` question
 
@@ -434,16 +471,16 @@ Issue codes:
 ### 9. Stepwise Execution Plan
 
 1. Update `.gitignore` with `.pi/local/`.
-2. Add `types.ts` and `request-paths.ts`.
-3. Add `request-validator.ts`.
-4. Add `request-store.ts`.
-5. Add `tool.ts` and `repair-messages.ts`.
-6. Add `form-shell.ts`.
-7. Add `request-watcher.ts`.
-8. Wire `index.ts`.
-9. Reload extensions with `/reload`.
-10. Manually verify lifecycle scenarios.
-11. Run `mise run check`.
+1. Add `types.ts` and `request-paths.ts`.
+1. Add `request-validator.ts`.
+1. Add `request-store.ts`.
+1. Add `tool.ts` and `repair-messages.ts`.
+1. Add `form-shell.ts`.
+1. Add `request-watcher.ts`.
+1. Wire `index.ts`.
+1. Reload extensions with `/reload`.
+1. Manually verify lifecycle scenarios.
+1. Run `mise run check`.
 
 Parallel notes:
 
@@ -456,11 +493,13 @@ Parallel notes:
 Pure verification:
 
 - `request-paths.ts`
+
   - nested `cwd` still resolves same project root
   - emitted `path` is absolute and `@`-prefixed
   - emitted `projectRelativePath` matches `.pi/local/question-runtime/requests/<requestId>.json`
 
 - `request-validator.ts`
+
   - malformed JSON -> one `json_parse` issue at `$`
   - missing `questions`
   - empty `questions`
@@ -476,6 +515,7 @@ Pure verification:
   - unknown extra fields but otherwise valid -> valid
 
 - `request-store.ts`
+
   - hydrate from latest branch snapshot only
   - identical content hash is ignored
   - fourth unique invalid hash exhausts first retry block

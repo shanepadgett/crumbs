@@ -177,8 +177,8 @@ Precedence:
 Easy customization path:
 
 1. copy built-in agent
-2. keep same `name`
-3. change prompt, tools, or model
+1. keep same `name`
+1. change prompt, tools, or model
 
 Your copy shadows earlier source.
 
@@ -225,13 +225,13 @@ Bad use:
 ### Pattern: recon before edit
 
 1. `scout` finds relevant files
-2. main agent edits with context
+1. main agent edits with context
 
 ### Pattern: parallel compare
 
 1. one subagent inspects current implementation
-2. one subagent inspects tests or adjacent system
-3. main agent merges findings
+1. one subagent inspects tests or adjacent system
+1. main agent merges findings
 
 ### Pattern: reusable specialists
 

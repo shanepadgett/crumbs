@@ -32,10 +32,10 @@ Include both [LANGUAGE.md](LANGUAGE.md) vocabulary and CONTEXT.md vocabulary in 
 Each sub-agent outputs:
 
 1. Interface (types, methods, params — plus invariants, ordering, error modes)
-2. Usage example showing how callers use it
-3. What the implementation hides behind the seam
-4. Dependency strategy and adapters (see [DEEPENING.md](DEEPENING.md))
-5. Trade-offs — where leverage is high, where it's thin
+1. Usage example showing how callers use it
+1. What the implementation hides behind the seam
+1. Dependency strategy and adapters (see [DEEPENING.md](DEEPENING.md))
+1. Trade-offs — where leverage is high, where it's thin
 
 ### 3. Present and compare
 

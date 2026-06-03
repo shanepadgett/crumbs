@@ -15,11 +15,13 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 ## 3. Requirement Map
 
 1. **Requirement:** `The system shall provide /qna-ledger as the browsing and editing view for ordinary QnA items.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna.ts` registers only `/qna`; `extensions/qna/command.ts` owns only discovery/loop start; there is no ledger-browser command.
    - `Planned implementation move:` Add a dedicated `/qna-ledger` command and overlay command loop, registered from `extensions/qna.ts`, that operates only on the branch-local ordinary ledger.
 
-2. **Requirement:** `/qna` and `/qna-ledger` shall not display or manage interview sessions.`
+1. **Requirement:** `/qna` and `/qna-ledger` shall not display or manage interview sessions.\`
+
    - `Status:` `partially satisfied`
    - `Current files/functions/types that relate:` `extensions/qna/command.ts` already blocks `/qna` in attached interview chats via `getAttachedInterviewSessionId`; no `/qna-ledger` path exists yet.
    - `Planned implementation move:` Keep `/qna-ledger` scoped strictly to `qna.state` records and avoid any interview reads or UI beyond the existing chat-attachment guard. No interview selector, session list, or attachment mutation should be introduced.
@@ -31,51 +33,60 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 - `Planned implementation move:` Reuse the existing attachment guard seam in `extensions/qna/interview-attachment.ts` from the new `/qna-ledger` command, matching `/qna` warning behavior and avoiding any interview-specific branch mutations.
 
 1. **Requirement:** `When the user runs /qna-ledger, the system shall open a simple ordinary-QnA ledger overlay for the current branch.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/shared/option-picker.ts` and `extensions/question-runtime/form-shell.ts` show current TUI modal patterns; there is no ledger overlay.
    - `Planned implementation move:` Add a `ctx.ui.custom(...)`-driven overlay file that renders a filterable list, record details, and action hints, then have the command loop reopen it after edit/send/export actions.
 
-2. **Requirement:** `The /qna-ledger overlay shall prioritize browsing and filtering ordinary QnA questions rather than cross-session planning.`
+1. **Requirement:** `The /qna-ledger overlay shall prioritize browsing and filtering ordinary QnA questions rather than cross-session planning.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/types.ts` already exposes per-record authoritative state and send metadata; no browsing view exists.
    - `Planned implementation move:` Keep the overlay list-centric and branch-local: records, state, pending-send markers, and per-record details only. Do not introduce repo-wide or planning-oriented views.
 
-3. **Requirement:** `The /qna-ledger overlay shall expose the authoritative ordinary-QnA record state for filtering and editing, including transcript-closed states such as answered_in_chat and superseded.`
+1. **Requirement:** `The /qna-ledger overlay shall expose the authoritative ordinary-QnA record state for filtering and editing, including transcript-closed states such as answered_in_chat and superseded.`
+
    - `Status:` `partially satisfied`
    - `Current files/functions/types that relate:` `extensions/qna/types.ts:QnaLedgerQuestionRecord` already models `open`, `answered`, `skipped`, `needs_clarification`, `answered_in_chat`, and `superseded`; `extensions/qna/branch-state.ts` persists them.
    - `Planned implementation move:` Add ledger filter/view types plus render helpers that treat the tagged union as the source of truth and surface transcript-closed records in the overlay and editor entrypoints.
 
-4. **Requirement:** `The /qna-ledger overlay shall allow filtering by question state.`
+1. **Requirement:** `The /qna-ledger overlay shall allow filtering by question state.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` no existing filter type or view helper.
    - `Planned implementation move:` Add a `QnaLedgerFilter` union (`all` + each authoritative state), filtered list selectors, and overlay controls to cycle/select filters without touching storage.
 
-5. **Requirement:** `The /qna-ledger overlay shall allow answering, skipping, marking needs_clarification, reopening, and editing previously closed ordinary QnA questions.`
+1. **Requirement:** `The /qna-ledger overlay shall allow answering, skipping, marking needs_clarification, reopening, and editing previously closed ordinary QnA questions.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/tool.ts` and `extensions/qna/runtime-submit.ts` can submit structured outcomes only for currently open loop questions; closed records cannot be edited; reopen has no ledger-level mutation helper.
    - `Planned implementation move:` Reuse the shared runtime form shell for single-record edit/answer/skip/needs-clarification actions, add a pure ledger-record mutation layer for direct reopen, and synthesize draft snapshots from existing ledger state so closed records are editable without broad runtime changes.
 
-6. **Requirement:** `When the user edits an ordinary QnA question from /qna-ledger, the system shall update the branch-local ledger immediately.`
+1. **Requirement:** `When the user edits an ordinary QnA question from /qna-ledger, the system shall update the branch-local ledger immediately.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/branch-state.ts:replaceSnapshot` persists snapshots immediately; `extensions/qna/runtime-submit.ts` can mutate open records but not arbitrary ledger records.
    - `Planned implementation move:` After every ledger edit action, persist the mutated snapshot through `QnaBranchStateStore.replaceSnapshot()` before returning to the overlay. Single-record edit helpers should bump `sendState.localRevision` only when the authoritative record changed.
 
-7. **Requirement:** `The /qna-ledger overlay shall provide a manual Send updates action.`
+1. **Requirement:** `The /qna-ledger overlay shall provide a manual Send updates action.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/types.ts` already stores send revisions; no send action or message schema exists.
    - `Planned implementation move:` Add overlay action wiring plus a pure send module that collects unsent records, builds one structured payload, emits it as a hidden steer message, and then marks those revisions as sent.
 
-8. **Requirement:** `When /qna-ledger sends updates, the system shall batch all unsent changed ordinary QnA items into one structured payload.`
+1. **Requirement:** `When /qna-ledger sends updates, the system shall batch all unsent changed ordinary QnA items into one structured payload.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/qna/reconcile.ts` and `extensions/qna/runtime-submit.ts` bump `sendState.localRevision`; no batching helper exists.
    - `Planned implementation move:` Introduce a dedicated batch payload type and builder that serializes every record with `localRevision > lastSentRevision` into one `ordinary_qna_ledger_updates` message.
 
-9. **Requirement:** `When /qna-ledger sends updates, the system shall send only items changed since the last send.`
+1. **Requirement:** `When /qna-ledger sends updates, the system shall send only items changed since the last send.`
+
    - `Status:` `partially satisfied`
    - `Current files/functions/types that relate:` `extensions/qna/types.ts:QnaLedgerSendState` tracks `localRevision` and `lastSentRevision`, but nothing consumes them.
    - `Planned implementation move:` Centralize delta detection in a pure send helper, then update `lastSentRevision` and `lastSentAt` only for sent records after the batch message is successfully emitted.
 
-10. **Requirement:** `When /qna-ledger sends updates and any item is needs_clarification, the system shall reactivate the loop-scoped qna tool.`
+1. **Requirement:** `When /qna-ledger sends updates and any item is needs_clarification, the system shall reactivate the loop-scoped qna tool.`
 
 - `Status:` `needs implementation`
 - `Current files/functions/types that relate:` `extensions/qna/loop-controller.ts:startLoop` can activate the scoped tool, but only `/qna` calls it and the controller currently assumes the loop is a manual `/qna` run.
@@ -88,11 +99,13 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 - `Planned implementation move:` Keep `tool.ts` and `runtime-submit.ts` open-only, have ledger-send loop metadata carry `source` plus `open` reviewable ids only, and use source-specific prompt copy to tell the agent that clarification follow-up may happen in chat while later authoritative edits return through `/qna-ledger`.
 
 1. **Requirement:** `The /qna-ledger overlay shall provide an export action.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` no exporter or file-writing path exists in the QnA extension.
    - `Planned implementation move:` Add overlay action wiring plus a Markdown export module that formats the full ordinary ledger and writes it to a timestamped file under repo-root `docs/qna/`.
 
-2. **Requirement:** `When the user exports ordinary QnA state, the system shall write a timestamped Markdown snapshot under docs/qna/.`
+1. **Requirement:** `When the user exports ordinary QnA state, the system shall write a timestamped Markdown snapshot under docs/qna/.`
+
    - `Status:` `needs implementation`
    - `Current files/functions/types that relate:` `extensions/question-runtime/request-paths.ts:resolveProjectRoot` already provides a reusable repo-root resolver; no QnA export writer exists.
    - `Planned implementation move:` Reuse repo-root resolution, ensure `docs/qna/` exists, generate a sortable UTC timestamped filename, and write deterministic Markdown content for all ordinary ledger records.
@@ -102,53 +115,65 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 ## Relevant files and current roles
 
 - `extensions/qna.ts`
+
   - Extension entrypoint.
   - Constructs one `QnaLoopController`.
   - Registers only `/qna`, the loop-scoped `qna` tool, and loop lifecycle hooks.
 
 - `extensions/qna/command.ts`
+
   - Owns `/qna` command orchestration.
   - Hydrates branch-local ledger state, scans transcript delta, runs reconciliation, persists the next snapshot, and starts a loop only when unresolved open questions remain.
 
 - `extensions/qna/types.ts`
+
   - Defines the authoritative branch snapshot, per-record authoritative states, send metadata, transcript reconciliation contracts, and current `qna` tool types.
 
 - `extensions/qna/branch-state.ts`
+
   - Hydrates the latest valid `qna.state` snapshot from the current branch.
   - Overlays later `question-runtime.control` draft snapshots into `runtimeDraftsByQuestionId`.
   - Persists replacement snapshots with `pi.appendEntry(...)`.
 
 - `extensions/qna/reconcile.ts`
+
   - Owns transcript-owned state transitions.
   - Creates new open records, silently closes open records as `answered_in_chat`, supersedes old records, and bumps `localRevision` when authoritative record state changes.
 
 - `extensions/qna/runtime-submit.ts`
+
   - Owns submit-result application for `/qna` loop batches.
   - Persists draft snapshots and maps structured outcomes into authoritative `answered` / `skipped` / `needs_clarification` states.
   - Assumes records are open and batched from an active `/qna` loop.
 
 - `extensions/qna/tool.ts`
+
   - Registers the loop-scoped agent-facing `qna` tool.
   - Builds a shared runtime request for open questions only.
   - Rehydrates latest branch state on each call, launches the shared form shell, and applies submit or cancel results.
 
 - `extensions/qna/loop-controller.ts`
+
   - Activates and deactivates the `qna` tool around an ephemeral loop.
   - Sends a hidden kickoff steer message and injects loop guidance into the system prompt.
   - Current loop metadata is shaped around manual `/qna` runs and a list of open questions.
 
 - `extensions/qna/loop-control-message.ts`
+
   - Defines the hidden kickoff custom message used to tag the current loop.
 
 - `extensions/question-runtime/form-shell.ts`
+
   - Already provides the interactive structured form modal.
   - Supports answer editing, skip, needs clarification, question notes, and reopen inside the form.
 
 - `extensions/question-runtime/form-state.ts`
+
   - Explains how draft snapshots become `question_outcomes` or `no_user_response`.
   - Important current limitation for ledger editing: there is no explicit `open` submit outcome, so a pure “reopen with no answer” authoritative mutation cannot be inferred from submit result alone.
 
 - `extensions/question-runtime/request-paths.ts`
+
   - Already exports `resolveProjectRoot(...)`, which can be reused for repo-root-relative Markdown export.
 
 ## Existing runtime flow
@@ -156,31 +181,33 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 ### `/qna`
 
 1. User runs `/qna`.
-2. `runQnaCommand()` hydrates `qna.state` from current branch entries.
-3. Transcript scan reads only assistant/user messages since `durableBoundaryEntryId`.
-4. Model reconciliation returns `updates` + `newQuestions`.
-5. `applyQnaReconciliation()` mutates authoritative records and bumps `localRevision` for changed records.
-6. Updated snapshot is persisted.
-7. If any open questions remain, `QnaLoopController.startLoop()` activates `qna` and sends a kickoff steer message.
+1. `runQnaCommand()` hydrates `qna.state` from current branch entries.
+1. Transcript scan reads only assistant/user messages since `durableBoundaryEntryId`.
+1. Model reconciliation returns `updates` + `newQuestions`.
+1. `applyQnaReconciliation()` mutates authoritative records and bumps `localRevision` for changed records.
+1. Updated snapshot is persisted.
+1. If any open questions remain, `QnaLoopController.startLoop()` activates `qna` and sends a kickoff steer message.
 
 ### `qna` tool batch
 
 1. Tool call rehydrates latest `qna.state`.
-2. Tool validates that requested question ids are currently open.
-3. Tool compiles one `AuthorizedQuestionRequest` using freeform questions and any stored draft snapshots.
-4. Shared runtime shell returns cancel or structured submit.
-5. `applyQnaDraftSnapshot()` or `applyQnaStructuredSubmitResult()` mutates branch-local state.
-6. Tool settles the loop only for `no_user_response`, explicit `complete`, or when no open records remain.
+1. Tool validates that requested question ids are currently open.
+1. Tool compiles one `AuthorizedQuestionRequest` using freeform questions and any stored draft snapshots.
+1. Shared runtime shell returns cancel or structured submit.
+1. `applyQnaDraftSnapshot()` or `applyQnaStructuredSubmitResult()` mutates branch-local state.
+1. Tool settles the loop only for `no_user_response`, explicit `complete`, or when no open records remain.
 
 ## Current data/model shapes
 
 - `QnaBranchStateSnapshot`
+
   - `durableBoundaryEntryId?: string`
   - `nextQuestionSequence: number`
   - `questions: QnaLedgerQuestionRecord[]`
   - `runtimeDraftsByQuestionId: Record<string, QuestionRuntimeQuestionDraft>`
 
 - `QnaLedgerQuestionRecord`
+
   - Shared base: `questionId`, `questionText`, `questionFingerprint`, `sendState`
   - Authoritative states:
     - `open`
@@ -191,6 +218,7 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
     - `superseded { supersededByQuestionId }`
 
 - `QnaLedgerSendState`
+
   - `localRevision`
   - `lastSentRevision`
   - optional `lastSentAt`
@@ -227,44 +255,52 @@ The clean implementation is to keep task-04/task-05 storage and loop seams intac
 ## Proposed modules and responsibilities
 
 - `extensions/qna/ledger-command.ts`
+
   - Registers `/qna-ledger`.
   - Owns the command loop that repeatedly shows the overlay, dispatches edit/send/export actions, persists results, and notifies the user.
 
 - `extensions/qna/ledger-overlay.ts`
+
   - Pure TUI interaction surface for list browsing, filter selection, record selection, and action dispatch.
   - No persistence or file I/O.
 
 - `extensions/qna/runtime-request.ts`
+
   - Shared builder for converting ledger records plus stored drafts into `AuthorizedQuestionRequest` payloads.
   - Used by both `tool.ts` and `/qna-ledger` single-record editing.
 
 - `extensions/qna/ledger-records.ts`
+
   - Pure single-record ledger mutations for overlay editing and reopen.
   - Owns “edit current record immediately” semantics and revision bumps for non-transcript edits.
 
 - `extensions/qna/send.ts`
+
   - Pure delta detection, batch payload construction, `needs_clarification` detection, and send-state advancement.
 
 - `extensions/qna/markdown-export.ts`
+
   - Deterministic Markdown formatter and repo-root file writer.
 
 - `extensions/qna/loop-controller.ts` + `extensions/qna/loop-control-message.ts`
+
   - Slightly generalized to support a ledger-send loop source and reviewable-question list, without breaking current `/qna` behavior.
 
 - `extensions/qna/tool.ts`
+
   - Reuses the shared runtime-request builder and loop-controller eligibility metadata instead of reimplementing open-only request assembly.
 
 ## Data flow from command entry to final persisted or emitted result
 
 1. User runs `/qna-ledger`.
-2. Command hydrates `qna.state` from current branch.
-3. Overlay renders filtered records using authoritative states.
-4. User picks an action:
+1. Command hydrates `qna.state` from current branch.
+1. Overlay renders filtered records using authoritative states.
+1. User picks an action:
    - `edit` → command builds one shared runtime request for the selected record, opens form shell, applies the resulting single-record mutation, persists immediately, then reopens overlay.
    - `reopen` → command applies a direct ledger mutation to `state: "open"`, persists immediately, then reopens overlay.
    - `send_updates` → command builds one structured delta payload from records where `localRevision > lastSentRevision`; when no item needs clarification, it sends only the hidden ledger-batch steer message. When any item needs clarification, it first emits the hidden ledger-batch steer message with `triggerTurn: false`, then starts or refreshes the ledger-send loop so the kickoff steer message is the single turn-triggering event. After successful emission, it advances send metadata, persists, then reopens overlay.
    - `export_markdown` → command formats and writes the snapshot under `docs/qna/`, notifies, then reopens overlay.
-5. User exits overlay.
+1. User exits overlay.
 
 ## Reusable abstractions to introduce or strengthen
 
@@ -334,10 +370,14 @@ showQnaLedgerOverlay()
 ### File Plan — `extensions/qna.ts`
 
 - `Action:` `modify`
+
 - `Why:` The extension entrypoint must register the new `/qna-ledger` command alongside existing `/qna` and `qna` loop wiring.
+
 - `Responsibilities:`
+
   - Keep one shared `QnaLoopController` instance.
   - Register both `/qna` and `/qna-ledger` with that controller.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -345,16 +385,22 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` Import and call `registerQnaLedgerCommand(pi, { loopController, getAttachedInterviewSessionId: getAttachedInterviewSessionIdFromBranch })`.
+
 - `Dependencies:` `extensions/qna/command.ts`, `extensions/qna/ledger-command.ts`, `extensions/qna/interview-attachment.ts`, `extensions/qna/tool.ts`, `extensions/qna/loop-controller.ts`
+
 - `Risks / notes:` Keep the top-level documentation header accurate; do not disturb existing `/qna` registration order or lifecycle hookup.
 
 ### File Plan — `extensions/qna/types.ts`
 
 - `Action:` `modify`
+
 - `Why:` Shared ledger browser, send batching, and loop-source metadata need explicit product-owned types.
+
 - `Responsibilities:`
+
   - Preserve the authoritative ledger union.
   - Add shared filter, loop-source, reviewable-question, and send-batch contracts.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -389,16 +435,22 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` Prefer additive type changes. Keep current `QnaToolInput`/`QnaToolResultDetails` stable unless loop-controller generalization requires the question-reference type to widen.
+
 - `Dependencies:` `extensions/qna/loop-controller.ts`, `extensions/qna/tool.ts`, `extensions/qna/send.ts`, `extensions/qna/ledger-overlay.ts`
+
 - `Risks / notes:` Avoid renaming existing record-state fields unless every current test and serializer path is updated together.
 
 ### File Plan — `extensions/qna/loop-control-message.ts`
 
 - `Action:` `modify`
+
 - `Why:` Ledger-triggered reactivation needs source-aware kickoff details so prompt shaping and loop filtering stay explicit.
+
 - `Responsibilities:`
+
   - Parse and build hidden loop kickoff messages.
   - Carry loop source and question ids safely.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -412,17 +464,23 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` Replace `openQuestionIds` with a more general review-question list and validate the new `source` field.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/qna/loop-controller.ts`
+
 - `Risks / notes:` Keep backward-compatible parsing unnecessary; this is hidden ephemeral control data for the current branch/runtime only.
 
 ### File Plan — `extensions/qna/loop-controller.ts`
 
 - `Action:` `modify`
+
 - `Why:` Send-from-ledger clarification follow-up must reactivate the existing scoped `qna` tool without inventing a second activation path.
+
 - `Responsibilities:`
+
   - Track active loop source and reviewable question ids.
   - Start loops for both `/qna` and `/qna-ledger` send reactivation.
   - Keep tool activation/deactivation centralized.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -439,19 +497,26 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Store `source` and `reviewQuestions` instead of an open-only list.
   - Adjust prompt copy so manual `/qna` still says manual loop while ledger-send copy explains that clarification follow-up may continue in ordinary chat and the structured `qna` tool still applies only to currently `open` review questions.
   - Expose current allowed ids so `tool.ts` can validate against the active loop scope.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/qna/loop-control-message.ts`
+
 - `Risks / notes:` Do not weaken current “qna only while active loop exists” behavior. Session reset and restore behavior must remain intact.
 
 ### File Plan — `extensions/qna/runtime-request.ts`
 
 - `Action:` `add`
+
 - `Why:` Both the current `qna` tool and the new ledger editor need the same ledger-to-runtime request compilation and draft restoration logic.
+
 - `Responsibilities:`
+
   - Convert ledger records into one or more `AuthorizedQuestionRequest` questions.
   - Reconstruct the best editable `QuestionRuntimeQuestionDraft` from branch-local runtime drafts and authoritative record state.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -468,6 +533,7 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Prefer `runtimeDraftsByQuestionId[questionId]` when present.
   - Otherwise synthesize a draft from `submittedOutcome` for `answered` / `skipped` / `needs_clarification`.
   - Fall back to an empty open freeform draft for `open`, `answered_in_chat`, and `superseded`.
@@ -477,18 +543,24 @@ showQnaLedgerOverlay()
     - `needs_clarification` → `closureState: "needs_clarification"` with preserved hidden answer draft when available, otherwise an empty answer draft, and `questionNote` from `submittedOutcome.note`.
     - `answered_in_chat` / `superseded` → empty open draft so the user can author a replacement authoritative outcome from scratch.
   - Reuse the same freeform prompt/justification text shape currently embedded in `tool.ts`.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` Current ordinary-QnA records are freeform in practice; if future records are not freeform, synthesis should degrade safely rather than invent invalid answer drafts.
 
 ### File Plan — `extensions/qna/tool.ts`
 
 - `Action:` `modify`
+
 - `Why:` The loop-scoped tool should stop owning bespoke request-building logic and should respect loop-controller eligibility metadata.
+
 - `Responsibilities:`
+
   - Preserve the current `qna` tool contract.
   - Reuse shared runtime-request building.
   - Validate requested question ids against the active loop scope instead of a locally recomputed open-only set.
   - Preserve the existing open-only structured-submit semantics even during ledger-send follow-up loops.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -501,21 +573,28 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Replace local `buildQuestionRuntimeRequest()` with the new shared builder.
   - Ensure `question_batch` accepts only ids allowed by the active loop controller.
   - Keep current `/qna` semantics by having `/qna` start loops with open-only review questions.
   - For `source: "qna_ledger_send"`, continue rejecting any non-`open` id; clarification follow-up is handled in chat and later `/qna-ledger` edits, not through widened `qna` submit behavior.
+
 - `Dependencies:` `extensions/qna/runtime-request.ts`, `extensions/qna/loop-controller.ts`, `extensions/qna/runtime-submit.ts`
+
 - `Risks / notes:` Do not accidentally make `qna` available outside an active loop or allow stale ids after branch state changed.
 
 ### File Plan — `extensions/qna/ledger-records.ts`
 
 - `Action:` `add`
+
 - `Why:` Ledger-overlay editing needs pure single-record mutation rules distinct from transcript reconciliation and loop batch submit.
+
 - `Responsibilities:`
+
   - Reopen a closed record to `open`.
   - Apply a single-record shared-runtime submit result to any editable ledger record.
   - Keep draft persistence and revision bumps consistent.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -537,23 +616,30 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Persist returned draft snapshots for the selected question on both cancel and submit paths; reject snapshots that contain ids other than the selected question.
   - Accept at most one submitted outcome for the selected question and map it into authoritative state regardless of prior ledger state.
   - Make the transition rules explicit: any submit may land in `answered`, `skipped`, or `needs_clarification`; direct overlay `reopen` is the only path that lands in authoritative `open`.
   - Bump `sendState.localRevision` only when the authoritative state or stored submitted outcome actually changed; draft-only persistence on cancel must not mark the record as sent or changed.
   - Treat explicit overlay `reopen` as the authoritative path for moving closed records back to `open`.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` Avoid duplicating batch semantics already covered by `runtime-submit.ts`; this file should stay focused on one-record ledger edits.
 
 ### File Plan — `extensions/qna/send.ts`
 
 - `Action:` `add`
+
 - `Why:` Send batching and revision advancement should be pure, testable, and reusable instead of embedded in the command/UI layer.
+
 - `Responsibilities:`
+
   - Detect unsent changed records.
   - Build the single structured batch payload.
   - Mark records as sent after emission.
   - Identify clarification-triggered follow-up.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -581,20 +667,27 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Select only `localRevision > lastSentRevision` records.
   - Serialize authoritative record fields needed by the agent: question id/text, state, submitted outcome when present, and `supersededByQuestionId` when present.
   - Keep message transport deterministic: the send helper returns only the hidden message payload; `ledger-command.ts` owns whether it is emitted with `triggerTurn: false` or paired with a loop kickoff message.
   - Advance `lastSentRevision` to `localRevision` and stamp `lastSentAt` for sent records.
+
 - `Dependencies:` `extensions/qna/types.ts`
+
 - `Risks / notes:` If `pi.sendMessage(...)` throws, the caller must not persist marked-as-sent state.
 
 ### File Plan — `extensions/qna/markdown-export.ts`
 
 - `Action:` `add`
+
 - `Why:` Export formatting and file-system writing should stay isolated from overlay/command logic.
+
 - `Responsibilities:`
+
   - Produce deterministic Markdown for the full ordinary ledger.
   - Resolve repo root, ensure `docs/qna/` exists, and write the snapshot file.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -617,21 +710,28 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Resolve git top-level with `resolveProjectRoot(...)`.
   - Create `docs/qna/` if missing.
   - Generate a sortable UTC timestamped filename such as `qna-ledger-2026-04-11T15-02-09Z.md`.
   - Render deterministic Markdown in this fixed order: document title, exported-at metadata, one summary table of counts by state, then grouped sections for `open`, `needs_clarification`, `answered`, `skipped`, `answered_in_chat`, and `superseded`, with each record showing `questionId`, `questionText`, send revision info, and any `submittedOutcome` / `supersededByQuestionId` details.
+
 - `Dependencies:` `node:fs/promises`, `node:path`, `extensions/qna/types.ts`, `extensions/question-runtime/request-paths.ts`
+
 - `Risks / notes:` Keep output deterministic for tests by allowing injected `now`.
 
 ### File Plan — `extensions/qna/ledger-overlay.ts`
 
 - `Action:` `add`
+
 - `Why:` The task needs a dedicated branch-local overlay for browsing/filtering and dispatching actions.
+
 - `Responsibilities:`
+
   - Render the filterable ledger list and selected-record detail panel.
   - Return high-level actions to the command loop.
   - Preserve view-only state such as current filter and selected record between iterations.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -657,24 +757,31 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Render state filter options (`all`, `open`, `answered`, `skipped`, `needs_clarification`, `answered_in_chat`, `superseded`).
   - Show pending-send marker when `localRevision > lastSentRevision`.
   - Expose keyboard actions for edit, reopen, send, export, and close.
   - Disable `reopen` when the selected record is already `open`.
   - When the current selection disappears because of a filter change or edit, fall back to the next visible record or clear selection deterministically.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/shared/option-picker.ts` as a style reference only
+
 - `Risks / notes:` Keep this file UI-only. No `pi.appendEntry`, no file writes, no direct loop activation.
 
 ### File Plan — `extensions/qna/ledger-command.ts`
 
 - `Action:` `add`
+
 - `Why:` `/qna-ledger` needs a command orchestrator separate from transcript reconciliation.
+
 - `Responsibilities:`
+
   - Register the command.
   - Hydrate latest branch-local ledger state.
   - Run the overlay/edit/send/export command loop.
   - Persist every mutation immediately.
   - Reuse the existing interview chat-attachment guard.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -698,6 +805,7 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:`
+
   - Require interactive UI mode.
   - Reuse `getAttachedInterviewSessionIdFromBranch(...)` and block `/qna-ledger` in interview-attached chats with the same warning pattern as `/qna`.
   - Rehydrate store before each action dispatch so overlay operations cannot act on stale branch state.
@@ -705,16 +813,22 @@ showQnaLedgerOverlay()
   - On `reopen`, call `reopenQnaLedgerQuestion(...)`, persist, notify, and reopen overlay.
   - On `send_updates`, no-op with notification when there is no delta; otherwise build the batch, emit the hidden ledger-send message first, and when clarification is present follow it by `loopController.startLoop({ source: "qna_ledger_send", ... })` so the kickoff message is the only turn-triggering event. Persist `markQnaLedgerItemsSent(...)` only after both emissions succeed, then notify and reopen overlay.
   - On `export_markdown`, call `writeQnaLedgerMarkdownSnapshot(...)`, notify path, and reopen overlay.
+
 - `Dependencies:` `extensions/qna/branch-state.ts`, `extensions/qna/interview-attachment.ts`, `extensions/qna/ledger-overlay.ts`, `extensions/qna/runtime-request.ts`, `extensions/qna/ledger-records.ts`, `extensions/qna/send.ts`, `extensions/qna/markdown-export.ts`, `extensions/qna/loop-controller.ts`, `extensions/question-runtime/form-shell.ts`, `extensions/question-runtime/request-validator.ts`
+
 - `Risks / notes:` Remember the repo rule: extension changes require a reload before manual testing.
 
 ### File Plan — `extensions/qna/command.ts`
 
 - `Action:` `modify`
+
 - `Why:` `/qna` should continue to use the generalized loop-controller API after task-06 broadens loop metadata.
+
 - `Responsibilities:`
+
   - Preserve current `/qna` transcript-reconciliation behavior.
   - Start loops through the widened controller contract.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -725,16 +839,22 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` Replace open-question `startLoop(...)` calls with `source: "manual_qna"` and review-question references shaped for the widened controller type.
+
 - `Dependencies:` `extensions/qna/loop-controller.ts`, `extensions/qna/reconcile.ts`
+
 - `Risks / notes:` Do not change transcript scanning, model reconciliation, or interview guard semantics.
 
 ### File Plan — `extensions/qna/runtime-submit.ts`
 
 - `Action:` `modify`
+
 - `Why:` Task-06 adds another product-owned edit path, so shared mutation helpers should be extracted rather than duplicated.
+
 - `Responsibilities:`
+
   - Keep current batch submit behavior intact.
   - Share any record-transition helpers needed by `ledger-records.ts`.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -747,17 +867,24 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` Extract any reusable revision-bump or outcome-to-record mapping helpers that would otherwise be copied into `ledger-records.ts`.
+
 - `Key logic to add or change:` Extract named helpers such as `applySubmittedOutcomeToLedgerRecord(...)` and `didLedgerRecordAuthoritativeStateChange(...)` so both batch `/qna` submit and single-record ledger edit reuse the same outcome-mapping rules.
+
 - `Dependencies:` `extensions/qna/types.ts`, `extensions/question-runtime/types.ts`
+
 - `Risks / notes:` Keep task-05 behavior unchanged for untouched open questions and `no_user_response` handling.
 
 ### File Plan — `extensions/qna/branch-state.ts`
 
 - `Action:` `do not modify unless implementation proves a concrete parser or clone gap`
+
 - `Why:` The existing store already persists authoritative records plus runtime drafts. Task-06 should preserve it as the sole persistence seam rather than churn it speculatively.
+
 - `Responsibilities:`
+
   - Remain the only durable branch-state persistence seam.
   - Continue safe parse/clone behavior for all ledger states.
+
 - `Planned exports / signatures:`
 
   ```ts
@@ -770,7 +897,9 @@ showQnaLedgerOverlay()
   ```
 
 - `Key logic to add or change:` None planned. Only touch this file if additive type changes truly require parse/clone alignment during implementation.
+
 - `Dependencies:` `extensions/qna/types.ts`
+
 - `Risks / notes:` Do not weaken snapshot validation or branch-hydration behavior. If no concrete need appears, leave this file untouched.
 
 ### File Plan — `extensions/qna/loop-control-message.test.ts`
@@ -1047,46 +1176,55 @@ showQnaLedgerOverlay()
 ## 8. Stepwise Execution Plan
 
 1. **Add shared type contracts first.**
+
    - Update `extensions/qna/types.ts`.
    - Update `extensions/qna/loop-control-message.ts` and `extensions/qna/loop-control-message.test.ts` to carry source-aware kickoff details.
    - Safe to do before any UI or command work.
 
-2. **Generalize loop lifecycle with tests.**
+1. **Generalize loop lifecycle with tests.**
+
    - Update `extensions/qna/loop-controller.ts` and `extensions/qna/loop-controller.test.ts`.
    - Update `extensions/qna/command.ts` to call the widened `startLoop(...)` contract.
    - Checkpoint: existing `/qna` loop tests should still conceptually pass after API adaptation.
 
-3. **Extract shared runtime-request building.**
+1. **Extract shared runtime-request building.**
+
    - Add `extensions/qna/runtime-request.ts` and `extensions/qna/runtime-request.test.ts`.
    - Refactor `extensions/qna/tool.ts` + `extensions/qna/tool.test.ts` to use the new builder.
    - This step is mostly independent from send/export UI work once the type changes are in.
 
-4. **Add pure ledger edit helpers.**
+1. **Add pure ledger edit helpers.**
+
    - Add `extensions/qna/ledger-records.ts` and `extensions/qna/ledger-records.test.ts`.
    - If needed, extract small reusable transition helpers from `extensions/qna/runtime-submit.ts`.
    - Checkpoint: verify revision-bump rules and reopen behavior in unit tests before any command wiring.
 
-5. **Add pure send/export helpers.**
+1. **Add pure send/export helpers.**
+
    - Add `extensions/qna/send.ts` + `extensions/qna/send.test.ts`.
    - Add `extensions/qna/markdown-export.ts` + `extensions/qna/markdown-export.test.ts`.
    - Lock the send-message ordering here: ledger batch first, kickoff second only when clarification follow-up should trigger a turn.
    - These two can be done in parallel after shared types are stable.
 
-6. **Build the overlay UI.**
+1. **Build the overlay UI.**
+
    - Add `extensions/qna/ledger-overlay.ts`.
    - Keep it action-returning only; do not mix persistence or file writes into the overlay.
    - This can proceed in parallel with step 5 once filter/action types are stable.
 
-7. **Wire the `/qna-ledger` command.**
+1. **Wire the `/qna-ledger` command.**
+
    - Add `extensions/qna/ledger-command.ts` and `extensions/qna/ledger-command.test.ts`.
    - Integrate overlay, the interview-attachment guard, shared runtime request building, single-record edit application, send batching, loop reactivation, and export writing.
    - Checkpoint: command tests should cover stale-id rejection, no-op send, clarification-triggered send ordering, and export path notification.
 
-8. **Register the new command.**
+1. **Register the new command.**
+
    - Update `extensions/qna.ts` to register `/qna-ledger`.
    - This is quick and should happen after the command file exists.
 
-9. **Run focused tests and manual verification.**
+1. **Run focused tests and manual verification.**
+
    - Run `bun test extensions/qna/*.test.ts`.
    - Reload the extension before manual UI testing because `extensions/` changed.
    - Manual checkpoints:
@@ -1101,6 +1239,7 @@ showQnaLedgerOverlay()
 ## Unit / integration / manual verification needed
 
 - **Unit**
+
   - `runtime-request.test.ts`: draft reconstruction and request validation.
   - `ledger-records.test.ts`: reopen and single-record edit semantics.
   - `send.test.ts`: unsent-delta selection, payload shape, send-state advancement.
@@ -1108,15 +1247,17 @@ showQnaLedgerOverlay()
   - Updated `loop-control-message.test.ts`, `loop-controller.test.ts`, and `tool.test.ts`.
 
 - **Command integration**
+
   - `ledger-command.test.ts` should verify orchestration using mocked overlay actions, mocked form-shell results, mocked clock/export helpers, the interview-attachment guard, and clarification-send message ordering.
 
 - **Manual**
+
   1. Run `/qna-ledger` on a branch with mixed-state records and confirm all states, including `answered_in_chat` and `superseded`, are visible under filters.
-  2. Edit an `answered` or `superseded` item, submit a new authoritative state, and confirm the branch-local ledger updates immediately.
-  3. Reopen a previously closed item and confirm it becomes `open` and is marked unsent.
-  4. Trigger `Send updates` when two or more records have pending revisions and confirm exactly one structured hidden payload is sent.
-  5. Trigger `Send updates` with at least one `needs_clarification` item and confirm the ledger batch is emitted before the kickoff, the `qna` tool becomes active again for follow-up, and structured `qna` review remains limited to currently `open` items.
-  6. Trigger export and confirm a new timestamped Markdown file lands under `docs/qna/`.
+  1. Edit an `answered` or `superseded` item, submit a new authoritative state, and confirm the branch-local ledger updates immediately.
+  1. Reopen a previously closed item and confirm it becomes `open` and is marked unsent.
+  1. Trigger `Send updates` when two or more records have pending revisions and confirm exactly one structured hidden payload is sent.
+  1. Trigger `Send updates` with at least one `needs_clarification` item and confirm the ledger batch is emitted before the kickoff, the `qna` tool becomes active again for follow-up, and structured `qna` review remains limited to currently `open` items.
+  1. Trigger export and confirm a new timestamped Markdown file lands under `docs/qna/`.
 
 ## Expected user-visible behavior
 

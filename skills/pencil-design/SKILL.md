@@ -3,7 +3,7 @@ name: pencil-design
 description: Design UIs in Pencil (.pen files) and generate production code from them. Use when working with .pen files, designing screens or components in Pencil, or generating code from Pencil designs. Triggers on tasks involving Pencil, .pen files, design-to-code workflows, or UI design with the Pencil MCP tools.
 metadata:
   author: Nyasha Chiroro
-  version: "1.0"
+  version: '1.0'
 ---
 
 # Pencil Design Skill
@@ -26,10 +26,10 @@ Design production-quality UIs in Pencil, generate clean code from them. Enforces
 Before inserting any element:
 
 1. `pencil_batch_get` with `patterns: [{ reusable: true }]` — list all reusable components
-2. Search results for matching component (button, card, input, nav, etc.)
-3. Match found -> insert as `ref`: `I(parent, { type: "ref", ref: "<componentId>" })`
-4. Customize instance via `U(instanceId + "/childId", { ... })`
-5. Only create from scratch if no suitable component exists
+1. Search results for matching component (button, card, input, nav, etc.)
+1. Match found -> insert as `ref`: `I(parent, { type: "ref", ref: "<componentId>" })`
+1. Customize instance via `U(instanceId + "/childId", { ... })`
+1. Only create from scratch if no suitable component exists
 
 See [references/design-system-components.md](references/design-system-components.md).
 
@@ -38,8 +38,8 @@ See [references/design-system-components.md](references/design-system-components
 **NEVER hardcode colors, radius, spacing, typography when variables exist.**
 
 1. `pencil_get_variables` — read all design tokens
-2. Map values to variables (e.g., `primary` not `#3b82f6`, `radius-md` not `6`)
-3. Apply variable references, not raw values
+1. Map values to variables (e.g., `primary` not `#3b82f6`, `radius-md` not `6`)
+1. Apply variable references, not raw values
 
 See [references/variables-and-tokens.md](references/variables-and-tokens.md).
 
@@ -48,10 +48,10 @@ See [references/variables-and-tokens.md](references/variables-and-tokens.md).
 **NEVER allow text/children to overflow parent or artboard.**
 
 1. Set text wrapping/truncation appropriately
-2. Constrain widths to parent bounds (mobile: 375px)
-3. Use `"fill_container"` for text width inside auto-layout frames
-4. After inserting: `pencil_snapshot_layout` with `problemsOnly: true` to detect clipping
-5. Fix issues before proceeding
+1. Constrain widths to parent bounds (mobile: 375px)
+1. Use `"fill_container"` for text width inside auto-layout frames
+1. After inserting: `pencil_snapshot_layout` with `problemsOnly: true` to detect clipping
+1. Fix issues before proceeding
 
 See [references/layout-and-text-overflow.md](references/layout-and-text-overflow.md).
 
@@ -62,10 +62,10 @@ See [references/layout-and-text-overflow.md](references/layout-and-text-overflow
 After each logical section (header, hero, sidebar, form, etc.):
 
 1. `pencil_get_screenshot` on section/screen node
-2. Analyze: alignment, spacing, overflow, glitches, missing content
-3. `pencil_snapshot_layout` with `problemsOnly: true` for clipping/overlap
-4. Fix issues before next section
-5. Final full-screen screenshot when complete
+1. Analyze: alignment, spacing, overflow, glitches, missing content
+1. `pencil_snapshot_layout` with `problemsOnly: true` for clipping/overlap
+1. Fix issues before next section
+1. Final full-screen screenshot when complete
 
 See [references/visual-verification.md](references/visual-verification.md).
 
@@ -74,9 +74,9 @@ See [references/visual-verification.md](references/visual-verification.md).
 **NEVER generate new logo/asset when one exists in the document.**
 
 1. `pencil_batch_get` — search by name pattern (`logo|brand|icon`)
-2. Match found elsewhere -> copy with `C()` operation
-3. Only `G()` for genuinely new images not in document
-4. Logos: ALWAYS copy, never regenerate
+1. Match found elsewhere -> copy with `C()` operation
+1. Only `G()` for genuinely new images not in document
+1. Logos: ALWAYS copy, never regenerate
 
 See [references/asset-reuse.md](references/asset-reuse.md).
 
@@ -85,9 +85,9 @@ See [references/asset-reuse.md](references/asset-reuse.md).
 **NEVER design or generate code without loading `frontend-design` first.**
 
 1. Load at start of any Pencil design or code gen task
-2. Follow its design thinking: purpose, bold aesthetic, differentiation
-3. Apply guidelines on typography, color, motion, spatial composition
-4. Never produce generic AI aesthetics
+1. Follow its design thinking: purpose, bold aesthetic, differentiation
+1. Apply guidelines on typography, color, motion, spatial composition
+1. Never produce generic AI aesthetics
 
 Applies to both Pencil design tasks and code generation from Pencil.
 
@@ -95,7 +95,7 @@ Applies to both Pencil design tasks and code generation from Pencil.
 
 ### Starting New Design
 
-```
+```text
 0. Load `frontend-design` skill
 1. pencil_get_editor_state        -> file state, schema
 2. pencil_batch_get (reusable)    -> design system components
@@ -112,10 +112,10 @@ Applies to both Pencil design tasks and code generation from Pencil.
 ### Section-by-Section
 
 1. **Plan** — identify reusable components
-2. **Build** — insert as `ref` instances, apply variables
-3. **Verify** — screenshot + layout check
-4. **Fix** — address overflow/alignment/spacing
-5. **Proceed** — only after verification passes
+1. **Build** — insert as `ref` instances, apply variables
+1. **Verify** — screenshot + layout check
+1. **Fix** — address overflow/alignment/spacing
+1. **Proceed** — only after verification passes
 
 ### Design-to-Code
 
@@ -124,12 +124,12 @@ See [references/design-to-code-workflow.md](references/design-to-code-workflow.m
 Summary:
 
 1. Load `frontend-design` skill
-2. `pencil_get_guidelines` with `"code"`
-3. `pencil_get_variables` -> read design tokens
-4. `pencil_batch_get` -> read design tree
-5. Map reusable components to appropriate UI library components
-6. Apply `frontend-design` guidelines
-7. Use Lucide for icons
+1. `pencil_get_guidelines` with `"code"`
+1. `pencil_get_variables` -> read design tokens
+1. `pencil_batch_get` -> read design tree
+1. Map reusable components to appropriate UI library components
+1. Apply `frontend-design` guidelines
+1. Use Lucide for icons
 
 ## MCP Tool Reference
 

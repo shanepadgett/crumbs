@@ -104,9 +104,9 @@ Restore operates at the user-message level.
 Restoring to a user message means:
 
 1. capture the current workspace state as a temporary redo snapshot
-2. restore the workspace to the snapshot from immediately before the target user message
-3. move the active conversation position to the parent of that user message
-4. preload the user message text back into the editor so the user can resend or revise it
+1. restore the workspace to the snapshot from immediately before the target user message
+1. move the active conversation position to the parent of that user message
+1. preload the user message text back into the editor so the user can resend or revise it
 
 This keeps code state and session state aligned.
 
@@ -213,34 +213,39 @@ Separate snapshot repos per worktree prevent state bleed between parallel worktr
 ## Implementation sequence
 
 1. Build the snapshot repository manager.
+
    - project/worktree identity
    - repo initialization
    - durable commit/ref creation
    - cleanup hooks
 
-2. Build the turn capture coordinator.
+1. Build the turn capture coordinator.
+
    - mutation detection
    - `before` snapshot capture
    - `after` snapshot capture
    - changed-file aggregation
 
-3. Build session metadata persistence.
+1. Build session metadata persistence.
+
    - custom entries
    - label integration
    - reload reconstruction
 
-4. Build restore and redo.
+1. Build restore and redo.
+
    - workspace restore engine
    - session repositioning
    - editor preload
    - temporary redo snapshot handling
 
-5. Build inspection commands and TUI surfacing.
+1. Build inspection commands and TUI surfacing.
+
    - list
    - diff
    - restore
    - redo
 
-6. Integrate with `/tree` and `/fork`.
+1. Integrate with `/tree` and `/fork`.
 
-7. Add retention, pruning, and background maintenance.
+1. Add retention, pruning, and background maintenance.
