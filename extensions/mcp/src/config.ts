@@ -135,6 +135,18 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
+      filePath: join(homedir(), ".pi", "agent", "crumbs.json"),
+      sourceKind: "global-crumbs-extension",
+      getServers(root) {
+        return root.extensions?.mcp?.mcpServers ?? root.extensions?.mcpDirect?.mcpServers ?? {};
+      },
+      setServers(root, servers) {
+        root.extensions ??= {};
+        root.extensions.mcp ??= {};
+        root.extensions.mcp.mcpServers = servers;
+      },
+    },
+    {
       filePath: resolve(cwd, ".pi", "mcp.json"),
       sourceKind: "project",
       getServers(root) {
@@ -179,6 +191,8 @@ export function formatSourceKind(kind: ServerSourceKind): string {
   switch (kind) {
     case "global":
       return "global";
+    case "global-crumbs-extension":
+      return "global crumbs ext";
     case "project":
       return "project";
     case "crumbs-root":

@@ -24,7 +24,12 @@ export interface RawServerConfig {
   tools?: Record<string, ToolPolicyConfig>;
 }
 
-export type ServerSourceKind = "global" | "project" | "crumbs-root" | "crumbs-extension";
+export type ServerSourceKind =
+  | "global"
+  | "global-crumbs-extension"
+  | "project"
+  | "crumbs-root"
+  | "crumbs-extension";
 
 export interface ServerConfigRecord {
   name: string;
