@@ -194,11 +194,11 @@ export const PROFILES: Profile[] = [
           ? []
           : [
               {
-                path: ".oxfmtrc.json",
+                path: ".config/oxfmtrc.json",
                 content: `${JSON.stringify({ ignorePatterns: ["external/**", "node_modules/**", ".working/**", ".pi/git/**"] }, null, 2)}\n`,
               },
               {
-                path: ".oxlintrc.json",
+                path: ".config/oxlintrc.json",
                 content: `${JSON.stringify({ ignorePatterns: ["external/**", "node_modules/**", ".working/**", ".pi/git/**"] }, null, 2)}\n`,
               },
             ]),
@@ -208,7 +208,7 @@ export const PROFILES: Profile[] = [
           content: task(
             useBiome
               ? 'run_filtered "format ts" "format failed" biome format --write .'
-              : 'run_filtered "format ts" "format failed" oxfmt --write .',
+              : 'run_filtered "format ts" "format failed" oxfmt --write --config .config/oxfmtrc.json .',
           ),
         },
         {
@@ -217,14 +217,14 @@ export const PROFILES: Profile[] = [
           content: task(
             useBiome
               ? 'run_filtered "lint ts" "lint failed" biome check --write .'
-              : 'run_filtered "lint ts" "lint failed" oxlint --fix .',
+              : 'run_filtered "lint ts" "lint failed" oxlint --fix --config .config/oxlintrc.json .',
           ),
         },
         {
           path: ".mise/tasks/typecheck/ts",
           executable: true,
           content: task(
-            'run_filtered "typecheck ts" "typecheck failed" ./node_modules/.bin/tsc --noEmit',
+            'run_filtered "typecheck ts" "typecheck failed" ./node_modules/.bin/tsc --project .config/tsconfig.json --noEmit',
           ),
         },
         {
@@ -242,8 +242,8 @@ export const PROFILES: Profile[] = [
           ),
         },
         {
-          path: "tsconfig.json",
-          content: `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "NodeNext", moduleResolution: "NodeNext", target: "ES2022" }, include: ["**/*.ts", "**/*.tsx"] }, null, 2)}\n`,
+          path: ".config/tsconfig.json",
+          content: `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "NodeNext", moduleResolution: "NodeNext", target: "ES2022" }, include: ["../**/*.ts", "../**/*.tsx"] }, null, 2)}\n`,
         },
       ];
     },
@@ -265,7 +265,7 @@ export const PROFILES: Profile[] = [
     files: () => [
       { path: ".mise/tasks/lib/scaffold.sh", content: taskLib, executable: true },
       {
-        path: ".markdownlint-cli2.mjs",
+        path: ".config/markdownlint-cli2.mjs",
         content:
           'export default {\n  config: {\n    default: true,\n    MD013: false,\n    MD033: false,\n    MD041: false,\n    MD055: false,\n    MD056: false,\n    MD060: false,\n  },\n  globs: ["**/*.md"],\n  ignores: ["**/node_modules/**", "external/**", ".working/**", ".pi/local/**", ".pi/git/**"],\n};\n',
       },
@@ -279,7 +279,7 @@ while IFS= read -r pattern; do
 done < <(
   node --input-type=module -e '
     import { pathToFileURL } from "node:url";
-    const config = (await import(pathToFileURL(\`\${process.cwd()}/.markdownlint-cli2.mjs\`).href)).default;
+    const config = (await import(pathToFileURL(\`\${process.cwd()}/.config/markdownlint-cli2.mjs\`).href)).default;
     for (const pattern of config.ignores ?? []) console.log(pattern);
   '
 )
@@ -290,7 +290,9 @@ run_filtered "format markdown" "format markdown failed" mdformat "\${MDFORMAT_AR
       {
         path: ".mise/tasks/lint/markdown",
         executable: true,
-        content: task('run_filtered "lint markdown" "lint markdown failed" markdownlint-cli2'),
+        content: task(
+          'run_filtered "lint markdown" "lint markdown failed" markdownlint-cli2 --config .config/markdownlint-cli2.mjs',
+        ),
       },
       {
         path: ".mise/tasks/check/markdown",
@@ -325,14 +327,16 @@ run_filtered "format markdown" "format markdown failed" mdformat "\${MDFORMAT_AR
     files: () => [
       { path: ".mise/tasks/lib/scaffold.sh", content: taskLib, executable: true },
       {
-        path: ".yamllint",
+        path: ".config/yamllint",
         content:
           "---\nignore: |\n  external/**\n  node_modules/**\n  .working/**\n  .pi/local/**\n  .pi/git/**\n",
       },
       {
         path: ".mise/tasks/lint/yaml",
         executable: true,
-        content: task('run_filtered "lint yaml" "lint yaml failed" yamllint .'),
+        content: task(
+          'run_filtered "lint yaml" "lint yaml failed" yamllint --config-file .config/yamllint .',
+        ),
       },
       {
         path: ".mise/tasks/check/yaml",

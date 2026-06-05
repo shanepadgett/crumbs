@@ -13,7 +13,7 @@ while IFS= read -r pattern; do
 done < <(
   node --input-type=module -e '
     import { pathToFileURL } from "node:url";
-    const config = (await import(pathToFileURL(`${process.cwd()}/.markdownlint-cli2.mjs`).href)).default;
+    const config = (await import(pathToFileURL(`${process.cwd()}/.config/markdownlint-cli2.mjs`).href)).default;
     for (const pattern of config.ignores ?? []) console.log(pattern);
   '
 )

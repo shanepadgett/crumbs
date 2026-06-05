@@ -7,4 +7,4 @@ while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
 done
 source "$ROOT/.mise/tasks/lib/scaffold.sh"
 
-run_filtered "lint yaml" "lint yaml failed" uvx yamllint==1.9.0 .
+run_filtered "lint yaml" "lint yaml failed" uvx yamllint==1.9.0 --config-file .config/yamllint .

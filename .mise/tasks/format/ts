@@ -7,4 +7,4 @@ while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
 done
 source "$ROOT/.mise/tasks/lib/scaffold.sh"
 
-run_filtered "format ts" "format failed" oxfmt --write .
+run_filtered "format ts" "format failed" oxfmt --write --config .config/oxfmtrc.json .

@@ -53,6 +53,7 @@ export async function detectScopes(cwd: string): Promise<Set<Scope>> {
   if (
     (await exists(join(cwd, "package.json"))) ||
     (await exists(join(cwd, "tsconfig.json"))) ||
+    (await exists(join(cwd, ".config/tsconfig.json"))) ||
     files.some((file) => [".js", ".jsx", ".ts", ".tsx"].includes(extname(file)))
   )
     scopes.add("ts");

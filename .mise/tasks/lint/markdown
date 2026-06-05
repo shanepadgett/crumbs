@@ -7,4 +7,4 @@ while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
 done
 source "$ROOT/.mise/tasks/lib/scaffold.sh"
 
-run_filtered "lint markdown" "lint markdown failed" markdownlint-cli2 "**/*.md" "#node_modules"
+run_filtered "lint markdown" "lint markdown failed" markdownlint-cli2 --config .config/markdownlint-cli2.mjs "**/*.md" "#node_modules"

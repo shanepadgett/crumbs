@@ -7,4 +7,4 @@ while [[ "$ROOT" != "/" && ! -f "$ROOT/.mise/tasks/lib/scaffold.sh" ]]; do
 done
 source "$ROOT/.mise/tasks/lib/scaffold.sh"
 
-run_filtered "lint ts" "lint failed" oxlint --fix .
+run_filtered "lint ts" "lint failed" oxlint --fix --config .config/oxlintrc.json .
