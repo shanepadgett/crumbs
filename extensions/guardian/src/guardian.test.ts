@@ -1,6 +1,6 @@
 import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { describe, expect, test } from "bun:test";
-import { parseAutoGuardianConfig } from "./config.js";
+import { parseGuardianConfig } from "./config.js";
 import { runGuardian } from "./guardian.js";
 import type { GateRequest, GuardianComplete, GuardianDeps } from "./types.js";
 
@@ -62,7 +62,7 @@ function deps(complete: GuardianComplete): GuardianDeps {
 
 describe("runGuardian", () => {
   test("returns allow and deny outcomes from valid JSON", async () => {
-    const config = parseAutoGuardianConfig({ guardian: { enabled: true } });
+    const config = parseGuardianConfig({ autoApprove: { enabled: true } });
 
     const allowed = await runGuardian(
       request(),
@@ -80,7 +80,7 @@ describe("runGuardian", () => {
   });
 
   test("retries once on malformed JSON", async () => {
-    const config = parseAutoGuardianConfig({ guardian: { enabled: true } });
+    const config = parseGuardianConfig({ autoApprove: { enabled: true } });
     const responses = [message("not json"), message('{"outcome":"allow","reason":"fixed"}')];
     let calls = 0;
 
@@ -95,7 +95,7 @@ describe("runGuardian", () => {
   });
 
   test("returns error after double-malformed JSON", async () => {
-    const config = parseAutoGuardianConfig({ guardian: { enabled: true } });
+    const config = parseGuardianConfig({ autoApprove: { enabled: true } });
 
     const result = await runGuardian(
       request(),
@@ -107,7 +107,7 @@ describe("runGuardian", () => {
   });
 
   test("returns error for model stopReason error", async () => {
-    const config = parseAutoGuardianConfig({ guardian: { enabled: true } });
+    const config = parseGuardianConfig({ autoApprove: { enabled: true } });
 
     const result = await runGuardian(
       request(),
@@ -119,7 +119,7 @@ describe("runGuardian", () => {
   });
 
   test("returns error when model auth is unavailable", async () => {
-    const config = parseAutoGuardianConfig({ guardian: { enabled: true } });
+    const config = parseGuardianConfig({ autoApprove: { enabled: true } });
     const result = await runGuardian(request(), config, {
       resolveModel: async () => TEST_MODEL,
       resolveAuth: async () => ({ ok: false, error: "missing auth" }),

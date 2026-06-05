@@ -33,7 +33,7 @@ export interface GuardianAuditRecord {
 }
 
 export function getGuardianAuditLogPath(): string {
-  return join(dirname(getGlobalCrumbsPath()), "auto-guardian", "audit.jsonl");
+  return join(dirname(getGlobalCrumbsPath()), "guardian", "audit.jsonl");
 }
 
 export async function writeGuardianAudit(record: GuardianAuditRecord): Promise<void> {

@@ -1,7 +1,7 @@
 import { isToolCallEventType, type ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { parseApplyPatchTargets } from "./patch.js";
 import { resolveCanonicalWorkspace, resolveTargetPath } from "./paths.js";
-import type { AutoGuardianConfig, GateRequest, MutationOperation, ToolKind } from "./types.js";
+import type { GateRequest, GuardianConfig, MutationOperation, ToolKind } from "./types.js";
 
 const READ_ONLY_TOOLS = new Set([
   "read",
@@ -51,13 +51,13 @@ function toolKind(toolName: string): ToolKind {
 
 async function resolveSinglePathRequest(
   cwd: string,
-  config: AutoGuardianConfig,
+  config: GuardianConfig,
   rawPath: string,
   operation: MutationOperation,
   byteSize?: number,
 ) {
   const canonicalWorkspace = await resolveCanonicalWorkspace(cwd);
-  return resolveTargetPath(cwd, canonicalWorkspace, rawPath, config.mutation.protectedPathRules, {
+  return resolveTargetPath(cwd, canonicalWorkspace, rawPath, config.mutation.blockPathRules, {
     operation,
     byteSize,
   });
@@ -80,7 +80,7 @@ export function createFallbackRequest(
 export async function buildGateRequest(
   event: ToolCallEvent,
   cwd: string,
-  config: AutoGuardianConfig,
+  config: GuardianConfig,
 ): Promise<GateRequest> {
   const kind = toolKind(event.toolName);
 
@@ -146,16 +146,10 @@ export async function buildGateRequest(
     const canonicalWorkspace = await resolveCanonicalWorkspace(cwd);
     const paths = await Promise.all(
       parsed.targets.map((target) =>
-        resolveTargetPath(
-          cwd,
-          canonicalWorkspace,
-          target.path,
-          config.mutation.protectedPathRules,
-          {
-            operation: target.operation,
-            byteSize: target.byteSize,
-          },
-        ),
+        resolveTargetPath(cwd, canonicalWorkspace, target.path, config.mutation.blockPathRules, {
+          operation: target.operation,
+          byteSize: target.byteSize,
+        }),
       ),
     );
 

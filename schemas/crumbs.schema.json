@@ -25,8 +25,8 @@
         "codexCompat": {
           "$ref": "#/$defs/codexCompatConfig"
         },
-        "autoGuardian": {
-          "$ref": "#/$defs/autoGuardianConfig"
+        "guardian": {
+          "$ref": "#/$defs/guardianConfig"
         },
         "commit": {
           "$ref": "#/$defs/commitConfig"
@@ -192,14 +192,18 @@
       },
       "additionalProperties": false
     },
-    "autoGuardianConfig": {
+    "guardianAction": {
+      "type": "string",
+      "enum": ["allow", "prompt", "autoApprove", "block"]
+    },
+    "guardianConfig": {
       "type": "object",
       "properties": {
         "mode": {
           "type": "string",
           "enum": ["off", "gate"],
           "default": "gate",
-          "description": "Enable or disable the auto guardian permission gate."
+          "description": "Enable or disable the guardian permission gate."
         },
         "ignoreTools": {
           "type": "array",
@@ -224,50 +228,50 @@
           "type": "object",
           "properties": {
             "defaultAction": {
-              "type": "string",
-              "enum": ["allow", "prompt"],
-              "default": "allow",
+              "$ref": "#/$defs/guardianAction",
+              "default": "autoApprove",
               "description": "Action for bash commands that match no explicit rule."
             },
-            "denyPatterns": {
+            "rules": {
               "type": "array",
-              "description": "Case-insensitive regex sources that hard-block matching bash commands. When provided, this replaces the built-in default list.",
+              "description": "Ordered shell-style glob rules for bash commands. First matching rule wins. When provided, this replaces the built-in default list.",
               "items": {
-                "type": "string",
-                "minLength": 1
+                "type": "object",
+                "properties": {
+                  "match": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Shell-style glob matched against normalized command text. Use * for any characters."
+                  },
+                  "action": {
+                    "$ref": "#/$defs/guardianAction"
+                  }
+                },
+                "required": ["match", "action"],
+                "additionalProperties": false
               },
               "default": [
-                ":\\s*\\(\\s*\\)\\s*\\{.*\\|\\s*:",
-                "\\bmkfs[\\.\\s]",
-                "\\bdd\\b[^\\n]*\\bof=/dev/",
-                ">\\s*/dev/(sd|nvme|disk)",
-                "\\brm\\s+-[A-Za-z]*r[A-Za-z]*f[A-Za-z]*\\s+/(\\s|$)"
+                { "match": ":(){*|*:", "action": "block" },
+                { "match": "mkfs*", "action": "block" },
+                { "match": "dd *of=/dev/*", "action": "block" },
+                { "match": "*> /dev/sd*", "action": "block" },
+                { "match": "*> /dev/nvme*", "action": "block" },
+                { "match": "*> /dev/disk*", "action": "block" },
+                { "match": "rm -rf /", "action": "block" },
+                { "match": "rm -fr /", "action": "block" },
+                { "match": "sudo *", "action": "prompt" },
+                { "match": "chmod *777*", "action": "prompt" },
+                { "match": "chown *777*", "action": "prompt" },
+                { "match": "git push *--force*", "action": "prompt" },
+                { "match": "curl *| sh*", "action": "prompt" },
+                { "match": "curl *| bash*", "action": "prompt" },
+                { "match": "wget *| sh*", "action": "prompt" },
+                { "match": "wget *| bash*", "action": "prompt" },
+                { "match": "*> /etc/*", "action": "prompt" },
+                { "match": "rm -r *", "action": "prompt" },
+                { "match": "rm -rf *", "action": "prompt" },
+                { "match": "rm -fr *", "action": "prompt" }
               ]
-            },
-            "promptPatterns": {
-              "type": "array",
-              "description": "Case-insensitive regex sources that ask the user before matching bash commands run. When provided, this replaces the built-in default list.",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": [
-                "\\bsudo\\b",
-                "\\b(chmod|chown)\\b[^\\n]*\\b777\\b",
-                "\\bgit\\s+push\\b[^\\n]*--force",
-                "\\b(curl|wget)\\b[^\\n]*\\|\\s*(sh|bash)",
-                ">\\s*/etc/",
-                "\\brm\\s+-[A-Za-z]*r"
-              ]
-            },
-            "allowPatterns": {
-              "type": "array",
-              "description": "Case-insensitive regex sources that allow matching bash commands when defaultAction is prompt. When provided, this replaces the built-in default list.",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": []
             }
           },
           "additionalProperties": false,
@@ -277,19 +281,32 @@
           "type": "object",
           "properties": {
             "defaultAction": {
-              "type": "string",
-              "enum": ["allow", "prompt"],
+              "$ref": "#/$defs/guardianAction",
               "default": "allow",
               "description": "Action for workspace file mutations that match no explicit rule."
             },
-            "protectedPaths": {
+            "rules": {
               "type": "array",
-              "description": "Workspace-relative glob patterns that hard-block writes. Supports * and **. When provided, this replaces the built-in default list.",
+              "description": "Ordered path glob rules for file mutations. First matching rule wins. When provided, this replaces the built-in default list.",
               "items": {
-                "type": "string",
-                "minLength": 1
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "action": {
+                    "$ref": "#/$defs/guardianAction"
+                  }
+                },
+                "required": ["paths", "action"],
+                "additionalProperties": false
               },
-              "default": [".git", ".git/**"]
+              "default": [{ "paths": [".git", ".git/**"], "action": "block" }]
             },
             "allowOutsideWorkspace": {
               "type": "boolean",
@@ -307,31 +324,31 @@
         },
         "unknownToolAction": {
           "type": "string",
-          "enum": ["allow", "prompt", "block"],
+          "$ref": "#/$defs/guardianAction",
           "default": "prompt",
           "description": "Action for non-built-in tools the gate does not recognize."
         },
-        "guardian": {
+        "autoApprove": {
           "type": "object",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": false,
-              "description": "Enable optional LLM guardian review for eligible requests."
+              "default": true,
+              "description": "Enable LLM auto approval for eligible requests."
             },
             "model": {
               "type": "string",
-              "description": "Guardian model as provider/id. Defaults to the active session model."
+              "description": "Auto approval model as provider/id. Defaults to the active session model."
             },
             "reviewBash": {
               "type": "boolean",
               "default": true,
-              "description": "Send bash commands that pass hard-deny checks to the guardian when enabled."
+              "description": "Send bash commands with autoApprove action to model review when enabled."
             },
             "reviewMutations": {
               "type": "boolean",
-              "default": false,
-              "description": "Send file mutations that pass hard-deny checks to the guardian when enabled."
+              "default": true,
+              "description": "Send file mutations with autoApprove action to model review when enabled."
             },
             "timeoutMs": {
               "type": "number",

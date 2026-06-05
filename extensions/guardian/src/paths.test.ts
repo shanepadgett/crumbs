@@ -11,7 +11,7 @@ import {
 import type { CompiledPattern } from "./types.js";
 
 async function tempRepo(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "auto-guardian-"));
+  const root = await mkdtemp(join(tmpdir(), "guardian-"));
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(join(root, "src", "app.ts"), "export {};\n", "utf8");
   return root;
@@ -45,7 +45,7 @@ describe("path policy", () => {
 
   test("detects outside-workspace targets", async () => {
     const root = await tempRepo();
-    const outside = await mkdtemp(join(tmpdir(), "auto-guardian-outside-"));
+    const outside = await mkdtemp(join(tmpdir(), "guardian-outside-"));
     try {
       const canonical = await resolveCanonicalWorkspace(root);
 

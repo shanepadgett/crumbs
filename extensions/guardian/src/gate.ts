@@ -9,9 +9,9 @@ import { classifyRequest } from "./classify.js";
 import { runGuardian } from "./guardian.js";
 import { promptUser } from "./prompt.js";
 import { buildGateRequest, createFallbackRequest } from "./request.js";
-import type { AutoGuardianConfig, GuardianComplete } from "./types.js";
+import type { GuardianComplete, GuardianConfig } from "./types.js";
 
-export interface AutoGuardianGateOptions {
+export interface GuardianGateOptions {
   complete?: GuardianComplete;
   notifyGuardianUnavailable?: (reason: string) => void;
 }
@@ -30,11 +30,11 @@ function guardianReviewLabel(kind: string): string {
   return "tool call";
 }
 
-export async function handleAutoGuardianToolCall(
+export async function handleGuardianToolCall(
   event: ToolCallEvent,
   ctx: ExtensionContext,
-  config: AutoGuardianConfig,
-  options: AutoGuardianGateOptions = {},
+  config: GuardianConfig,
+  options: GuardianGateOptions = {},
 ): Promise<ToolCallEventResult | undefined> {
   if (config.mode === "off") return undefined;
   if (config.ignoreToolSet.has(event.toolName)) return undefined;
@@ -43,7 +43,7 @@ export async function handleAutoGuardianToolCall(
   try {
     request = await buildGateRequest(event, ctx.cwd, config);
   } catch (error) {
-    const reason = `auto-guardian could not inspect ${event.toolName}: ${formatError(error)}`;
+    const reason = `guardian could not inspect ${event.toolName}: ${formatError(error)}`;
     return promptUser(ctx, createFallbackRequest(event, ctx.cwd, "inspection failed"), reason);
   }
 
@@ -63,8 +63,11 @@ export async function handleAutoGuardianToolCall(
     config,
     {
       resolveModel: async () => {
-        if (!config.guardian.model) return ctx.model;
-        return ctx.modelRegistry.find(config.guardian.model.provider, config.guardian.model.id);
+        if (!config.autoApprove.model) return ctx.model;
+        return ctx.modelRegistry.find(
+          config.autoApprove.model.provider,
+          config.autoApprove.model.id,
+        );
       },
       resolveAuth: (model) => ctx.modelRegistry.getApiKeyAndHeaders(model),
       complete:

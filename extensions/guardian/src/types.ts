@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 
 export type ToolKind = "read_only" | "bash" | "file_mutation" | "unknown";
+export type ConfigAction = "allow" | "block" | "prompt" | "autoApprove";
 export type DecisionAction = "allow" | "block" | "prompt" | "guardian";
 export type MutationOperation = "add" | "update" | "delete" | "replace" | "move";
 
@@ -15,31 +16,39 @@ export interface CompiledPattern {
   regex: RegExp;
 }
 
+export interface BashRule extends CompiledPattern {
+  action: ConfigAction;
+}
+
+export interface MutationRule {
+  paths: string[];
+  pathRules: CompiledPattern[];
+  action: ConfigAction;
+}
+
 export interface GuardianModelRef {
   provider: string;
   id: string;
   raw: string;
 }
 
-export interface AutoGuardianConfig {
+export interface GuardianConfig {
   mode: "off" | "gate";
   ignoreTools: string[];
   ignoreToolSet: ReadonlySet<string>;
   bash: {
-    defaultAction: "allow" | "prompt";
-    denyPatterns: CompiledPattern[];
-    promptPatterns: CompiledPattern[];
-    allowPatterns: CompiledPattern[];
+    defaultAction: ConfigAction;
+    rules: BashRule[];
   };
   mutation: {
-    defaultAction: "allow" | "prompt";
-    protectedPaths: string[];
-    protectedPathRules: CompiledPattern[];
+    defaultAction: ConfigAction;
+    rules: MutationRule[];
+    blockPathRules: CompiledPattern[];
     allowOutsideWorkspace: boolean;
     maxBytes?: number;
   };
-  unknownToolAction: "allow" | "prompt" | "block";
-  guardian: {
+  unknownToolAction: ConfigAction;
+  autoApprove: {
     enabled: boolean;
     model?: GuardianModelRef;
     reviewBash: boolean;
