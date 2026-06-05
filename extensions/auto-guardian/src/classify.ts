@@ -4,6 +4,7 @@ import type {
   CompiledPattern,
   GateRequest,
 } from "./types.js";
+import { isKnownSafeBashCommand } from "./shell-shape.js";
 
 function allow(reason: string): ClassifierResult {
   return { action: "allow", reason, overridable: true };
@@ -58,15 +59,19 @@ function classifyBash(request: GateRequest, config: AutoGuardianConfig): Classif
   const risky = firstMatch(command, config.bash.promptPatterns);
   if (risky) return prompt(describeBashRule(risky, "prompt"));
 
-  if (config.guardian.enabled && config.guardian.reviewBash) {
-    return guardian("guardian review enabled for bash");
-  }
+  if (isKnownSafeBashCommand(command)) return allow("Command is known safe and read-only.");
 
   if (config.bash.defaultAction === "prompt") {
     const allowed = firstMatch(command, config.bash.allowPatterns);
     if (allowed) return allow("Command matches an allow rule.");
-    return prompt("Commands require approval by default.");
   }
+
+  if (config.guardian.enabled && config.guardian.reviewBash) {
+    return guardian("guardian review enabled for bash");
+  }
+
+  if (config.bash.defaultAction === "prompt")
+    return prompt("Commands require approval by default.");
 
   return allow("bash command allowed by default");
 }

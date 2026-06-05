@@ -113,7 +113,17 @@ describe("classifyRequest", () => {
       guardian: { enabled: true, reviewMutations: true },
     });
 
-    expect(classifyRequest(bashRequest("git status"), bashConfig).action).toBe("guardian");
+    expect(classifyRequest(bashRequest("npm test"), bashConfig).action).toBe("guardian");
     expect(classifyRequest(mutationRequest([path()]), mutationConfig).action).toBe("guardian");
+  });
+
+  test("allows known safe bash commands before guardian review", () => {
+    const config = parseAutoGuardianConfig({ guardian: { enabled: true, reviewBash: true } });
+
+    expect(classifyRequest(bashRequest("git ls-files | head -20"), config).action).toBe("allow");
+    expect(classifyRequest(bashRequest("git ls-files | sh"), config).action).toBe("guardian");
+    expect(classifyRequest(bashRequest("git ls-files > files.txt"), config).action).toBe(
+      "guardian",
+    );
   });
 });

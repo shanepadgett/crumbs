@@ -4,6 +4,7 @@ import type {
   ToolCallEvent,
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
+import { auditGuardianDecision } from "./audit.js";
 import { classifyRequest } from "./classify.js";
 import { runGuardian } from "./guardian.js";
 import { promptUser } from "./prompt.js";
@@ -17,6 +18,10 @@ export interface AutoGuardianGateOptions {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function userDecisionFromResult(result: ToolCallEventResult | undefined): "allowed" | "denied" {
+  return result?.block ? "denied" : "allowed";
 }
 
 function guardianReviewLabel(kind: string): string {
@@ -76,6 +81,13 @@ export async function handleAutoGuardianToolCall(
         `${reviewLabel[0]?.toUpperCase() ?? "T"}${reviewLabel.slice(1)} approved`,
         "info",
       );
+    await auditGuardianDecision({
+      request,
+      decision,
+      guardian,
+      finalOutcome: "allowed",
+      finalDecision: "guardian_allowed",
+    });
     return undefined;
   }
   if (guardian.outcome === "deny") {
@@ -84,9 +96,31 @@ export async function handleAutoGuardianToolCall(
         `${reviewLabel[0]?.toUpperCase() ?? "T"}${reviewLabel.slice(1)} denied`,
         "warning",
       );
-    return promptUser(ctx, request, guardian.reason);
+    const promptResult = await promptUser(ctx, request, guardian.reason);
+    const userDecision = userDecisionFromResult(promptResult);
+    await auditGuardianDecision({
+      request,
+      decision,
+      guardian,
+      userDecision,
+      finalOutcome: userDecision === "allowed" ? "allowed" : "denied",
+      finalDecision:
+        userDecision === "allowed" ? "guardian_denied_user_allowed" : "guardian_denied_user_denied",
+    });
+    return promptResult;
   }
 
   options.notifyGuardianUnavailable?.(guardian.reason);
-  return promptUser(ctx, request, `Guardian review failed: ${guardian.reason}`);
+  const promptResult = await promptUser(ctx, request, `Guardian review failed: ${guardian.reason}`);
+  const userDecision = userDecisionFromResult(promptResult);
+  await auditGuardianDecision({
+    request,
+    decision,
+    guardian,
+    userDecision,
+    finalOutcome: userDecision === "allowed" ? "allowed" : "denied",
+    finalDecision:
+      userDecision === "allowed" ? "guardian_error_user_allowed" : "guardian_error_user_denied",
+  });
+  return promptResult;
 }
