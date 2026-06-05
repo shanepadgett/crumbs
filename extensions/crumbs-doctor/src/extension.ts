@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -14,6 +14,16 @@ import {
   getProjectCrumbsReadPaths,
 } from "../../shared/config/crumbs-paths.js";
 import { resolveProjectRoot } from "../../shared/config/project-root.js";
+import {
+  getDefaultGlobalMcpPath,
+  getDefaultGlobalSubagentsDir,
+  getDefaultProjectMcpPath,
+  getDefaultProjectSubagentsDir,
+  getLegacyGlobalMcpPath,
+  getLegacyGlobalSubagentsDir,
+  getLegacyProjectMcpPath,
+  getLegacyProjectSubagentsDir,
+} from "../../shared/config/crumbs-runtime-paths.js";
 import { asObject, type JsonObject, writeJsonObject } from "../../shared/io/json-file.js";
 import { notifyForSessionStart } from "../../shared/ui/notify.js";
 
@@ -27,6 +37,12 @@ type JsonStatus =
 type Finding =
   | { kind: "malformed-json"; filePath: string; error: string }
   | { kind: "type-conflict"; filePath: string; keyPath: string; expected: string; actual: string }
+  | {
+      kind: "legacy-location";
+      label: string;
+      legacyPath: string;
+      defaultPath: string;
+    }
   | {
       kind: "legacy-pair";
       level: "global" | "project";
@@ -45,6 +61,21 @@ const FALLBACK_SCHEMA_URL =
   "https://raw.githubusercontent.com/shanepadgett/crumbs/refs/heads/main/schemas/crumbs.schema.json";
 
 const SCHEMA_RELATIVE_PATH = "schemas/crumbs.schema.json";
+
+interface MigrationItem {
+  label: string;
+  legacyPath: string;
+  defaultPath: string;
+  validateJson?: boolean;
+}
+
+interface MigrationResult {
+  label: string;
+  legacyPath: string;
+  defaultPath: string;
+  status: "moved" | "skipped" | "blocked";
+  message: string;
+}
 
 function typeOfValue(value: unknown): string {
   if (Array.isArray(value)) return "array";
@@ -199,6 +230,58 @@ async function readJsonStatus(path: string): Promise<JsonStatus> {
   }
 }
 
+async function getMigrationItems(cwd: string): Promise<MigrationItem[]> {
+  const projectRoot = await resolveProjectRoot(cwd);
+  return [
+    {
+      label: "global root .agents crumbs config",
+      legacyPath: join(homedir(), ".agents", "crumbs.json"),
+      defaultPath: getGlobalCrumbsPath(),
+      validateJson: true,
+    },
+    {
+      label: "global crumbs config",
+      legacyPath: getLegacyGlobalCrumbsPath(),
+      defaultPath: getGlobalCrumbsPath(),
+      validateJson: true,
+    },
+    {
+      label: "project root .agents crumbs config",
+      legacyPath: join(projectRoot, ".agents", "crumbs.json"),
+      defaultPath: await getProjectCrumbsPath(cwd),
+      validateJson: true,
+    },
+    {
+      label: "project crumbs config",
+      legacyPath: getLegacyProjectCrumbsPathForRoot(projectRoot),
+      defaultPath: await getProjectCrumbsPath(cwd),
+      validateJson: true,
+    },
+    {
+      label: "global subagents",
+      legacyPath: getLegacyGlobalSubagentsDir(),
+      defaultPath: getDefaultGlobalSubagentsDir(),
+    },
+    {
+      label: "project subagents",
+      legacyPath: getLegacyProjectSubagentsDir(projectRoot),
+      defaultPath: getDefaultProjectSubagentsDir(projectRoot),
+    },
+    {
+      label: "global MCP config",
+      legacyPath: getLegacyGlobalMcpPath(),
+      defaultPath: getDefaultGlobalMcpPath(),
+      validateJson: true,
+    },
+    {
+      label: "project MCP config",
+      legacyPath: getLegacyProjectMcpPath(projectRoot),
+      defaultPath: getDefaultProjectMcpPath(projectRoot),
+      validateJson: true,
+    },
+  ];
+}
+
 async function inspect(cwd: string): Promise<{
   findings: Finding[];
   hasGlobalCrumbs: boolean;
@@ -244,6 +327,11 @@ async function inspect(cwd: string): Promise<{
 
   const projectRoot = await resolveProjectRoot(cwd);
   const legacyProjectCrumbsPath = getLegacyProjectCrumbsPathForRoot(projectRoot);
+  for (const item of await getMigrationItems(cwd)) {
+    if (!(await fileExists(item.legacyPath))) continue;
+    findings.push({ kind: "legacy-location", ...item });
+  }
+
   const conflictPairs: Array<{
     level: "global" | "project";
     legacyPath: string;
@@ -302,6 +390,13 @@ function renderReport(findings: Finding[]): string {
       continue;
     }
 
+    if (finding.kind === "legacy-location") {
+      lines.push(
+        `- legacy location: ${finding.label} uses ${finding.legacyPath}; move to ${finding.defaultPath}`,
+      );
+      continue;
+    }
+
     if (finding.kind === "legacy-pair") {
       lines.push(
         `- legacy crumbs pair: ${finding.level} has both ${finding.defaultPath} and ${finding.legacyPath}`,
@@ -329,6 +424,61 @@ function renderReport(findings: Finding[]): string {
   }
   if (findings.some((item) => item.kind === "legacy-pair")) {
     lines.push("- Prefer one crumbs file per level; .agents/crumbs/crumbs.json is default.");
+  }
+  if (findings.some((item) => item.kind === "legacy-location")) {
+    lines.push(
+      "- Legacy crumbs-owned locations are supported now but will be removed in a future update.",
+    );
+    lines.push("- Run /crumbs doctor fix to move legacy files and directories when safe.");
+  }
+
+  return lines.join("\n");
+}
+
+async function migrateItem(item: MigrationItem): Promise<MigrationResult> {
+  if (!(await fileExists(item.legacyPath))) {
+    return { ...item, status: "skipped", message: "legacy path missing" };
+  }
+  if (await fileExists(item.defaultPath)) {
+    return { ...item, status: "blocked", message: "default path already exists; merge manually" };
+  }
+  if (item.validateJson) {
+    const status = await readJsonStatus(item.legacyPath);
+    if (!status.exists) return { ...item, status: "skipped", message: "legacy path missing" };
+    if (!status.ok)
+      return { ...item, status: "blocked", message: `malformed JSON: ${status.error}` };
+  }
+
+  await mkdir(dirname(item.defaultPath), { recursive: true });
+  await rename(item.legacyPath, item.defaultPath);
+  return { ...item, status: "moved", message: "moved" };
+}
+
+async function migrateLegacyLocations(cwd: string): Promise<MigrationResult[]> {
+  const items = await getMigrationItems(cwd);
+  const results: MigrationResult[] = [];
+  for (const item of items) results.push(await migrateItem(item));
+  return results;
+}
+
+function renderMigrationReport(results: MigrationResult[]): string {
+  const lines = ["crumbs doctor fix"];
+  const shown = results.filter((result) => result.status !== "skipped");
+
+  if (shown.length === 0) {
+    lines.push("No legacy crumbs-owned paths found.");
+    return lines.join("\n");
+  }
+
+  for (const result of shown) {
+    lines.push(`- ${result.status}: ${result.label}`);
+    lines.push(`  ${result.legacyPath} -> ${result.defaultPath}`);
+    lines.push(`  ${result.message}`);
+  }
+
+  if (shown.some((result) => result.status === "blocked")) {
+    lines.push("");
+    lines.push("Blocked items were not moved. Merge manually, then remove legacy path.");
   }
 
   return lines.join("\n");
@@ -502,22 +652,27 @@ export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    if (!findings.some((finding) => finding.kind === "legacy-pair")) return;
+    if (!findings.some((finding) => finding.kind === "legacy-location")) return;
 
     launchWarningShown = true;
     notifyForSessionStart(
       ctx,
       event.reason,
-      "Both .agents/crumbs and legacy .pi crumbs files found. .agents/crumbs/crumbs.json is default. Run /crumbs doctor.",
+      "Legacy crumbs-owned locations found. Move to .agents/crumbs; legacy locations will be removed in a future update. Run /crumbs doctor.",
       "warning",
     );
   });
 
   pi.registerCommand("crumbs", {
     description:
-      "Crumbs utilities. Usage: /crumbs doctor | /crumbs init [--force] | /crumbs schema",
+      "Crumbs utilities. Usage: /crumbs doctor [fix] | /crumbs init [--force] | /crumbs schema",
     getArgumentCompletions(prefix) {
       const value = prefix.trim();
+      const tokens = value.split(/\s+/).filter(Boolean);
+      if (tokens[0] === "doctor") {
+        const fixPrefix = tokens.length > 1 ? (tokens[1] ?? "") : "";
+        return "fix".startsWith(fixPrefix) ? [{ value: "doctor fix", label: "fix" }] : null;
+      }
       const options = ["doctor", "init", "schema"];
       const filtered = options.filter((option) => option.startsWith(value));
       return filtered.length > 0
@@ -529,6 +684,21 @@ export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
 
       try {
         if (tokens[0] === "doctor") {
+          if (tokens[1] && tokens[1] !== "fix") {
+            if (ctx.hasUI) ctx.ui.notify("Usage: /crumbs doctor [fix]", "warning");
+            return;
+          }
+
+          if (tokens[1] === "fix") {
+            const results = await migrateLegacyLocations(ctx.cwd);
+            if (ctx.hasUI)
+              ctx.ui.notify(
+                renderMigrationReport(results),
+                results.some((result) => result.status === "blocked") ? "warning" : "info",
+              );
+            return;
+          }
+
           const { findings } = await inspect(ctx.cwd);
           const report = renderReport(findings);
           if (ctx.hasUI) ctx.ui.notify(report, findings.length > 0 ? "warning" : "info");
@@ -566,7 +736,7 @@ export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
 
         if (ctx.hasUI)
           ctx.ui.notify(
-            "Usage: /crumbs doctor | /crumbs init [--force] | /crumbs schema",
+            "Usage: /crumbs doctor [fix] | /crumbs init [--force] | /crumbs schema",
             "warning",
           );
       } catch (error) {

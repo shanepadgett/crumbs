@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { resolveProjectRoot } from "../../../shared/config/project-root.js";
+import { getDefaultProjectSubagentsDir } from "../../../shared/config/crumbs-runtime-paths.js";
 import { clearAgentRegistryCache, discoverAgents } from "../agents.js";
 import type { AgentRegistry, AgentSource, AgentSpec, AgentThinkingLevel } from "../types.js";
 
@@ -117,7 +118,7 @@ async function resolveTargetPath(
 ): Promise<string> {
   if (scope === "user") return join(registry.userDir, `${agentName}.md`);
   const projectDir =
-    registry.projectDir ?? join(await resolveProjectRoot(cwd), ".pi", "crumbs", "agents");
+    registry.projectDir ?? getDefaultProjectSubagentsDir(await resolveProjectRoot(cwd));
   return join(projectDir, `${agentName}.md`);
 }
 

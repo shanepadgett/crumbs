@@ -8,6 +8,13 @@ import {
   getGlobalCrumbsReadPaths,
   getLegacyProjectCrumbsPathForRoot,
 } from "../../shared/config/crumbs-paths.js";
+import {
+  getDefaultGlobalMcpPath,
+  getDefaultMcpToolCachePath,
+  getDefaultProjectMcpPath,
+  getLegacyGlobalMcpPath,
+  getLegacyProjectMcpPath,
+} from "../../shared/config/crumbs-runtime-paths.js";
 import { mergeLegacyWithDefault } from "../../shared/config/legacy-default-merge.js";
 import { loadEffectiveExtensionConfig } from "../../shared/config/crumbs-loader.js";
 import { asObject } from "../../shared/io/json-file.js";
@@ -75,9 +82,14 @@ function resolveProjectRootSync(cwd: string): string {
   let current = start;
 
   while (true) {
+    const isHome = current === resolve(homedir());
     if (
-      existsSync(join(current, ".agents", "crumbs", "crumbs.json")) ||
+      (!isHome && existsSync(join(current, ".agents", "crumbs", "crumbs.json"))) ||
+      (!isHome && existsSync(join(current, ".agents", "crumbs", "agents"))) ||
+      (!isHome && existsSync(join(current, ".agents", "crumbs", "mcp.json"))) ||
       existsSync(join(current, ".pi", "crumbs.json")) ||
+      (!isHome && existsSync(join(current, ".pi", "crumbs", "agents"))) ||
+      existsSync(join(current, ".pi", "mcp.json")) ||
       existsSync(join(current, ".git"))
     ) {
       return current;
@@ -146,7 +158,7 @@ function writeJsonFile(path: string, data: RawMcpFile): void {
 }
 
 function getToolCachePath(): string {
-  return join(homedir(), ".pi", "agent", "mcp-tools-cache.json");
+  return getDefaultMcpToolCachePath();
 }
 
 function getToolCacheKey(record: ServerConfigRecord): string {
@@ -179,10 +191,14 @@ function getConfigSources(cwd: string): ConfigSource[] {
   const projectCrumbsWritePath = getDefaultProjectCrumbsPathForRoot(projectRoot);
   const globalCrumbsReadPaths = getGlobalCrumbsReadPaths();
   const projectCrumbsReadPaths = getProjectCrumbsReadPathsSync(cwd);
+  const globalMcpWritePath = getDefaultGlobalMcpPath();
+  const projectMcpWritePath = getDefaultProjectMcpPath(projectRoot);
 
   return [
     {
-      filePath: join(homedir(), ".pi", "agent", "mcp.json"),
+      filePath: globalMcpWritePath,
+      readPaths: [getLegacyGlobalMcpPath(), globalMcpWritePath],
+      writePath: globalMcpWritePath,
       sourceKind: "global",
       getServers(root) {
         return root.mcpServers ?? {};
@@ -206,7 +222,9 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
-      filePath: resolve(projectRoot, ".pi", "mcp.json"),
+      filePath: projectMcpWritePath,
+      readPaths: [getLegacyProjectMcpPath(projectRoot), projectMcpWritePath],
+      writePath: projectMcpWritePath,
       sourceKind: "project",
       getServers(root) {
         return root.mcpServers ?? {};

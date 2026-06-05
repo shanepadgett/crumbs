@@ -25,8 +25,12 @@ import {
 
 async function chooseScope(ctx: ExtensionCommandContext): Promise<Scope | undefined> {
   return pickFromList(ctx, "Choose destination scope", [
-    { value: "project", label: "Project", description: "Write to .pi/crumbs/agents in project" },
-    { value: "user", label: "User", description: "Write to ~/.pi/crumbs/agents" },
+    {
+      value: "project",
+      label: "Project",
+      description: "Write to .agents/crumbs/agents in project",
+    },
+    { value: "user", label: "User", description: "Write to ~/.agents/crumbs/agents" },
   ]);
 }
 

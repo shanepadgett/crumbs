@@ -1,39 +1,62 @@
 {
-  "$schema": "../schemas/crumbs.schema.json",
+  "$schema": "../../schemas/crumbs.schema.json",
   "extensions": {
     "caveman": {
       "enabled": true,
-      "powers": ["improve", "architecture", "typescript"],
+      "powers": [
+        "improve",
+        "architecture",
+        "typescript"
+      ],
       "additionalContext": {
-        "all": ["AGENTS.md"],
+        "all": [
+          "AGENTS.md",
+          ".agents/instructions/working-plans.md"
+        ],
         "powers": {}
       }
     },
     "quietMiseTask": {
-      "globalExcludeGlobs": ["external/**", "docs/_hidden/**"],
+      "globalExcludeGlobs": [
+        "external/**",
+        "docs/_hidden/**"
+      ],
       "configs": [
         {
           "name": "config",
           "task": "check:config",
-          "trackedExtensions": [".json", ".toml"]
+          "trackedExtensions": [
+            ".json",
+            ".toml"
+          ]
         },
         {
           "enabled": true,
           "name": "ts",
           "task": "check:ts",
-          "trackedExtensions": [".js", ".jsx", ".ts", ".tsx"]
+          "trackedExtensions": [
+            ".js",
+            ".jsx",
+            ".ts",
+            ".tsx"
+          ]
         },
         {
           "enabled": true,
           "name": "markdown",
           "task": "check:markdown",
-          "trackedExtensions": [".md"]
+          "trackedExtensions": [
+            ".md"
+          ]
         },
         {
           "enabled": true,
           "name": "yaml",
           "task": "check:yaml",
-          "trackedExtensions": [".yml", ".yaml"]
+          "trackedExtensions": [
+            ".yml",
+            ".yaml"
+          ]
         }
       ]
     }

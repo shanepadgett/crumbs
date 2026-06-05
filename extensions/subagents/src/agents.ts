@@ -5,6 +5,12 @@ import type { Dirent } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveProjectRoot } from "../../shared/config/project-root.js";
+import {
+  getDefaultGlobalSubagentsDir,
+  getDefaultProjectSubagentsDir,
+  getLegacyGlobalSubagentsDir,
+  getLegacyProjectSubagentsDir,
+} from "../../shared/config/crumbs-runtime-paths.js";
 import { isDirectory } from "../../shared/io/fs.js";
 import {
   THINKING_LEVEL_VALUES,
@@ -37,7 +43,7 @@ function getBuiltinAgentsDir(): string {
 }
 
 function getUserAgentsDir(): string {
-  return join(process.env.HOME || "~", ".pi", "crumbs", "agents");
+  return getDefaultGlobalSubagentsDir();
 }
 
 function normalizeNewlines(value: string): string {
@@ -173,15 +179,14 @@ function parseAgent(
   };
 }
 
-async function findProjectAgentsDir(cwd: string): Promise<string | null> {
-  let current = resolve(cwd);
-  while (true) {
-    const candidate = join(current, ".pi", "crumbs", "agents");
-    if (await isDirectory(candidate)) return candidate;
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
+async function getProjectAgentsDirs(cwd: string): Promise<string[]> {
+  const projectRoot = await resolveProjectRoot(cwd);
+  const legacyDir = getLegacyProjectSubagentsDir(projectRoot);
+  const defaultDir = getDefaultProjectSubagentsDir(projectRoot);
+  const dirs: string[] = [];
+  if (await isDirectory(legacyDir)) dirs.push(legacyDir);
+  if (await isDirectory(defaultDir)) dirs.push(defaultDir);
+  return dirs;
 }
 
 async function loadAgentsFromDir(
@@ -239,7 +244,7 @@ function mergeAgents(agents: AgentSpec[]): { agents: AgentSpec[]; diagnostics: A
       byName.set(agent.name, agent);
       continue;
     }
-    if (existing.source === agent.source) {
+    if (existing.source === agent.source && existing.sourceDir === agent.sourceDir) {
       diagnostics.push(
         issue(
           "error",
@@ -248,6 +253,18 @@ function mergeAgents(agents: AgentSpec[]): { agents: AgentSpec[]; diagnostics: A
           agent.name,
         ),
       );
+      continue;
+    }
+    if (existing.source === agent.source) {
+      diagnostics.push(
+        issue(
+          "info",
+          `agent "${agent.name}" from ${agent.sourceDir} shadows ${existing.sourceDir}`,
+          agent.filePath,
+          agent.name,
+        ),
+      );
+      byName.set(agent.name, agent);
       continue;
     }
     diagnostics.push(
@@ -339,24 +356,56 @@ export async function discoverAgents(
 
   const builtinDir = options.builtinDir ? resolve(options.builtinDir) : getBuiltinAgentsDir();
   const userDir = getUserAgentsDir();
-  const projectDir = await findProjectAgentsDir(cwd);
+  const projectRoot = await resolveProjectRoot(cwd);
+  const legacyUserDir = getLegacyGlobalSubagentsDir();
+  const projectDir = getDefaultProjectSubagentsDir(projectRoot);
+  const legacyProjectDir = getLegacyProjectSubagentsDir(projectRoot);
+  const projectDirs = await getProjectAgentsDirs(cwd);
   const dirs: Array<{ dir: string; source: AgentSource }> = [];
+  const diagnostics: AgentIssue[] = [];
 
   if (options.includeBuiltin !== false) dirs.push({ dir: builtinDir, source: "builtin" });
-  if (options.includeUser !== false) dirs.push({ dir: userDir, source: "user" });
-  if (options.includeProject !== false && projectDir)
-    dirs.push({ dir: projectDir, source: "project" });
+  if (options.includeUser !== false) {
+    if (await isDirectory(legacyUserDir)) dirs.push({ dir: legacyUserDir, source: "user" });
+    dirs.push({ dir: userDir, source: "user" });
+  }
+  if (options.includeProject !== false) {
+    for (const dir of projectDirs) dirs.push({ dir, source: "project" });
+  }
   for (const extraDir of options.extraDirs ?? [])
     dirs.push({ dir: resolve(extraDir), source: "path" });
+
+  if (options.includeUser !== false && (await isDirectory(legacyUserDir))) {
+    diagnostics.push(
+      issue(
+        "info",
+        `legacy user agents directory exists: ${legacyUserDir}. Move agents to ${userDir}; legacy locations will be removed in a future update.`,
+        legacyUserDir,
+      ),
+    );
+  }
+  if (options.includeProject !== false && (await isDirectory(legacyProjectDir))) {
+    diagnostics.push(
+      issue(
+        "info",
+        `legacy project agents directory exists: ${legacyProjectDir}. Move agents to ${projectDir}; legacy locations will be removed in a future update.`,
+        legacyProjectDir,
+      ),
+    );
+  }
 
   const loaded = await Promise.all(dirs.map((item) => loadAgentsFromDir(item.dir, item.source)));
   const merged = mergeAgents(loaded.flatMap((item) => item.agents));
   const result: AgentRegistry = {
     agents: merged.agents,
-    diagnostics: [...loaded.flatMap((item) => item.diagnostics), ...merged.diagnostics],
+    diagnostics: [
+      ...diagnostics,
+      ...loaded.flatMap((item) => item.diagnostics),
+      ...merged.diagnostics,
+    ],
     builtinDir,
     userDir,
-    projectDir,
+    projectDir: projectDirs.length > 0 ? projectDir : null,
   };
 
   registryCache.set(projectKey, result);
