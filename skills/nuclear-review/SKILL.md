@@ -40,6 +40,7 @@ Changed files are entry points, not prison walls. Follow direct blast radius whe
 Before judging architecture, inspect enough context to know local truth.
 
 - Read changed files and surrounding owner modules.
+- If changed area depends on domain language or recorded decisions, read nearby `CONTEXT.md` and relevant `docs/adr/` entries before proposing ownership changes.
 - Find existing canonical helpers, seams, patterns, and naming before suggesting new ones.
 - Check whether logic sits with concept owner or leaks into generic/shared flow.
 - Check whether new state, flags, modes, optional fields, casts, or wrappers make callers learn more concepts.
@@ -64,6 +65,23 @@ Ask these for every meaningful change:
 - Did this make data flow, error flow, ordering, or persistence harder to reason about?
 - If we deleted this new layer/helper/branch, would complexity disappear or merely move to callers?
 
+## Deep Module Checks
+
+Use depth as review language when current change adds or exposes shallow structure.
+
+- A module is deep when callers get meaningful behavior behind a small interface.
+- Interface means everything caller must know: types, invariants, ordering, error modes, configuration, and performance expectations.
+- Shallow modules make caller knowledge nearly as complex as implementation. Pass-through helpers, thin managers, and wrapper-only services are guilty until proven useful.
+- Apply deletion test: if deleting module makes complexity vanish, delete it; if deleting it spreads complexity across callers, module probably earns its keep.
+- The interface is test surface. Tests should protect behavior through caller-facing seam, not internal extraction details.
+
+## Seam Discipline
+
+- One adapter means hypothetical seam. Two adapters means real seam.
+- Do not introduce port/interface/adapter structure unless production vs test substitution, multiple adapters, dependency-direction repair, or ownership boundary needs it now.
+- Internal seams may exist inside implementation for clarity or test setup, but do not leak them into external interface unless callers need them.
+- Prefer one resolved policy/state/model crossing a seam over repeated feature checks across call sites.
+
 ## Block AI-Slop Patterns
 
 Treat these as presumptive blockers when tied to current change:
@@ -79,6 +97,7 @@ Treat these as presumptive blockers when tied to current change:
 - Large-file growth that mixes distinct ownership or makes navigation worse.
 - Sequential orchestration or partial updates that make consistency/error handling harder when simpler structure is obvious.
 - Tests coupled to internals while public behavior seam stays unprotected.
+- Single-adapter ports or interfaces that create ceremony without real variation.
 
 Presume blocker does not mean automatic blocker. Waive only with concrete repo evidence and explain why.
 
