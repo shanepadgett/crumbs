@@ -1,4 +1,10 @@
-import { getGlobalCrumbsPath, getProjectCrumbsPath } from "./crumbs-paths.js";
+import {
+  getGlobalCrumbsPath,
+  getGlobalCrumbsReadPaths,
+  getProjectCrumbsPath,
+  getProjectCrumbsReadPaths,
+} from "./crumbs-paths.js";
+import { mergeLegacyWithDefault } from "./legacy-default-merge.js";
 import { mergeCrumbsConfigs } from "./crumbs-merge.js";
 import { asObject, readJsonObject, type JsonObject, writeJsonObject } from "../io/json-file.js";
 import { invalidateProjectRootCache, resolveProjectRoot } from "./project-root.js";
@@ -16,18 +22,23 @@ async function resolveProjectContext(cwd: string): Promise<{ root: string; path:
   return { root, path: await getProjectCrumbsPath(cwd) };
 }
 
+async function readMergedJsonObjects(paths: string[]): Promise<JsonObject> {
+  const configs = await Promise.all(paths.map((path) => readJsonObject(path)));
+  return configs.reduce<JsonObject>((merged, config) => mergeLegacyWithDefault(merged, config), {});
+}
+
 export async function loadGlobalCrumbsConfig(): Promise<JsonObject> {
   if (!globalCrumbsCache) {
-    globalCrumbsCache = await readJsonObject(getGlobalCrumbsPath());
+    globalCrumbsCache = await readMergedJsonObjects(getGlobalCrumbsReadPaths());
   }
   return cloneJsonObject(globalCrumbsCache);
 }
 
 export async function loadProjectCrumbsConfig(cwd: string): Promise<JsonObject> {
-  const { root, path } = await resolveProjectContext(cwd);
+  const { root } = await resolveProjectContext(cwd);
   let cached = projectCrumbsByRoot.get(root);
   if (!cached) {
-    cached = await readJsonObject(path);
+    cached = await readMergedJsonObjects(await getProjectCrumbsReadPaths(cwd));
     projectCrumbsByRoot.set(root, cached);
   }
   return cloneJsonObject(cached);

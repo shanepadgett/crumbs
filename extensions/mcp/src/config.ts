@@ -2,6 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { normalizeCavemanEnhancements } from "../../caveman/src/system-prompt.js";
+import {
+  getDefaultProjectCrumbsPathForRoot,
+  getGlobalCrumbsPath,
+  getGlobalCrumbsReadPaths,
+  getLegacyProjectCrumbsPathForRoot,
+} from "../../shared/config/crumbs-paths.js";
+import { mergeLegacyWithDefault } from "../../shared/config/legacy-default-merge.js";
 import { loadEffectiveExtensionConfig } from "../../shared/config/crumbs-loader.js";
 import { asObject } from "../../shared/io/json-file.js";
 import { DirectMcpClient } from "./client.js";
@@ -33,9 +40,53 @@ interface McpToolCacheFile {
 
 interface ConfigSource {
   filePath: string;
+  readPaths?: string[];
+  writePath?: string;
   sourceKind: ServerSourceKind;
   getServers(root: RawMcpFile): Record<string, RawServerConfig>;
   setServers(root: RawMcpFile, servers: Record<string, RawServerConfig>): void;
+}
+
+function readConfigSourceRoot(source: ConfigSource): RawMcpFile {
+  const paths = source.readPaths ?? [source.filePath];
+  return paths.reduce<RawMcpFile>(
+    (merged, path) => mergeLegacyWithDefault(merged, readJsonFile(path)),
+    {},
+  );
+}
+
+function hasLegacyServerInSource(source: ConfigSource, name: string): boolean {
+  const writePath = source.writePath ?? source.filePath;
+  return (source.readPaths ?? [])
+    .filter((path) => path !== writePath)
+    .some((path) => !!source.getServers(readJsonFile(path))[name]);
+}
+
+function getProjectCrumbsReadPathsSync(cwd: string): string[] {
+  const projectRoot = resolveProjectRootSync(cwd);
+  return [
+    getLegacyProjectCrumbsPathForRoot(projectRoot),
+    getDefaultProjectCrumbsPathForRoot(projectRoot),
+  ];
+}
+
+function resolveProjectRootSync(cwd: string): string {
+  const start = resolve(cwd);
+  let current = start;
+
+  while (true) {
+    if (
+      existsSync(join(current, ".agents", "crumbs", "crumbs.json")) ||
+      existsSync(join(current, ".pi", "crumbs.json")) ||
+      existsSync(join(current, ".git"))
+    ) {
+      return current;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return start;
+    current = parent;
+  }
 }
 
 function cloneServerConfig(raw: RawServerConfig): RawServerConfig {
@@ -123,6 +174,12 @@ function writeToolCacheFile(data: McpToolCacheFile): void {
 }
 
 function getConfigSources(cwd: string): ConfigSource[] {
+  const projectRoot = resolveProjectRootSync(cwd);
+  const globalCrumbsWritePath = getGlobalCrumbsPath();
+  const projectCrumbsWritePath = getDefaultProjectCrumbsPathForRoot(projectRoot);
+  const globalCrumbsReadPaths = getGlobalCrumbsReadPaths();
+  const projectCrumbsReadPaths = getProjectCrumbsReadPathsSync(cwd);
+
   return [
     {
       filePath: join(homedir(), ".pi", "agent", "mcp.json"),
@@ -135,7 +192,9 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
-      filePath: join(homedir(), ".pi", "agent", "crumbs.json"),
+      filePath: globalCrumbsWritePath,
+      readPaths: globalCrumbsReadPaths,
+      writePath: globalCrumbsWritePath,
       sourceKind: "global-crumbs-extension",
       getServers(root) {
         return root.extensions?.mcp?.mcpServers ?? root.extensions?.mcpDirect?.mcpServers ?? {};
@@ -147,7 +206,7 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
-      filePath: resolve(cwd, ".pi", "mcp.json"),
+      filePath: resolve(projectRoot, ".pi", "mcp.json"),
       sourceKind: "project",
       getServers(root) {
         return root.mcpServers ?? {};
@@ -157,7 +216,9 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
-      filePath: resolve(cwd, ".pi", "crumbs.json"),
+      filePath: projectCrumbsWritePath,
+      readPaths: projectCrumbsReadPaths,
+      writePath: projectCrumbsWritePath,
       sourceKind: "crumbs-root",
       getServers(root) {
         return root.mcpServers ?? {};
@@ -167,7 +228,9 @@ function getConfigSources(cwd: string): ConfigSource[] {
       },
     },
     {
-      filePath: resolve(cwd, ".pi", "crumbs.json"),
+      filePath: projectCrumbsWritePath,
+      readPaths: projectCrumbsReadPaths,
+      writePath: projectCrumbsWritePath,
       sourceKind: "crumbs-extension",
       getServers(root) {
         return root.extensions?.mcp?.mcpServers ?? root.extensions?.mcpDirect?.mcpServers ?? {};
@@ -206,7 +269,7 @@ export function loadServerRecords(cwd: string): Record<string, ServerConfigRecor
   const merged: Record<string, ServerConfigRecord> = {};
 
   for (const source of getConfigSources(cwd)) {
-    const root = readJsonFile(source.filePath);
+    const root = readConfigSourceRoot(source);
     const servers = source.getServers(root);
 
     for (const [name, raw] of Object.entries(servers)) {
@@ -252,15 +315,21 @@ export function updateServerRecord(
   updater: (current: RawServerConfig | undefined) => RawServerConfig | undefined,
 ): void {
   const source = findSource(cwd, sourceKind);
-  const root = readJsonFile(source.filePath);
+  const writePath = source.writePath ?? source.filePath;
+  const root = readJsonFile(writePath);
   const servers = { ...source.getServers(root) };
-  const next = updater(servers[name]);
+  const fallbackCurrent = loadServerRecords(cwd)[name];
+  const current =
+    servers[name] ?? (fallbackCurrent?.sourceKind === sourceKind ? fallbackCurrent.raw : undefined);
+  const next = updater(current);
+  const hasLegacyServer = hasLegacyServerInSource(source, name);
 
   if (next) servers[name] = next;
+  else if (hasLegacyServer) servers[name] = { enabled: false };
   else delete servers[name];
 
   source.setServers(root, servers);
-  writeJsonFile(source.filePath, root);
+  writeJsonFile(writePath, root);
 }
 
 export function removeServerRecord(cwd: string, sourceKind: ServerSourceKind, name: string): void {

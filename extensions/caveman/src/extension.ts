@@ -218,7 +218,7 @@ async function openScopePicker(
     {
       value: "project",
       label: "Project powers",
-      description: "Save in .pi/crumbs.json",
+      description: "Save in .agents/crumbs/crumbs.json",
     },
     {
       value: "session",
@@ -297,7 +297,7 @@ async function openEnhancementPicker(
         theme.fg(
           "muted",
           scope === "project"
-            ? "Saved in .pi/crumbs.json"
+            ? "Saved in .agents/crumbs/crumbs.json"
             : "Saved for current session only. First time starts blank.",
         ),
         1,

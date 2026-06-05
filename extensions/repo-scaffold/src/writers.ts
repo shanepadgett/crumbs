@@ -251,7 +251,7 @@ async function mergeQuietValidators(cwd: string, plan: ScaffoldPlan): Promise<st
       },
     };
   });
-  return ".pi/crumbs.json";
+  return ".agents/crumbs/crumbs.json";
 }
 
 export async function writePlan(
@@ -316,6 +316,6 @@ export async function previewPlan(cwd: string, plan: ScaffoldPlan): Promise<stri
     lines.push(
       `${(await fileExists(join(cwd, file.path))) ? "skip/replace" : "create"} ${file.path}`,
     );
-  if (plan.quietValidators.length > 0) lines.push("merge .pi/crumbs.json");
+  if (plan.quietValidators.length > 0) lines.push("merge .agents/crumbs/crumbs.json");
   return [...new Set(lines)].sort();
 }

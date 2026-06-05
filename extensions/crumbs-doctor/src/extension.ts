@@ -5,8 +5,17 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getGlobalCrumbsPath, getProjectCrumbsPath } from "../../shared/config/crumbs-paths.js";
+import {
+  getGlobalCrumbsPath,
+  getGlobalCrumbsReadPaths,
+  getLegacyGlobalCrumbsPath,
+  getLegacyProjectCrumbsPathForRoot,
+  getProjectCrumbsPath,
+  getProjectCrumbsReadPaths,
+} from "../../shared/config/crumbs-paths.js";
+import { resolveProjectRoot } from "../../shared/config/project-root.js";
 import { asObject, type JsonObject, writeJsonObject } from "../../shared/io/json-file.js";
+import { notifyForSessionStart } from "../../shared/ui/notify.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,7 +26,20 @@ type JsonStatus =
 
 type Finding =
   | { kind: "malformed-json"; filePath: string; error: string }
-  | { kind: "type-conflict"; filePath: string; keyPath: string; expected: string; actual: string };
+  | { kind: "type-conflict"; filePath: string; keyPath: string; expected: string; actual: string }
+  | {
+      kind: "legacy-pair";
+      level: "global" | "project";
+      legacyPath: string;
+      defaultPath: string;
+    }
+  | {
+      kind: "legacy-conflict";
+      level: "global" | "project";
+      legacyPath: string;
+      defaultPath: string;
+      keyPath: string;
+    };
 
 const FALLBACK_SCHEMA_URL =
   "https://raw.githubusercontent.com/shanepadgett/crumbs/refs/heads/main/schemas/crumbs.schema.json";
@@ -55,6 +77,44 @@ function hasAtPath(root: JsonObject, path: string): boolean {
   }
 
   return true;
+}
+
+function stableJson(value: unknown): string {
+  if (!value || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function collectConflictingKeyPaths(
+  legacy: JsonObject,
+  defaultConfig: JsonObject,
+  prefix = "",
+): string[] {
+  const conflicts: string[] = [];
+
+  for (const key of Object.keys(legacy)) {
+    if (!(key in defaultConfig)) continue;
+
+    const keyPath = prefix ? `${prefix}.${key}` : key;
+    const legacyValue = legacy[key];
+    const defaultValue = defaultConfig[key];
+    const legacyObject = asObject(legacyValue);
+    const defaultObject = asObject(defaultValue);
+
+    if (legacyObject && defaultObject) {
+      conflicts.push(...collectConflictingKeyPaths(legacyObject, defaultObject, keyPath));
+      continue;
+    }
+
+    if (stableJson(legacyValue) !== stableJson(defaultValue)) conflicts.push(keyPath);
+  }
+
+  return conflicts;
 }
 
 function expectsBoolean(value: unknown): boolean {
@@ -150,12 +210,16 @@ async function inspect(cwd: string): Promise<{
   const globalCrumbsPath = getGlobalCrumbsPath();
 
   const crumbsStatuses = await Promise.all([
-    readJsonStatus(globalCrumbsPath),
-    readJsonStatus(projectCrumbsPath),
+    ...getGlobalCrumbsReadPaths().map((path) => readJsonStatus(path)),
+    ...(await getProjectCrumbsReadPaths(cwd)).map((path) => readJsonStatus(path)),
   ]);
 
-  const hasGlobalCrumbs = crumbsStatuses[0]?.exists === true;
-  const hasProjectCrumbs = crumbsStatuses[1]?.exists === true;
+  const hasGlobalCrumbs = crumbsStatuses.some(
+    (status) => status.path === globalCrumbsPath && status.exists,
+  );
+  const hasProjectCrumbs = crumbsStatuses.some(
+    (status) => status.path === projectCrumbsPath && status.exists,
+  );
 
   for (const status of crumbsStatuses) {
     if (!status.exists) continue;
@@ -175,6 +239,38 @@ async function inspect(cwd: string): Promise<{
         expected: rule.expected,
         actual: typeOfValue(value),
       });
+    }
+  }
+
+  const projectRoot = await resolveProjectRoot(cwd);
+  const legacyProjectCrumbsPath = getLegacyProjectCrumbsPathForRoot(projectRoot);
+  const conflictPairs: Array<{
+    level: "global" | "project";
+    legacyPath: string;
+    defaultPath: string;
+  }> = [
+    {
+      level: "global",
+      legacyPath: getLegacyGlobalCrumbsPath(),
+      defaultPath: globalCrumbsPath,
+    },
+    {
+      level: "project",
+      legacyPath: legacyProjectCrumbsPath,
+      defaultPath: projectCrumbsPath,
+    },
+  ];
+
+  for (const pair of conflictPairs) {
+    const legacy = crumbsStatuses.find((status) => status.path === pair.legacyPath);
+    const defaultStatus = crumbsStatuses.find((status) => status.path === pair.defaultPath);
+    if (!legacy?.exists || !defaultStatus?.exists) continue;
+
+    findings.push({ kind: "legacy-pair", ...pair });
+    if (!legacy.ok || !defaultStatus.ok) continue;
+
+    for (const keyPath of collectConflictingKeyPaths(legacy.value, defaultStatus.value)) {
+      findings.push({ kind: "legacy-conflict", ...pair, keyPath });
     }
   }
 
@@ -199,8 +295,22 @@ function renderReport(findings: Finding[]): string {
       continue;
     }
 
+    if (finding.kind === "type-conflict") {
+      lines.push(
+        `- type conflict: ${finding.keyPath} expected ${finding.expected}, got ${finding.actual} @ ${finding.filePath}`,
+      );
+      continue;
+    }
+
+    if (finding.kind === "legacy-pair") {
+      lines.push(
+        `- legacy crumbs pair: ${finding.level} has both ${finding.defaultPath} and ${finding.legacyPath}`,
+      );
+      continue;
+    }
+
     lines.push(
-      `- type conflict: ${finding.keyPath} expected ${finding.expected}, got ${finding.actual} @ ${finding.filePath}`,
+      `- legacy conflict: ${finding.level} ${finding.keyPath} differs; ${finding.defaultPath} overrides ${finding.legacyPath}`,
     );
   }
 
@@ -211,6 +321,14 @@ function renderReport(findings: Finding[]): string {
   }
   if (findings.some((item) => item.kind === "type-conflict")) {
     lines.push("- Correct key types in crumbs files to match schema expectations.");
+  }
+  if (findings.some((item) => item.kind === "legacy-conflict")) {
+    lines.push(
+      "- Move wanted legacy values into .agents/crumbs/crumbs.json, then remove legacy crumbs file.",
+    );
+  }
+  if (findings.some((item) => item.kind === "legacy-pair")) {
+    lines.push("- Prefer one crumbs file per level; .agents/crumbs/crumbs.json is default.");
   }
 
   return lines.join("\n");
@@ -300,9 +418,11 @@ async function resolveSchemaUrlFromPiSettings(cwd: string): Promise<string> {
   const packageSchemaUrl = await resolveSchemaUrlFromPackageRoot();
   if (packageSchemaUrl) return packageSchemaUrl;
 
+  const projectRoot = await resolveProjectRoot(cwd);
+
   const candidateSettingsPaths = [
     join(homedir(), ".pi", "agent", "settings.json"),
-    join(await getProjectCrumbsPath(cwd), "..", "settings.json"),
+    join(projectRoot, ".pi", "settings.json"),
   ];
 
   for (const settingsPath of candidateSettingsPaths) {
@@ -370,6 +490,29 @@ async function updateProjectCrumbsSchema(
 }
 
 export default function crumbsDoctorExtension(pi: ExtensionAPI): void {
+  let launchWarningShown = false;
+
+  pi.on("session_start", async (event, ctx) => {
+    if (launchWarningShown || (event.reason !== "startup" && event.reason !== "reload")) return;
+
+    let findings: Finding[];
+    try {
+      findings = (await inspect(ctx.cwd)).findings;
+    } catch {
+      return;
+    }
+
+    if (!findings.some((finding) => finding.kind === "legacy-pair")) return;
+
+    launchWarningShown = true;
+    notifyForSessionStart(
+      ctx,
+      event.reason,
+      "Both .agents/crumbs and legacy .pi crumbs files found. .agents/crumbs/crumbs.json is default. Run /crumbs doctor.",
+      "warning",
+    );
+  });
+
   pi.registerCommand("crumbs", {
     description:
       "Crumbs utilities. Usage: /crumbs doctor | /crumbs init [--force] | /crumbs schema",

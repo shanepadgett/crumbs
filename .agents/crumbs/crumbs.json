@@ -36,16 +36,6 @@
           "trackedExtensions": [".yml", ".yaml"]
         }
       ]
-    },
-    "mcp": {
-      "mcpServers": {
-        "pencil": {
-          "command": "/Users/spadgett/.pencil/mcp/visual_studio_code/out/mcp-server-darwin-arm64",
-          "args": ["--app", "visual_studio_code"],
-          "lifecycle": "lazy",
-          "requiresCavemanPower": "design"
-        }
-      }
     }
   }
 }

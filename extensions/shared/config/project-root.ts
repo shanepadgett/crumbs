@@ -14,7 +14,9 @@ async function pathExists(path: string): Promise<boolean> {
 
 async function isProjectMarker(path: string): Promise<boolean> {
   return (
-    (await pathExists(join(path, ".pi", "crumbs.json"))) || (await pathExists(join(path, ".git")))
+    (await pathExists(join(path, ".agents", "crumbs", "crumbs.json"))) ||
+    (await pathExists(join(path, ".pi", "crumbs.json"))) ||
+    (await pathExists(join(path, ".git")))
   );
 }
 
