@@ -1,14 +1,14 @@
 # .working folder
 
-Use this folder for ephemeral agent artifacts while work is in progress:
+Use this folder for temporary repo work notes made with agents.
 
-- planning checklists
-- research notes
-- scratch docs
-- temporary migration/rollout notes
+- Put tasks and plans in `plans/`.
+- Treat tasks and plans as same thing here.
+- Use numeric prefixes only when order matters.
+- Use plain names for plans that can be done anytime.
 
 Guidelines:
 
 - Keep durable documentation in `README.md` or `docs/` instead.
-- Prefer deleting temporary files when task is complete.
+- Ask before deleting completed plans.
 - Keep this folder lightweight and disposable.
