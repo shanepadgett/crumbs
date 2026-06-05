@@ -213,29 +213,34 @@ Separate snapshot repos per worktree prevent state bleed between parallel worktr
 ## Implementation sequence
 
 1. Build the snapshot repository manager.
+
    - project/worktree identity
    - repo initialization
    - durable commit/ref creation
    - cleanup hooks
 
 1. Build the turn capture coordinator.
+
    - mutation detection
    - `before` snapshot capture
    - `after` snapshot capture
    - changed-file aggregation
 
 1. Build session metadata persistence.
+
    - custom entries
    - label integration
    - reload reconstruction
 
 1. Build restore and redo.
+
    - workspace restore engine
    - session repositioning
    - editor preload
    - temporary redo snapshot handling
 
 1. Build inspection commands and TUI surfacing.
+
    - list
    - diff
    - restore

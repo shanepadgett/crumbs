@@ -40,7 +40,6 @@ Changed files are entry points, not prison walls. Follow direct blast radius whe
 Before judging architecture, inspect enough context to know local truth.
 
 - Read changed files and surrounding owner modules.
-- If changed area depends on domain language or recorded decisions, read nearby `CONTEXT.md` and relevant `docs/adr/` entries before proposing ownership changes.
 - Find existing canonical helpers, seams, patterns, and naming before suggesting new ones.
 - Check whether logic sits with concept owner or leaks into generic/shared flow.
 - Check whether new state, flags, modes, optional fields, casts, or wrappers make callers learn more concepts.

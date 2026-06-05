@@ -1,9 +1,6 @@
 ---
 name: pencil-design
 description: Design UIs in Pencil (.pen files) and generate production code from them. Use when working with .pen files, designing screens or components in Pencil, or generating code from Pencil designs. Triggers on tasks involving Pencil, .pen files, design-to-code workflows, or UI design with the Pencil MCP tools.
-metadata:
-  author: Nyasha Chiroro
-  version: "1.0"
 ---
 
 # Pencil Design Skill
