@@ -36,6 +36,13 @@
           "trackedExtensions": [".yml", ".yaml"]
         }
       ]
+    },
+    "autoGuardian": {
+      "unknownToolAction": "prompt",
+      "guardian": {
+        "enabled": true,
+        "reviewBash": true
+      }
     }
   }
 }

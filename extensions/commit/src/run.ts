@@ -102,7 +102,9 @@ export async function runCommitAgent(
     extensionsOverride: (base) => ({
       ...base,
       extensions: base.extensions.filter(
-        (extension) => !extension.resolvedPath.includes("/extensions/notify/"),
+        (extension) =>
+          !extension.resolvedPath.includes("/extensions/notify/") &&
+          !extension.resolvedPath.includes("/extensions/auto-guardian/"),
       ),
     }),
   });

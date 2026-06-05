@@ -4,7 +4,10 @@ import {
   getAgentDir,
   SessionManager,
   type AgentSession,
+  type ExtensionContext,
+  type ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
+import { SubagentUiQueue, type SubagentUiBinding } from "./ui-proxy.js";
 import type {
   AgentSpec,
   RunResult,
@@ -23,6 +26,7 @@ type RunAgentOptions = {
   parentActiveTools?: string[];
   cwd?: string;
   signal?: AbortSignal;
+  uiBinding?: SubagentUiBinding;
   onUpdate?: (run: RunResult) => void;
 };
 
@@ -33,6 +37,8 @@ type ExecuteWorkflowOptions = {
   workflow: Workflow;
   parentActiveTools?: string[];
   signal?: AbortSignal;
+  parentUi?: ExtensionUIContext;
+  mode?: ExtensionContext["mode"];
   onUpdate?: (result: WorkflowResult) => void;
 };
 
@@ -204,7 +210,9 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
     extensionsOverride: (base) => ({
       ...base,
       extensions: base.extensions.filter(
-        (extension) => !extension.resolvedPath.includes("/extensions/notify/"),
+        (extension) =>
+          !extension.resolvedPath.includes("/extensions/notify/") &&
+          !extension.resolvedPath.includes("/extensions/status-table/"),
       ),
     }),
   });
@@ -217,6 +225,12 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
       sessionManager: SessionManager.inMemory(cwd),
     });
     session = created.session;
+    if (options.uiBinding) {
+      await session.bindExtensions({
+        uiContext: options.uiBinding.queue.create(options.agent.name),
+        mode: options.uiBinding.mode,
+      });
+    }
 
     const model = resolveModel(session, options.agent.model);
     if (model) await session.setModel(model);
@@ -438,6 +452,9 @@ async function mapWithConcurrencyLimit<T>(
 export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<WorkflowResult> {
   const startedAt = Date.now();
   const items = buildWorkflowItems(options.workflow);
+  const uiBinding = options.parentUi
+    ? { mode: options.mode ?? "tui", queue: new SubagentUiQueue(options.parentUi) }
+    : undefined;
   const emit = (mode: WorkflowResult["mode"], runs: RunResult[], done: number, total: number) => {
     if (!options.onUpdate) return;
     options.onUpdate(createWorkflowResult(mode, items, runs, startedAt, done, total));
@@ -464,6 +481,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         cwd: task.cwd,
         parentActiveTools: options.parentActiveTools,
         signal: options.signal,
+        uiBinding,
         onUpdate: (update) => emit(options.workflow.mode, [...runs, update], index, tasks.length),
       });
       runs.push(run);
@@ -504,6 +522,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
       cwd: task.cwd,
       parentActiveTools: options.parentActiveTools,
       signal: options.signal,
+      uiBinding,
       onUpdate: (update) => {
         slots[index] = update;
         emit(

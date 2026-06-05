@@ -25,6 +25,9 @@
         "codexCompat": {
           "$ref": "#/$defs/codexCompatConfig"
         },
+        "autoGuardian": {
+          "$ref": "#/$defs/autoGuardianConfig"
+        },
         "commit": {
           "$ref": "#/$defs/commitConfig"
         },
@@ -185,6 +188,166 @@
           "type": "boolean",
           "default": false,
           "description": "Enable OpenAI/OpenAI Codex priority service tier for supported requests."
+        }
+      },
+      "additionalProperties": false
+    },
+    "autoGuardianConfig": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["off", "gate"],
+          "default": "gate",
+          "description": "Enable or disable the auto guardian permission gate."
+        },
+        "ignoreTools": {
+          "type": "array",
+          "description": "Tool names the gate always allows. When provided, this replaces the built-in default list.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [
+            "read",
+            "grep",
+            "find",
+            "ls",
+            "websearch",
+            "webfetch",
+            "codesearch",
+            "view_image",
+            "subagent"
+          ]
+        },
+        "bash": {
+          "type": "object",
+          "properties": {
+            "defaultAction": {
+              "type": "string",
+              "enum": ["allow", "prompt"],
+              "default": "allow",
+              "description": "Action for bash commands that match no explicit rule."
+            },
+            "denyPatterns": {
+              "type": "array",
+              "description": "Case-insensitive regex sources that hard-block matching bash commands. When provided, this replaces the built-in default list.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": [
+                ":\\s*\\(\\s*\\)\\s*\\{.*\\|\\s*:",
+                "\\bmkfs[\\.\\s]",
+                "\\bdd\\b[^\\n]*\\bof=/dev/",
+                ">\\s*/dev/(sd|nvme|disk)",
+                "\\brm\\s+-[A-Za-z]*r[A-Za-z]*f[A-Za-z]*\\s+/(\\s|$)"
+              ]
+            },
+            "promptPatterns": {
+              "type": "array",
+              "description": "Case-insensitive regex sources that ask the user before matching bash commands run. When provided, this replaces the built-in default list.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": [
+                "\\bsudo\\b",
+                "\\b(chmod|chown)\\b[^\\n]*\\b777\\b",
+                "\\bgit\\s+push\\b[^\\n]*--force",
+                "\\b(curl|wget)\\b[^\\n]*\\|\\s*(sh|bash)",
+                ">\\s*/etc/",
+                "\\brm\\s+-[A-Za-z]*r"
+              ]
+            },
+            "allowPatterns": {
+              "type": "array",
+              "description": "Case-insensitive regex sources that allow matching bash commands when defaultAction is prompt. When provided, this replaces the built-in default list.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "mutation": {
+          "type": "object",
+          "properties": {
+            "defaultAction": {
+              "type": "string",
+              "enum": ["allow", "prompt"],
+              "default": "allow",
+              "description": "Action for workspace file mutations that match no explicit rule."
+            },
+            "protectedPaths": {
+              "type": "array",
+              "description": "Workspace-relative glob patterns that hard-block writes. Supports * and **. When provided, this replaces the built-in default list.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": [".git", ".git/**"]
+            },
+            "allowOutsideWorkspace": {
+              "type": "boolean",
+              "default": false,
+              "description": "Allow writes whose canonical target is outside the current workspace."
+            },
+            "maxBytes": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Prompt before write/apply_patch mutations larger than this many bytes."
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "unknownToolAction": {
+          "type": "string",
+          "enum": ["allow", "prompt", "block"],
+          "default": "prompt",
+          "description": "Action for non-built-in tools the gate does not recognize."
+        },
+        "guardian": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable optional LLM guardian review for eligible requests."
+            },
+            "model": {
+              "type": "string",
+              "description": "Guardian model as provider/id. Defaults to the active session model."
+            },
+            "reviewBash": {
+              "type": "boolean",
+              "default": true,
+              "description": "Send bash commands that pass hard-deny checks to the guardian when enabled."
+            },
+            "reviewMutations": {
+              "type": "boolean",
+              "default": false,
+              "description": "Send file mutations that pass hard-deny checks to the guardian when enabled."
+            },
+            "timeoutMs": {
+              "type": "number",
+              "minimum": 1,
+              "default": 15000,
+              "description": "Maximum guardian review time in milliseconds."
+            },
+            "maxTokens": {
+              "type": "number",
+              "minimum": 1,
+              "default": 256,
+              "description": "Maximum guardian response tokens."
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
         }
       },
       "additionalProperties": false

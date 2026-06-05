@@ -172,6 +172,8 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
         workflow,
         parentActiveTools: pi.getActiveTools(),
         signal,
+        parentUi: ctx.hasUI ? ctx.ui : undefined,
+        mode: ctx.mode,
         onUpdate: (update) =>
           onUpdate?.({
             content: [{ type: "text", text: renderWorkflowSummary(update) }],

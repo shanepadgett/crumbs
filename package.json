@@ -7,6 +7,7 @@
     "pi-package"
   ],
   "workspaces": [
+    "extensions/auto-guardian",
     "extensions/caveman",
     "extensions/codex-compat",
     "extensions/commit",
