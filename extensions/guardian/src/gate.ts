@@ -94,13 +94,15 @@ export async function handleGuardianToolCall(
     return undefined;
   }
   if (guardian.outcome === "deny") {
-    if (ctx.hasUI)
-      ctx.ui.notify(
-        `${reviewLabel[0]?.toUpperCase() ?? "T"}${reviewLabel.slice(1)} denied`,
-        "warning",
-      );
     const promptResult = await promptUser(ctx, request, guardian.reason);
     const userDecision = userDecisionFromResult(promptResult);
+    if (ctx.hasUI) {
+      const label = `${reviewLabel[0]?.toUpperCase() ?? "T"}${reviewLabel.slice(1)}`;
+      ctx.ui.notify(
+        `${label} ${userDecision === "allowed" ? "approved" : "denied"} by user`,
+        userDecision === "allowed" ? "info" : "warning",
+      );
+    }
     await auditGuardianDecision({
       request,
       decision,
