@@ -1,6 +1,6 @@
 ---
 name: repo-founder
-description: "Interview user, then set up agent-friendly repository guidance and tooling: sane .gitignore, repo-specific AGENTS.md, and optional mise.toml with runtime and check tasks. Use when user wants to start a new repo, prepare repo automation, create AGENTS.md guidance, or set up repo tooling from requirements."
+description: 'Interview user, then set up agent-friendly repository guidance and tooling: sane .gitignore, repo-specific AGENTS.md, and optional mise.toml with runtime and check tasks. Use when user wants to start a new repo, prepare repo automation, create AGENTS.md guidance, or set up repo tooling from requirements.'
 ---
 
 # Repo Founder
