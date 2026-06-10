@@ -5,6 +5,11 @@
       "extensions": [],
       "skills": []
     },
-    ".."
+    {
+      "source": "..",
+      "extensions": [
+        "-extensions/guardian/index.ts"
+      ]
+    }
   ]
 }
