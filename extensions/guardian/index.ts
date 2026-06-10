@@ -11,6 +11,8 @@ import { createDefaultGuardianConfig, loadGuardianConfig } from "./src/config.js
 import { handleGuardianToolCall } from "./src/gate.js";
 import type { GuardianConfig } from "./src/types.js";
 
+const CRUMBS_EVENT_USER_INPUT_REQUIRED = "crumbs:user-input-required";
+
 function warningNotifier(ctx: ExtensionContext): ((message: string) => void) | undefined {
   if (!ctx.hasUI) return undefined;
   return (message) => ctx.ui.notify(message, "warning");
@@ -62,6 +64,9 @@ export default function guardianExtension(pi: ExtensionAPI): void {
         if (guardianUnavailableNotified || !ctx.hasUI) return;
         guardianUnavailableNotified = true;
         ctx.ui.notify(`guardian: autoApprove unavailable: ${reason}`, "warning");
+      },
+      notifyUserInputRequired() {
+        pi.events.emit(CRUMBS_EVENT_USER_INPUT_REQUIRED, undefined);
       },
     });
   });

@@ -9,11 +9,12 @@ import { classifyRequest } from "./classify.js";
 import { runGuardian } from "./guardian.js";
 import { promptUser } from "./prompt.js";
 import { buildGateRequest, createFallbackRequest } from "./request.js";
-import type { GuardianComplete, GuardianConfig } from "./types.js";
+import type { GateRequest, GuardianComplete, GuardianConfig } from "./types.js";
 
 export interface GuardianGateOptions {
   complete?: GuardianComplete;
   notifyGuardianUnavailable?: (reason: string) => void;
+  notifyUserInputRequired?: () => void;
 }
 
 function formatError(error: unknown): string {
@@ -30,6 +31,24 @@ function guardianReviewLabel(kind: string): string {
   return "tool call";
 }
 
+function notifyUserInputRequired(options: GuardianGateOptions): void {
+  try {
+    options.notifyUserInputRequired?.();
+  } catch {
+    // Notification hooks must not affect Guardian security decisions.
+  }
+}
+
+function promptForUserDecision(
+  ctx: ExtensionContext,
+  request: GateRequest,
+  reason: string,
+  options: GuardianGateOptions,
+): Promise<ToolCallEventResult | undefined> {
+  notifyUserInputRequired(options);
+  return promptUser(ctx, request, reason);
+}
+
 export async function handleGuardianToolCall(
   event: ToolCallEvent,
   ctx: ExtensionContext,
@@ -44,7 +63,12 @@ export async function handleGuardianToolCall(
     request = await buildGateRequest(event, ctx.cwd, config);
   } catch (error) {
     const reason = `guardian could not inspect ${event.toolName}: ${formatError(error)}`;
-    return promptUser(ctx, createFallbackRequest(event, ctx.cwd, "inspection failed"), reason);
+    return promptForUserDecision(
+      ctx,
+      createFallbackRequest(event, ctx.cwd, "inspection failed"),
+      reason,
+      options,
+    );
   }
 
   if (request.kind === "read_only") return undefined;
@@ -52,7 +76,9 @@ export async function handleGuardianToolCall(
   const decision = classifyRequest(request, config);
   if (decision.action === "allow") return undefined;
   if (decision.action === "block") return { block: true, reason: decision.reason };
-  if (decision.action === "prompt") return promptUser(ctx, request, decision.reason);
+  if (decision.action === "prompt") {
+    return promptForUserDecision(ctx, request, decision.reason, options);
+  }
 
   const reviewLabel = guardianReviewLabel(request.kind);
   if (ctx.hasUI) ctx.ui.notify(`Reviewing ${reviewLabel}`, "info");
@@ -94,7 +120,7 @@ export async function handleGuardianToolCall(
     return undefined;
   }
   if (guardian.outcome === "deny") {
-    const promptResult = await promptUser(ctx, request, guardian.reason);
+    const promptResult = await promptForUserDecision(ctx, request, guardian.reason, options);
     const userDecision = userDecisionFromResult(promptResult);
     if (ctx.hasUI) {
       const label = `${reviewLabel[0]?.toUpperCase() ?? "T"}${reviewLabel.slice(1)}`;
@@ -116,7 +142,12 @@ export async function handleGuardianToolCall(
   }
 
   options.notifyGuardianUnavailable?.(guardian.reason);
-  const promptResult = await promptUser(ctx, request, `Guardian review failed: ${guardian.reason}`);
+  const promptResult = await promptForUserDecision(
+    ctx,
+    request,
+    `Guardian review failed: ${guardian.reason}`,
+    options,
+  );
   const userDecision = userDecisionFromResult(promptResult);
   await auditGuardianDecision({
     request,
