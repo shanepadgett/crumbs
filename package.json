@@ -31,17 +31,17 @@
     "node-pty": "1.1.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.78.1",
-    "@earendil-works/pi-coding-agent": "0.78.1",
-    "@earendil-works/pi-tui": "0.78.1",
+    "@earendil-works/pi-ai": "0.79.4",
+    "@earendil-works/pi-coding-agent": "0.79.4",
+    "@earendil-works/pi-tui": "0.79.4",
     "@types/node": "25.8.0",
     "typebox": "1.1.38",
     "typescript": "6.0.3"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": ">=0.78.0 <0.79.0",
-    "@earendil-works/pi-coding-agent": ">=0.78.0 <0.79.0",
-    "@earendil-works/pi-tui": ">=0.78.0 <0.79.0",
+    "@earendil-works/pi-ai": ">=0.79.0 <0.80.0",
+    "@earendil-works/pi-coding-agent": ">=0.79.0 <0.80.0",
+    "@earendil-works/pi-tui": ">=0.79.0 <0.80.0",
     "typebox": ">=1.1.38 <2.0.0"
   },
   "pi": {
