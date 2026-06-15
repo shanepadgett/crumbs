@@ -32,6 +32,10 @@
     "extensions/commit": {
       "name": "@crumbs-pi/commit",
     },
+    "extensions/cost-report": {
+      "name": "@crumbs-pi/cost-report",
+      "version": "0.1.0",
+    },
     "extensions/crumbs-doctor": {
       "name": "@crumbs-pi/crumbs-doctor",
     },

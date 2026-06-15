@@ -1,0 +1,11 @@
+{
+  "name": "@crumbs-pi/cost-report",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

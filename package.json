@@ -11,6 +11,7 @@
     "extensions/caveman",
     "extensions/codex-compat",
     "extensions/commit",
+    "extensions/cost-report",
     "extensions/crumbs-doctor",
     "extensions/mcp",
     "extensions/notify",
