@@ -19,8 +19,8 @@
         "quietMiseTask": {
           "$ref": "#/$defs/quietMiseTaskConfig"
         },
-        "statusTable": {
-          "$ref": "#/$defs/statusTableConfig"
+        "statusLine": {
+          "$ref": "#/$defs/statusLineConfig"
         },
         "codexCompat": {
           "$ref": "#/$defs/codexCompatConfig"
@@ -164,19 +164,13 @@
       },
       "additionalProperties": false
     },
-    "statusTableConfig": {
+    "statusLineConfig": {
       "type": "object",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable or disable the status table widget by default."
-        },
-        "mode": {
-          "type": "string",
-          "enum": ["full", "minimal"],
-          "default": "full",
-          "description": "Default status table rendering mode."
+          "description": "Enable or disable the status line footer by default."
         }
       },
       "additionalProperties": false

@@ -17,7 +17,7 @@
     "extensions/quiet-validators",
     "extensions/repo-scaffold",
     "extensions/skills-manager",
-    "extensions/status-table",
+    "extensions/status-line",
     "extensions/subagents",
     "extensions/terminal-clear",
     "extensions/web"

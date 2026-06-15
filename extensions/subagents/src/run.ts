@@ -212,7 +212,7 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
       extensions: base.extensions.filter(
         (extension) =>
           !extension.resolvedPath.includes("/extensions/notify/") &&
-          !extension.resolvedPath.includes("/extensions/status-table/"),
+          !extension.resolvedPath.includes("/extensions/status-line/"),
       ),
     }),
   });

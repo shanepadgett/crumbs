@@ -1,5 +1,5 @@
 {
-  "name": "@crumbs-pi/status-table",
+  "name": "@crumbs-pi/status-line",
   "private": true,
   "type": "module",
   "pi": {

@@ -152,10 +152,6 @@ function expectsBoolean(value: unknown): boolean {
   return typeof value === "boolean";
 }
 
-function expectsStringEnum(values: readonly string[]) {
-  return (value: unknown): boolean => typeof value === "string" && values.includes(value);
-}
-
 function expectsStringArray(value: unknown): boolean {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
@@ -170,13 +166,8 @@ const KNOWN_TYPE_RULES: Array<{
   validate: (value: unknown) => boolean;
 }> = [
   { keyPath: "extensions.quietMiseTask", expected: "object", validate: expectsObject },
-  { keyPath: "extensions.statusTable", expected: "object", validate: expectsObject },
-  { keyPath: "extensions.statusTable.enabled", expected: "boolean", validate: expectsBoolean },
-  {
-    keyPath: "extensions.statusTable.mode",
-    expected: "full|minimal",
-    validate: expectsStringEnum(["full", "minimal"]),
-  },
+  { keyPath: "extensions.statusLine", expected: "object", validate: expectsObject },
+  { keyPath: "extensions.statusLine.enabled", expected: "boolean", validate: expectsBoolean },
   { keyPath: "extensions.codexCompat", expected: "object", validate: expectsObject },
   { keyPath: "extensions.codexCompat.fast", expected: "boolean", validate: expectsBoolean },
   { keyPath: "extensions.commit", expected: "object", validate: expectsObject },

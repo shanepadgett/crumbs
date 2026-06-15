@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { GIT_TIMEOUT_MS } from "./constants.js";
 import type { GitSummary } from "./types.js";
 
+const GIT_TIMEOUT_MS = 1000;
 const UNMERGED_STATUSES = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
 export function parseGitStatus(stdout: string): GitSummary {
@@ -57,6 +57,6 @@ export async function loadGitSummary(pi: ExtensionAPI, cwd: string): Promise<Git
     { cwd, timeout: GIT_TIMEOUT_MS },
   );
 
-  if (result.code !== 0) return { branch: "no git", summary: "no git" };
+  if (result.code !== 0) return { branch: "", summary: "" };
   return parseGitStatus(result.stdout);
 }

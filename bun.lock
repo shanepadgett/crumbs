@@ -54,8 +54,8 @@
     "extensions/skills-manager": {
       "name": "@crumbs-pi/skills-manager",
     },
-    "extensions/status-table": {
-      "name": "@crumbs-pi/status-table",
+    "extensions/status-line": {
+      "name": "@crumbs-pi/status-line",
     },
     "extensions/subagents": {
       "name": "@crumbs-pi/subagents",
@@ -147,7 +147,7 @@
 
     "@crumbs-pi/skills-manager": ["@crumbs-pi/skills-manager@workspace:extensions/skills-manager"],
 
-    "@crumbs-pi/status-table": ["@crumbs-pi/status-table@workspace:extensions/status-table"],
+    "@crumbs-pi/status-line": ["@crumbs-pi/status-line@workspace:extensions/status-line"],
 
     "@crumbs-pi/subagents": ["@crumbs-pi/subagents@workspace:extensions/subagents"],
 
