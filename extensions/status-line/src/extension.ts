@@ -3,6 +3,7 @@ import { normalizeCavemanEnhancement } from "../../caveman/src/system-prompt.js"
 import {
   CRUMBS_EVENT_CAVEMAN_CHANGED,
   CRUMBS_EVENT_FAST_CHANGED,
+  CRUMBS_EVENT_GIT_STATUS_REFRESH_REQUESTED,
 } from "../../shared/crumbs-events.js";
 import { loadGitSummary } from "./git.js";
 import { renderStatusLine } from "./render.js";
@@ -70,6 +71,12 @@ function asCavemanFlagEvent(value: unknown): CavemanFlagEvent {
     hasSessionOverride:
       typeof record.hasSessionOverride === "boolean" ? record.hasSessionOverride : undefined,
   };
+}
+
+function asGitRefreshEvent(value: unknown): { cwd?: string } {
+  if (!value || typeof value !== "object") return {};
+  const record = value as Record<string, unknown>;
+  return { cwd: typeof record.cwd === "string" ? record.cwd : undefined };
 }
 
 export default function statusLineExtension(pi: ExtensionAPI): void {
@@ -248,6 +255,16 @@ export default function statusLineExtension(pi: ExtensionAPI): void {
   unsubscribeEventHandlers.push(
     pi.events.on(CRUMBS_EVENT_CAVEMAN_CHANGED, (event) => {
       applyCavemanEvent(lastContext, lastCwd, asCavemanFlagEvent(event));
+    }),
+  );
+
+  unsubscribeEventHandlers.push(
+    pi.events.on(CRUMBS_EVENT_GIT_STATUS_REFRESH_REQUESTED, (event) => {
+      const { cwd } = asGitRefreshEvent(event);
+      const ctx = lastContext;
+      if (!ctx || !lastCwd || (cwd && cwd !== lastCwd)) return;
+
+      void refreshGit(ctx).then(() => requestRender(ctx));
     }),
   );
 

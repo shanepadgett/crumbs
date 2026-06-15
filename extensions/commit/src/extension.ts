@@ -11,6 +11,7 @@ import { loadCommitConfig } from "./config.js";
 import { collectCommitEvidence } from "./evidence.js";
 import { renderCommitPrompt } from "./prompt.js";
 import { type CommitAgentUpdate, runCommitAgent } from "./run.js";
+import { CRUMBS_EVENT_GIT_STATUS_REFRESH_REQUESTED } from "../../shared/crumbs-events.js";
 
 const COMMAND_DESCRIPTION = "Create semantic git commit(s) from injected git snapshot";
 type CommitCancelResult = "cancelled" | "done";
@@ -184,6 +185,8 @@ async function handleCommit(
     if (wasCancelled(signal)) {
       return { message: "Commit cancelled.", level: "info" };
     }
+
+    pi.events.emit(CRUMBS_EVENT_GIT_STATUS_REFRESH_REQUESTED, { cwd: evidence.repoRoot });
 
     return {
       message: formatResult(
