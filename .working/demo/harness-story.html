@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The harness decides the bill</title>
+    <style>
+      /* ============================================================
+     TOKENS — canvas + 2 inks + 2 series hues + 1 money accent.
+     Type: 5 sizes. Weight does hierarchy work, not size jumps.
+     ============================================================ */
+      :root {
+        --canvas: #fcfbf8;
+        --ink: #161513;
+        --ink-2: #5c5a54;
+        --faint: #a4a199;
+        --hairline: #e7e4dc;
+
+        --conscious: #38758f; /* token-conscious harness */
+        --conscious-soft: #e3edf2;
+        --baseline: #8a8780; /* default harness */
+        --baseline-fill: #dedbd3;
+        --money: #c2522d; /* costs & deltas only */
+
+        --serif: Charter, Georgia, "Times New Roman", serif;
+        --sans: -apple-system, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+        --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+        --measure: min(880px, 75vw);
+        --wide: min(1120px, 82vw);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--canvas);
+        color: var(--ink);
+        font: 400 18.5px/1.68 var(--serif);
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background: var(--conscious-soft);
+      }
+
+      .measure {
+        max-width: var(--measure);
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 24px;
+        padding-right: 24px;
+      }
+      .wide {
+        max-width: var(--wide);
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 24px;
+        padding-right: 24px;
+      }
+
+      /* ---------- type scale: 46 / 27 / 20 / 18.5 / 13.5 ---------- */
+      h1 {
+        font: 500 46px/1.15 var(--sans);
+        letter-spacing: -0.018em;
+      }
+      h2 {
+        font: 550 27px/1.25 var(--sans);
+        letter-spacing: -0.012em;
+        margin: 0 0 22px;
+      }
+      .fig-title {
+        font: 600 20px/1.35 var(--sans);
+        letter-spacing: -0.008em;
+        margin: 0 0 4px;
+      }
+      .fig-sub {
+        font: 400 13.5px/1.6 var(--sans);
+        color: var(--faint);
+        margin: 0 0 30px;
+      }
+      p {
+        margin: 0 0 1.4em;
+        color: var(--ink-2);
+      }
+      p strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .caption {
+        font: 400 13.5px/1.6 var(--sans);
+        color: var(--faint);
+      }
+      figure .caption {
+        margin-top: 24px;
+      }
+
+      .c-conscious {
+        color: var(--conscious);
+        font-weight: 600;
+      }
+      .c-baseline {
+        color: var(--baseline);
+        font-weight: 600;
+      }
+      .c-money {
+        font-family: var(--mono);
+        font-size: 0.9em;
+        color: var(--money);
+        font-weight: 600;
+      }
+      .num {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      header.hero {
+        padding: 120px 0 80px;
+      }
+      .hero .meta {
+        font: 400 13.5px var(--sans);
+        color: var(--faint);
+        margin-bottom: 26px;
+      }
+      .hero p.lede {
+        font-size: 21.5px;
+        line-height: 1.62;
+        color: var(--ink);
+        margin-top: 28px;
+        max-width: 60ch;
+      }
+      section {
+        padding: 88px 0 0;
+      }
+      figure {
+        margin: 52px auto 0;
+      }
+      hr.fin {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        max-width: var(--measure);
+        margin: 96px auto 0;
+      }
+      footer {
+        padding: 56px 0 110px;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(8px);
+        transition:
+          opacity 0.65s ease,
+          transform 0.65s ease;
+      }
+      .reveal.in {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* ---------- buttons (replay / calculator chrome) ---------- */
+      .btn {
+        font: 500 13.5px var(--sans);
+        color: var(--ink);
+        background: none;
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 6px 16px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        border-color: var(--baseline);
+      }
+      .btn.primary {
+        border-color: var(--conscious);
+        color: var(--conscious);
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .seg button {
+        font: 500 13.5px var(--sans);
+        color: var(--ink-2);
+        background: none;
+        border: none;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      .seg button + button {
+        border-left: 1px solid var(--hairline);
+      }
+      .seg button.on {
+        background: var(--ink);
+        color: var(--canvas);
+      }
+      input[type="range"] {
+        accent-color: var(--conscious);
+      }
+
+      /* ---------- comparison bars ---------- */
+      .cmp-group {
+        margin-bottom: 38px;
+      }
+      .cmp-group:last-of-type {
+        margin-bottom: 0;
+      }
+      .cmp-group-title {
+        font: 600 15px/1.4 var(--sans);
+        margin: 0 0 14px;
+        color: var(--ink);
+      }
+      .cmp-lbl {
+        font: 500 13.5px var(--sans);
+        margin: 0 0 5px;
+      }
+      .cmp-lbl.lean {
+        color: var(--conscious);
+      }
+      .cmp-lbl.base {
+        color: var(--baseline);
+      }
+      .cmp-track {
+        position: relative;
+        height: 18px;
+        margin-bottom: 16px;
+      }
+      .cmp-track:last-child {
+        margin-bottom: 0;
+      }
+      .cmp-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        transition: width 1s cubic-bezier(0.25, 0.7, 0.3, 1);
+      }
+      .cmp-fill.lean {
+        background: var(--conscious);
+        min-width: 3px;
+      }
+      .cmp-fill.base {
+        background: var(--baseline-fill);
+      }
+      .cmp-fill.none {
+        min-width: 0;
+      }
+      .cmp-val {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        font: 500 13.5px var(--mono);
+        color: var(--ink-2);
+        white-space: nowrap;
+        transition: left 1s cubic-bezier(0.25, 0.7, 0.3, 1);
+        padding-left: 10px;
+      }
+      .cmp-delta {
+        font: 600 13.5px var(--mono);
+        color: var(--money);
+      }
+
+      /* ---------- fig 1: the loop ---------- */
+      .loop {
+        display: grid;
+        grid-template-columns: 1fr 230px;
+        gap: 40px;
+        align-items: start;
+      }
+      .loop-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .loop-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .loop-row.show {
+        opacity: 1;
+      }
+      .loop-row .t {
+        font: 500 12.5px var(--sans);
+        color: var(--faint);
+        width: 52px;
+        flex-shrink: 0;
+      }
+      .loop-cells {
+        display: flex;
+        gap: 2px;
+        flex: 1;
+        height: 16px;
+      }
+      .loop-cells i {
+        display: block;
+        height: 100%;
+      }
+      .loop-cells .old {
+        background: var(--baseline-fill);
+      }
+      .loop-cells .new {
+        background: var(--ink);
+      }
+      .loop-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        padding-top: 2px;
+      }
+      .loop-stat .v {
+        font: 600 26px var(--mono);
+        color: var(--ink);
+      }
+      .loop-stat .l {
+        font: 400 13.5px var(--sans);
+        color: var(--faint);
+        margin-top: 2px;
+      }
+      .loop-key {
+        font: 400 13.5px var(--sans);
+        color: var(--faint);
+      }
+      .loop-key i {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        vertical-align: -1px;
+        margin-right: 6px;
+      }
+
+      /* ---------- fig 2: replay ---------- */
+      .rp-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 26px;
+      }
+      .rp-controls .pos {
+        font: 500 13.5px var(--mono);
+        color: var(--faint);
+        margin-left: 8px;
+      }
+      .rp-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 56px;
+      }
+      .rp-col-h {
+        font: 600 15px var(--sans);
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--hairline);
+        margin-bottom: 2px;
+      }
+      .rp-col-h.base {
+        color: var(--baseline);
+      }
+      .rp-col-h.lean {
+        color: var(--conscious);
+      }
+      .rp-list {
+        min-height: 380px;
+      }
+      .rp-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: baseline;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--hairline);
+        font: 400 14px var(--sans);
+        color: var(--ink-2);
+      }
+      .rp-row .tk {
+        font: 500 13px var(--mono);
+        color: var(--ink-2);
+        white-space: nowrap;
+      }
+      .rp-row.capsule {
+        color: var(--conscious);
+      }
+      .rp-row.capsule .tk {
+        color: var(--conscious);
+      }
+      .rp-row.stale,
+      .rp-row.tomb {
+        color: var(--faint);
+        text-decoration: line-through;
+      }
+      .rp-row.stale .tk,
+      .rp-row.tomb .tk {
+        color: var(--faint);
+        text-decoration: none;
+      }
+      .rp-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding-top: 14px;
+      }
+      .rp-total .v {
+        font: 600 24px var(--mono);
+      }
+      .rp-total .v.base {
+        color: var(--ink);
+      }
+      .rp-total .v.lean {
+        color: var(--conscious);
+      }
+      .rp-total .l {
+        font: 400 13.5px var(--sans);
+        color: var(--faint);
+      }
+
+      /* ---------- fig: cache prefix rows ---------- */
+      .px-row {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        gap: 20px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .px-row .l {
+        font: 400 13.5px var(--sans);
+        color: var(--ink-2);
+        text-align: left;
+      }
+      .px-track {
+        display: flex;
+        gap: 2px;
+        height: 22px;
+      }
+      .px-track i {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        font: 500 11.5px var(--sans);
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .px-track .pay {
+        background: var(--baseline-fill);
+        color: var(--ink-2);
+      }
+      .px-track .hit {
+        background: var(--conscious-soft);
+        color: var(--conscious);
+      }
+      .px-track .new {
+        background: var(--ink);
+        color: var(--canvas);
+      }
+
+      /* break-even */
+      .be {
+        margin-top: 44px;
+      }
+      .be-ctl {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 22px;
+        font: 400 14px var(--sans);
+        color: var(--ink-2);
+        flex-wrap: wrap;
+      }
+      .be-ctl input {
+        width: 280px;
+      }
+      .be-ctl .rd {
+        font: 600 14px var(--mono);
+        color: var(--ink);
+      }
+      .be-verdict {
+        font: 400 15px var(--sans);
+        color: var(--ink);
+        margin-top: 20px;
+      }
+
+      /* ---------- fig: rot chart ---------- */
+      .rot-svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .rot-svg text {
+        font-family: var(--sans);
+      }
+
+      /* ---------- fig: calculator ---------- */
+      .calc {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 64px;
+        align-items: start;
+      }
+      .calc-ctl-row {
+        display: grid;
+        grid-template-columns: 1fr 200px 70px;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+        font: 400 14px var(--sans);
+        color: var(--ink-2);
+      }
+      .calc-ctl-row .v {
+        font: 600 14px var(--mono);
+        color: var(--ink);
+        text-align: right;
+      }
+      .calc-model {
+        margin-bottom: 26px;
+      }
+      .calc-out-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--hairline);
+        font: 400 15px var(--sans);
+      }
+      .calc-out-row .k {
+        color: var(--ink-2);
+      }
+      .calc-out-row .v {
+        font: 600 16px var(--mono);
+      }
+      .calc-out-row .v.base {
+        color: var(--baseline);
+      }
+      .calc-out-row .v.lean {
+        color: var(--conscious);
+      }
+      .calc-save {
+        padding: 22px 0 0;
+      }
+      .calc-save .v {
+        font: 600 38px var(--mono);
+        color: var(--money);
+      }
+      .calc-save .l {
+        font: 400 13.5px var(--sans);
+        color: var(--faint);
+        margin-top: 4px;
+      }
+
+      @media (max-width: 900px) {
+        :root {
+          --measure: 92vw;
+          --wide: 94vw;
+        }
+        .rp-grid {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .calc {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .loop {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 36px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ================================================================ -->
+    <header class="hero">
+      <div class="measure">
+        <p class="meta reveal">
+          Internal note · June 2026 · modeled costs on published list pricing
+        </p>
+        <h1 class="reveal">The harness decides the bill</h1>
+        <p class="lede reveal">
+          We pay for AI coding by the token. The model sets the rate, but the harness around it
+          decides how many tokens we buy, and the harnesses our engineers use today were built by
+          the companies selling those tokens. This note prices the difference between a default
+          harness and one engineered to be token-conscious. Nothing here is a benchmark yet. The
+          point is the shape of the math, and the shape holds at any plausible setting.
+        </p>
+      </div>
+    </header>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Every turn re-sends the whole conversation</h2>
+        <p class="reveal">
+          A language model keeps no memory between steps. When an agent takes its fortieth turn, the
+          harness uploads turns one through thirty-nine again, and the meter runs on all of it. The
+          file it read at the start gets bought again. The test log from an hour ago gets bought
+          again. Context grows a little every turn, so the total input bill grows roughly with the
+          square of session length.
+        </p>
+        <p class="reveal">
+          Output tokens get the attention because the per-token rate is five to six times higher. In
+          agent loops the volume runs the other way: input tokens outnumber output tokens by
+          enormous ratios, and nearly all of that input is repetition.
+        </p>
+      </div>
+
+      <figure class="measure reveal">
+        <div class="fig-title">Ten turns of an ordinary agent session</div>
+        <p class="fig-sub">
+          Each row is one request. Dark is new content; gray is history re-uploaded and re-billed.
+        </p>
+        <div class="loop">
+          <div class="loop-rows" id="loopRows"></div>
+          <div class="loop-stats">
+            <div class="loop-stat">
+              <div class="v" id="loopCum">0</div>
+              <div class="l">cumulative input tokens billed</div>
+            </div>
+            <div class="loop-stat">
+              <div class="v" id="loopRebuy">0×</div>
+              <div class="l">times turn one's file read has been re-purchased</div>
+            </div>
+            <div class="loop-key">
+              <i style="background: var(--ink)"></i>new this turn<br /><i
+                style="background: var(--baseline-fill)"
+              ></i
+              >re-sent history
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Modeled at 6,000 new tokens per turn, which is modest for coding work. Ten turns buy
+          330,000 input tokens to deliver 60,000 tokens of new information.
+        </p>
+      </figure>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">One afternoon, replayed twice</h2>
+        <p class="reveal">
+          Here is a small, ordinary task: a checkout test is failing. Fix it, then start the
+          follow-up the user asks for. Same model, same tools, same prompts on both sides.
+          <span class="c-baseline">The default harness</span> keeps every byte it has ever seen.
+          <span class="c-conscious">The token-conscious harness</span> writes full outputs to a
+          local artifact store, hands the model a short capsule with a retrieval handle, and marks
+          anything an edit invalidated as stale. Step through it.
+        </p>
+      </div>
+
+      <figure class="wide reveal">
+        <div class="rp-controls">
+          <button class="btn primary" id="rpStep">Step</button>
+          <button class="btn" id="rpPlay">Play</button>
+          <button class="btn" id="rpReset">Reset</button>
+          <span class="pos" id="rpPos">0 / 9</span>
+        </div>
+        <div class="rp-grid">
+          <div>
+            <div class="rp-col-h base">Default harness</div>
+            <div class="rp-list" id="rpBase"></div>
+            <div class="rp-total">
+              <span class="l">context re-sent next turn</span
+              ><span class="v base num" id="rpBaseTot">3,000</span>
+            </div>
+          </div>
+          <div>
+            <div class="rp-col-h lean">Token-conscious harness</div>
+            <div class="rp-list" id="rpLean"></div>
+            <div class="rp-total">
+              <span class="l"
+                >context re-sent next turn &nbsp;<span class="cmp-delta" id="rpDelta"></span></span
+              ><span class="v lean num" id="rpLeanTot">3,000</span>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Token counts are modeled from typical file, log, and search sizes. Struck-through rows are
+          stale or superseded; colored rows are capsules. Every full output still exists on disk,
+          retrievable by id in one tool call. What changes is what gets re-uploaded every turn.
+        </p>
+      </figure>
+
+      <div class="measure" style="margin-top: 44px">
+        <p class="reveal">
+          By the time the user asks for the follow-up, the default harness re-sends about
+          <strong>87,000 tokens per turn</strong> and the conscious one about
+          <strong>5,100</strong>. Nothing was deleted. The full test logs, the search flood, and the
+          original file snapshot all sit in the artifact store, one retrieval call away.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Waste has a shape</h2>
+        <p class="reveal">Four patterns cover most of what default harnesses re-send.</p>
+        <p class="reveal">
+          <strong>Stale reads.</strong> The agent reads a file, edits it, and the original copy
+          stays in context. The cost is the small problem. The model can reason from the outdated
+          copy and write a wrong edit on top of it. Marking old reads stale is a correctness fix
+          that happens to save tokens.
+        </p>
+        <p class="reveal">
+          <strong>Repeat reads.</strong> Agents re-read the same file three or four times in a
+          session. A content hash turns the repeats into "unchanged since last read" plus the line
+          ranges already shown.
+        </p>
+        <p class="reveal">
+          <strong>Victory laps.</strong> A 4,200-line test log that passed carries one useful bit:
+          it passed. The default harness re-sends the whole log on every later turn until the
+          session ends.
+        </p>
+        <p class="reveal">
+          <strong>Search floods.</strong> A code search returns 312 hits and three of them matter.
+          Keep the three exact, store the rest, and hand the model a search handle for the stored
+          set.
+        </p>
+      </div>
+
+      <figure class="measure reveal">
+        <div class="fig-title">Dead weight keeps billing for the rest of the session</div>
+        <p class="fig-sub">
+          Context re-sent on every later turn · shared scale across all three groups
+        </p>
+        <div class="cmp-group">
+          <div class="cmp-group-title">A test log, after the suite passed</div>
+          <div class="cmp-lbl base">Default harness</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" data-w="78"></div>
+            <span class="cmp-val" data-x="78">24,600 tokens</span>
+          </div>
+          <div class="cmp-lbl lean">Token-conscious</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean" data-w="0.4"></div>
+            <span class="cmp-val" data-x="0.4"
+              >120 tokens &nbsp;<span class="cmp-delta">−99.5%</span></span
+            >
+          </div>
+        </div>
+        <div class="cmp-group">
+          <div class="cmp-group-title">The same 800-line file, read three times</div>
+          <div class="cmp-lbl base">Default harness</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" data-w="78"></div>
+            <span class="cmp-val" data-x="78">24,600 tokens</span>
+          </div>
+          <div class="cmp-lbl lean">Token-conscious</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean" data-w="27.9"></div>
+            <span class="cmp-val" data-x="27.9"
+              >8,800 tokens &nbsp;<span class="cmp-delta">−64%</span></span
+            >
+          </div>
+        </div>
+        <div class="cmp-group">
+          <div class="cmp-group-title">A 312-hit search where three hits mattered</div>
+          <div class="cmp-lbl base">Default harness</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" data-w="36.5"></div>
+            <span class="cmp-val" data-x="36.5">11,500 tokens</span>
+          </div>
+          <div class="cmp-lbl lean">Token-conscious</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean" data-w="1.3"></div>
+            <span class="cmp-val" data-x="1.3"
+              >420 tokens &nbsp;<span class="cmp-delta">−96.3%</span></span
+            >
+          </div>
+        </div>
+        <p class="caption">
+          The rule behind all three: failures stay exact and current, successes collapse to
+          capsules, and stale data gets flagged instead of silently trusted.
+        </p>
+      </figure>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Edits bill twice</h2>
+        <p class="reveal">
+          Our baseline agent edits files by quoting. One tool call per change, and each call spells
+          out the old text and the new text in full. Three changes to one file means three
+          round-trips, with the entire context re-uploaded between each one. So an edit costs twice:
+          once for retyped code at output prices, and again for the extra turns of re-sent input.
+        </p>
+        <p class="reveal">
+          A grounded patch removes both costs. The model proves it has the current file with a short
+          content hash, then edits by line anchor: replace lines 42 through 42, delete 80 through
+          95, insert after 120. Several files, one call. If the file changed since the model last
+          saw it, the hash mismatches and the patch is rejected before anything is written. The
+          model gets told to re-read. That failure mode is strictly safer than string matching,
+          which can silently hit the wrong occurrence.
+        </p>
+      </div>
+
+      <figure class="measure reveal">
+        <div class="fig-title">Three small edits to one file, priced both ways</div>
+        <p class="fig-sub">Groups use different units, so each group has its own scale</p>
+        <div class="cmp-group">
+          <div class="cmp-group-title">Output tokens spent describing the change</div>
+          <div class="cmp-lbl base">Quoted edits, one call each</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" data-w="78"></div>
+            <span class="cmp-val" data-x="78">1,170 tokens</span>
+          </div>
+          <div class="cmp-lbl lean">Grounded patch, one call total</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean" data-w="7.3"></div>
+            <span class="cmp-val" data-x="7.3"
+              >110 tokens &nbsp;<span class="cmp-delta">−91%</span></span
+            >
+          </div>
+        </div>
+        <div class="cmp-group">
+          <div class="cmp-group-title">
+            Context re-uploaded between edit calls, at a 60k-token session
+          </div>
+          <div class="cmp-lbl base">Quoted edits — two extra round-trips</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" data-w="78"></div>
+            <span class="cmp-val" data-x="78">120,000 tokens</span>
+          </div>
+          <div class="cmp-lbl lean">Grounded patch — no extra round-trips</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean none" data-w="0"></div>
+            <span class="cmp-val" data-x="0"
+              >0 tokens &nbsp;<span class="cmp-delta">−100%</span></span
+            >
+          </div>
+        </div>
+        <p class="caption">
+          Output tokens cost five to six times input on every frontier model, so the retyped code in
+          the first group is the most expensive token class we buy.
+        </p>
+      </figure>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Yes, this breaks the cache. Do it anyway.</h2>
+        <p class="reveal">
+          The first objection from anyone who knows the billing model: rewriting old context
+          invalidates the prompt cache. True. Providers bill cached input at a tenth of list price,
+          and the discount only applies to a byte-identical prefix. Curating old context means
+          paying full input price for one turn.
+        </p>
+      </div>
+
+      <figure class="measure reveal">
+        <div class="fig-title">What the cache actually discounts</div>
+        <p class="fig-sub">One request per row · width is token volume</p>
+        <div class="px-row">
+          <span class="l">First turn — nothing cached yet</span>
+          <div class="px-track">
+            <i class="pay" style="flex: 9">full price</i><i class="new" style="flex: 1">new</i>
+          </div>
+        </div>
+        <div class="px-row">
+          <span class="l">Later turns — prefix unchanged</span>
+          <div class="px-track">
+            <i class="hit" style="flex: 9">cached · 10% of list</i
+            ><i class="new" style="flex: 1">new</i>
+          </div>
+        </div>
+        <div class="px-row">
+          <span class="l">Curation turn — prefix rewritten, smaller</span>
+          <div class="px-track" style="width: 34%">
+            <i class="pay" style="flex: 8">full price once</i><i class="new" style="flex: 1">new</i>
+          </div>
+        </div>
+        <div class="be">
+          <div class="fig-title" style="font-size: 17px">When does the rewrite pay off?</div>
+          <p class="fig-sub" style="margin-bottom: 18px">
+            A 120k-token context curated down to 30k · drag the turns remaining
+          </p>
+          <div class="be-ctl">
+            <span>Turns left in the session</span>
+            <input type="range" id="beSlider" min="1" max="30" value="12" />
+            <span class="rd" id="beTurns">12</span>
+          </div>
+          <div class="cmp-lbl base">Keep all 120k, perfectly cached</div>
+          <div class="cmp-track">
+            <div class="cmp-fill base" id="beBarKeep"></div>
+            <span class="cmp-val" id="beValKeep"></span>
+          </div>
+          <div style="height: 10px"></div>
+          <div class="cmp-lbl lean">Rewrite to 30k, eat one full-price turn</div>
+          <div class="cmp-track">
+            <div class="cmp-fill lean" id="beBarCut"></div>
+            <span class="cmp-val" id="beValCut"></span>
+          </div>
+          <div class="be-verdict" id="beVerdict"></div>
+        </div>
+        <p class="caption" id="beCaption"></p>
+      </figure>
+
+      <div class="measure" style="margin-top: 44px">
+        <p class="reveal">
+          The rewrite pays for itself in four to five turns at current list prices, and agent
+          sessions run far longer than five turns. A cache hit is a 90% discount on tokens that
+          should not be in the prompt at all. Shrink first, cache what remains.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Full windows make agents worse</h2>
+        <p class="reveal">
+          Money is the smaller half of the argument. Models reason measurably worse as their context
+          fills; long-context degradation shows up in every published evaluation that looks for it.
+          And when a default harness finally hits its window limit, it auto-compacts: a lossy
+          summary replaces the history. The agent forgets which fixes it already tried, re-reads
+          files it had open, re-runs suites that already passed, and sometimes re-applies a change
+          the engineer reverted on purpose. The session pays for the same work twice while the
+          engineer babysits it. This is the rework our people describe when they say the agent "got
+          dumb" an hour in.
+        </p>
+        <p class="reveal">
+          A harness that keeps working context at a quarter of the window never hits that wall. When
+          compaction is genuinely needed, it writes a structured dossier: the goal, the user's
+          constraints verbatim, what changed, what failed, and handles to every stored artifact. The
+          next turn recovers detail instead of rediscovering it.
+        </p>
+      </div>
+
+      <figure class="measure reveal">
+        <div class="fig-title">The compaction sawtooth</div>
+        <p class="fig-sub">
+          Conceptual curve, drawn from the long-context degradation literature · vertical axis is
+          effective quality, not a benchmark score
+        </p>
+        <svg class="rot-svg" id="rotSvg" viewBox="0 0 900 300"></svg>
+        <p class="caption">
+          The gray drops are forced compactions: the summary discards evidence, and the turns after
+          it are spent re-reading and re-running. The conscious harness stays out of the degraded
+          zone because its working set never approaches the window.
+        </p>
+      </figure>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">Two thousand engineers, priced</h2>
+        <p class="reveal">
+          Apply the per-session math at our scale, on the models we actually buy. The defaults below
+          are conservative for engineers who use agents all day: six sessions, forty turns each. The
+          model is deliberately generous to the default harness. It gets a perfect cache hit on
+          every single turn, which real traffic never achieves, and the rework bill from the
+          previous section is left out entirely. Read the gap as a floor.
+        </p>
+      </div>
+
+      <figure class="wide reveal">
+        <div class="calc">
+          <div>
+            <div class="calc-model seg" id="calcModel">
+              <button data-m="gpt55">GPT-5.5</button>
+              <button data-m="opus48" class="on">Opus 4.8</button>
+              <button data-m="fable5">Fable 5</button>
+            </div>
+            <div class="calc-ctl-row">
+              <span>Engineers using agents daily</span
+              ><input type="range" id="cEng" min="100" max="5000" step="100" value="2000" /><span
+                class="v"
+                id="cEngV"
+                >2,000</span
+              >
+            </div>
+            <div class="calc-ctl-row">
+              <span>Sessions per engineer per day</span
+              ><input type="range" id="cSess" min="1" max="15" value="6" /><span
+                class="v"
+                id="cSessV"
+                >6</span
+              >
+            </div>
+            <div class="calc-ctl-row">
+              <span>Turns per session</span
+              ><input type="range" id="cTurns" min="10" max="80" step="5" value="40" /><span
+                class="v"
+                id="cTurnsV"
+                >40</span
+              >
+            </div>
+            <p class="caption" id="calcNote" style="margin-top: 18px"></p>
+          </div>
+          <div>
+            <div class="calc-out-row">
+              <span class="k">One session, default harness</span
+              ><span class="v base" id="oBaseSess"></span>
+            </div>
+            <div class="calc-out-row">
+              <span class="k">One session, token-conscious</span
+              ><span class="v lean" id="oLeanSess"></span>
+            </div>
+            <div class="calc-out-row">
+              <span class="k">Per engineer per month, default</span
+              ><span class="v base" id="oBaseMo"></span>
+            </div>
+            <div class="calc-out-row">
+              <span class="k">Annual, default harness</span
+              ><span class="v base" id="oBaseYr"></span>
+            </div>
+            <div class="calc-out-row">
+              <span class="k">Annual, token-conscious</span
+              ><span class="v lean" id="oLeanYr"></span>
+            </div>
+            <div class="calc-save">
+              <div class="v" id="oSave"></div>
+              <div class="l">
+                modeled annual difference — same models, same work, different harness
+              </div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <div class="measure" style="margin-top: 44px">
+        <p class="reveal">
+          The per-engineer number explains something we already watch happen: at the default
+          settings above, on Opus, the default harness costs
+          <span class="c-money" id="inlineMo">$583</span> per engineer per month, which is how
+          people burn through a $400 monthly budget in days. The answer so far has been rationing. A
+          better answer is a harness that stops re-buying the same tokens.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <section>
+      <div class="measure">
+        <h2 class="reveal">What this is, and what it isn't</h2>
+        <p class="reveal">
+          These are modeled costs on published list prices, with the assumptions printed under each
+          figure. No benchmark numbers exist yet, and I won't pretend otherwise. The evaluation plan
+          is written: stale-read traps, needle recovery out of capsuled artifacts, continuation
+          quality after compaction, and a solve-rate regression suite. Savings that make the agent
+          dumber don't count, so solve rate is the gating metric, measured before and after each
+          mechanism ships.
+        </p>
+        <p class="reveal">
+          The tradeoffs are engineered rather than wished away. Retrieval round-trips cost tokens,
+          so the added tool surface stays at two tools. A capsule can hide a detail the model
+          needed, so every capsule carries a retrieval handle and the exact bytes stay on disk.
+          Curation breaks the cache, and the break-even math above prices that honestly.
+        </p>
+        <p class="reveal">
+          One more thing worth saying plainly: this layer will not come from the model vendors. They
+          bill per token, and their harnesses reflect it. Context engineering lives in the harness,
+          the harness is software we can own, and whoever owns the harness owns the cost curve, the
+          telemetry, and the leverage in the next vendor negotiation.
+        </p>
+        <p class="reveal" style="font-size: 21px; color: var(--ink); margin-top: 36px">
+          <strong>Pay the model to think. Stop paying it to re-read its own inbox.</strong>
+        </p>
+      </div>
+    </section>
+
+    <hr class="fin" />
+    <footer>
+      <div class="measure">
+        <p class="caption">
+          Pricing: OpenAI list for GPT-5.5 ($5 input / $0.50 cached / $30 output per 1M tokens).
+          Anthropic list for Claude Opus 4.8 ($5 / $0.50 / $25, cache write $6.25) and Claude Fable
+          5 ($10 / $1 / $50, cache write $12.50). Session model: default harness grows context 6,000
+          tokens per turn uncapped with perfect cache hits; token-conscious grows 1,200 per turn,
+          holds a 30k working set, and pays a full cache re-write every five turns; 500 output
+          tokens per turn on both sides; 220 working days per year. All scenario sizes (logs, files,
+          searches) are synthetic and typical.
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      "use strict";
+
+      /* ================= pricing ($ per 1M tokens, published list) ================= */
+      const PRICING = {
+        gpt55: { name: "GPT-5.5", input: 5, cachedIn: 0.5, cacheWrite: 5, output: 30 },
+        opus48: { name: "Claude Opus 4.8", input: 5, cachedIn: 0.5, cacheWrite: 6.25, output: 25 },
+        fable5: { name: "Claude Fable 5", input: 10, cachedIn: 1, cacheWrite: 12.5, output: 50 },
+      };
+      let modelKey = "opus48";
+      const P = () => PRICING[modelKey];
+      const M = 1e6;
+      const fmtTok = (n) => n.toLocaleString();
+      const fmtUsd = (n) =>
+        n >= 1e6
+          ? "$" + (n / 1e6).toFixed(1) + "M"
+          : n >= 1000
+            ? "$" + Math.round(n).toLocaleString()
+            : "$" + n.toFixed(2);
+
+      /* ================= reveal + bar fills ================= */
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            e.target.classList.add("in");
+            e.target.querySelectorAll(".cmp-fill[data-w]").forEach((b) =>
+              requestAnimationFrame(() => {
+                b.style.width = b.dataset.w + "%";
+              }),
+            );
+            e.target.querySelectorAll(".cmp-val[data-x]").forEach((v) =>
+              requestAnimationFrame(() => {
+                v.style.left = v.dataset.x + "%";
+              }),
+            );
+            if (e.target.querySelector("#loopRows")) runLoop();
+            if (e.target.querySelector("#rotSvg")) drawRot();
+            io.unobserve(e.target);
+          }
+        },
+        { threshold: 0.25 },
+      );
+      document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+      /* ================= fig: the loop ================= */
+      function runLoop() {
+        const rows = document.getElementById("loopRows");
+        rows.innerHTML = "";
+        const TURNS = 10,
+          NEW = 6000;
+        for (let t = 1; t <= TURNS; t++) {
+          const row = document.createElement("div");
+          row.className = "loop-row";
+          let cells = "";
+          for (let c = 1; c <= t; c++)
+            cells += `<i class="${c === t ? "new" : "old"}" style="flex:1"></i>`;
+          for (let c = t; c < TURNS; c++) cells += `<i style="flex:1"></i>`;
+          row.innerHTML = `<span class="t">turn ${t}</span><span class="loop-cells">${cells}</span>`;
+          rows.appendChild(row);
+        }
+        let t = 0,
+          cum = 0;
+        const cumEl = document.getElementById("loopCum"),
+          reEl = document.getElementById("loopRebuy");
+        const iv = setInterval(() => {
+          if (t >= TURNS) {
+            clearInterval(iv);
+            return;
+          }
+          t++;
+          rows.children[t - 1].classList.add("show");
+          cum += t * NEW;
+          cumEl.textContent = fmtTok(cum);
+          reEl.textContent = t - 1 + "×";
+        }, 600);
+      }
+
+      /* ================= fig: session replay ================= */
+      const RP_BASE_BLOCK = { id: "sys", name: "system prompt and tool schemas", tokens: 3000 };
+      const RP_STEPS = [
+        { add: { id: "u1", name: "user: fix the failing checkout test", tokens: 150 } },
+        { add: { id: "r1", name: "read checkout.ts, 812 lines", tokens: 8200 } },
+        { add: { id: "b1", name: "npm test — FAIL, 4,200-line log", tokens: 24800 } },
+        {
+          add: { id: "g1", name: 'search "PaymentError" — 312 hits', tokens: 11500 },
+          lean: [
+            {
+              id: "b1",
+              to: "capsule",
+              tokens: 900,
+              name: "npm test FAIL · exit 1 · first error and stack kept · ctx_c11",
+            },
+          ],
+        },
+        {
+          add: { id: "r2", name: "read checkout.test.ts, 488 lines", tokens: 6100 },
+          lean: [
+            {
+              id: "g1",
+              to: "capsule",
+              tokens: 420,
+              name: "search: top 5 exact hits · full set ctx_c12",
+            },
+          ],
+        },
+        {
+          add: { id: "e1", name: "edit checkout.ts — timeout fix", tokens: 380 },
+          lean: [
+            { id: "r1", to: "stale", tokens: 80, name: "read checkout.ts — stale after edit" },
+          ],
+        },
+        { add: { id: "b2", name: "npm test — PASS, 4,180-line log", tokens: 24600 } },
+        {
+          add: { id: "u2", name: "user: now add a retry option", tokens: 90 },
+          lean: [
+            { id: "b2", to: "capsule", tokens: 120, name: "npm test PASS · 214 ok · ctx_d41" },
+            { id: "b1", to: "tomb", tokens: 40, name: "old FAIL log — resolved" },
+            { id: "r2", to: "capsule", tokens: 200, name: "checkout.test.ts outline · ctx_c19" },
+          ],
+        },
+        {
+          add: {
+            id: "r3",
+            name: "read checkout.ts again, full",
+            tokens: 8200,
+            leanTokens: 600,
+            leanName: "read checkout.ts — outline and changed ranges, hash known",
+            leanCls: "capsule",
+          },
+        },
+      ];
+      let rpIdx = 0,
+        rpTimer = null,
+        rpBase = [],
+        rpLean = [];
+      function rpRender() {
+        const bl = document.getElementById("rpBase"),
+          ll = document.getElementById("rpLean");
+        const row = (b) =>
+          `<div class="rp-row ${b.cls || ""}"><span>${b.name}</span><span class="tk num">${fmtTok(b.tokens)}</span></div>`;
+        bl.innerHTML = rpBase.map(row).join("");
+        ll.innerHTML = rpLean.map(row).join("");
+        const bt = rpBase.reduce((s, b) => s + b.tokens, 0);
+        const lt = rpLean.reduce((s, b) => s + b.tokens, 0);
+        document.getElementById("rpBaseTot").textContent = fmtTok(bt);
+        document.getElementById("rpLeanTot").textContent = fmtTok(lt);
+        document.getElementById("rpDelta").textContent =
+          rpIdx > 3 ? "−" + Math.round((1 - lt / bt) * 100) + "%" : "";
+        document.getElementById("rpPos").textContent = `${rpIdx} / ${RP_STEPS.length}`;
+      }
+      function rpReset() {
+        rpIdx = 0;
+        rpBase = [{ ...RP_BASE_BLOCK }];
+        rpLean = [{ ...RP_BASE_BLOCK }];
+        rpRender();
+      }
+      function rpStep() {
+        if (rpIdx >= RP_STEPS.length) return;
+        const st = RP_STEPS[rpIdx];
+        rpBase.push({ ...st.add });
+        rpLean.push(
+          st.add.leanTokens
+            ? {
+                id: st.add.id,
+                name: st.add.leanName,
+                tokens: st.add.leanTokens,
+                cls: st.add.leanCls,
+              }
+            : { ...st.add },
+        );
+        (st.lean || []).forEach((mut) => {
+          const b = rpLean.find((x) => x.id === mut.id);
+          if (b) {
+            b.cls = mut.to;
+            b.tokens = mut.tokens;
+            b.name = mut.name;
+          }
+        });
+        rpIdx++;
+        rpRender();
+      }
+      document.getElementById("rpStep").onclick = rpStep;
+      document.getElementById("rpReset").onclick = () => {
+        clearInterval(rpTimer);
+        rpTimer = null;
+        document.getElementById("rpPlay").textContent = "Play";
+        rpReset();
+      };
+      document.getElementById("rpPlay").onclick = function () {
+        if (rpTimer) {
+          clearInterval(rpTimer);
+          rpTimer = null;
+          this.textContent = "Play";
+          return;
+        }
+        if (rpIdx >= RP_STEPS.length) rpReset();
+        this.textContent = "Pause";
+        rpTimer = setInterval(() => {
+          rpStep();
+          if (rpIdx >= RP_STEPS.length) {
+            clearInterval(rpTimer);
+            rpTimer = null;
+            document.getElementById("rpPlay").textContent = "Play";
+          }
+        }, 1200);
+      };
+      rpReset();
+
+      /* ================= fig: break-even ================= */
+      const BLOAT = 120000,
+        CURATED = 30000;
+      function renderBE() {
+        const n = +document.getElementById("beSlider").value;
+        document.getElementById("beTurns").textContent = n;
+        const p = P();
+        const keep = ((n * BLOAT) / M) * p.cachedIn;
+        const cut = (CURATED / M) * p.cacheWrite + ((n * CURATED) / M) * p.cachedIn;
+        const max = Math.max(keep, cut);
+        const wK = (keep / max) * 72,
+          wC = (cut / max) * 72;
+        const barK = document.getElementById("beBarKeep"),
+          barC = document.getElementById("beBarCut");
+        barK.style.width = wK + "%";
+        barC.style.width = wC + "%";
+        document.getElementById("beValKeep").style.left = wK + "%";
+        document.getElementById("beValKeep").textContent = fmtUsd(keep) + " input cost";
+        document.getElementById("beValCut").style.left = wC + "%";
+        document.getElementById("beValCut").textContent = fmtUsd(cut) + " input cost";
+        const be = Math.ceil(
+          ((CURATED / M) * p.cacheWrite) / (((BLOAT - CURATED) / M) * p.cachedIn),
+        );
+        document.getElementById("beVerdict").innerHTML =
+          cut < keep
+            ? `The rewrite is ahead by <span class="c-money">${fmtUsd(keep - cut)}</span> over ${n} turns. Break-even is ${be} turns on ${p.name}.`
+            : `Keeping the cache wins only when ${n} turn${n > 1 ? "s" : ""} remain. Break-even is ${be} turns on ${p.name}, and sessions run much longer.`;
+        document.getElementById("beCaption").textContent =
+          `${p.name} list pricing: cached input ${fmtUsd(p.cachedIn)} and cache write ${fmtUsd(p.cacheWrite)} per 1M tokens. The rewritten prefix bills once at the write rate, then re-caches.`;
+      }
+      document.getElementById("beSlider").addEventListener("input", renderBE);
+
+      /* ================= fig: compaction sawtooth ================= */
+      function drawRot() {
+        const svg = document.getElementById("rotSvg");
+        const W = 900,
+          H = 300,
+          L = 46,
+          R = 120,
+          T = 18,
+          B = 36;
+        const x = (t) => L + (t / 50) * (W - L - R);
+        const y = (q) => T + ((100 - q) / 45) * (H - T - B); // q range 55..100
+        const pts = (a) =>
+          a.map(([t, q], i) => (i ? "L" : "M") + x(t).toFixed(1) + " " + y(q).toFixed(1)).join(" ");
+        const base = [
+          [0, 97],
+          [8, 94],
+          [16, 89],
+          [22, 84],
+          [26, 80],
+          [27, 67],
+          [31, 74],
+          [36, 77],
+          [40, 73],
+          [44, 69],
+          [45, 59],
+          [48, 64],
+          [50, 66],
+        ];
+        const lean = [
+          [0, 97],
+          [12, 96],
+          [25, 94],
+          [38, 94],
+          [50, 93],
+        ];
+        svg.innerHTML = `
+    <line x1="${L}" y1="${y(60)}" x2="${W - R}" y2="${y(60)}" stroke="#e7e4dc" stroke-width="1"/>
+    <line x1="${L}" y1="${y(80)}" x2="${W - R}" y2="${y(80)}" stroke="#e7e4dc" stroke-width="1"/>
+    <line x1="${L}" y1="${y(100)}" x2="${W - R}" y2="${y(100)}" stroke="#e7e4dc" stroke-width="1"/>
+    <line x1="${x(26.6)}" y1="${T}" x2="${x(26.6)}" y2="${H - B}" stroke="#c9c5bb" stroke-width="1" stroke-dasharray="3 4"/>
+    <line x1="${x(44.6)}" y1="${T}" x2="${x(44.6)}" y2="${H - B}" stroke="#c9c5bb" stroke-width="1" stroke-dasharray="3 4"/>
+    <path d="${pts(base)}" fill="none" stroke="#8a8780" stroke-width="2.2" class="rot-line"/>
+    <path d="${pts(lean)}" fill="none" stroke="#38758f" stroke-width="2.2" class="rot-line"/>
+    <text x="${x(26.6)}" y="${T - 4}" font-size="12.5" fill="#5c5a54" text-anchor="middle">forced compaction</text>
+    <text x="${x(30)}" y="${y(64)}" font-size="12.5" fill="#8a8780">re-reads, re-runs, redone work</text>
+    <text x="${W - R + 10}" y="${y(66) + 4}" font-size="13" font-weight="600" fill="#8a8780">default</text>
+    <text x="${W - R + 10}" y="${y(93) + 4}" font-size="13" font-weight="600" fill="#38758f">token-conscious</text>
+    <text x="${L}" y="${H - 8}" font-size="12.5" fill="#a4a199">turn 1</text>
+    <text x="${W - R}" y="${H - 8}" font-size="12.5" fill="#a4a199" text-anchor="end">turn 50</text>`;
+        svg.querySelectorAll(".rot-line").forEach((p) => {
+          const len = p.getTotalLength();
+          p.style.strokeDasharray = len;
+          p.style.strokeDashoffset = len;
+          p.style.transition = "stroke-dashoffset 1.6s ease";
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              p.style.strokeDashoffset = 0;
+            }),
+          );
+        });
+      }
+
+      /* ================= fig: calculator ================= */
+      function sessionCost(
+        p,
+        {
+          turns,
+          growth,
+          baseCtx = 3000,
+          ctxCap = Infinity,
+          missEvery = Infinity,
+          outPerTurn = 500,
+        },
+      ) {
+        let ctx = baseCtx,
+          cost = 0;
+        for (let t = 1; t <= turns; t++) {
+          const newTok = Math.max(0, Math.min(ctx + growth, ctxCap) - ctx);
+          if (t === 1 || t % missEvery === 0) cost += ((ctx + newTok) / M) * p.cacheWrite;
+          else cost += (ctx / M) * p.cachedIn + (newTok / M) * p.cacheWrite;
+          ctx += newTok;
+          cost += (outPerTurn / M) * p.output;
+        }
+        return cost;
+      }
+      const NAIVE = { growth: 6000 };
+      const LEAN = { growth: 1200, ctxCap: 30000, missEvery: 5 };
+      const WORKDAYS = 220,
+        MONTH_DAYS = 22;
+
+      function renderCalc() {
+        const p = P();
+        const eng = +document.getElementById("cEng").value;
+        const sess = +document.getElementById("cSess").value;
+        const turns = +document.getElementById("cTurns").value;
+        document.getElementById("cEngV").textContent = eng.toLocaleString();
+        document.getElementById("cSessV").textContent = sess;
+        document.getElementById("cTurnsV").textContent = turns;
+        const bS = sessionCost(p, { ...NAIVE, turns });
+        const lS = sessionCost(p, { ...LEAN, turns });
+        document.getElementById("oBaseSess").textContent = fmtUsd(bS);
+        document.getElementById("oLeanSess").textContent = fmtUsd(lS);
+        document.getElementById("oBaseMo").textContent = fmtUsd(bS * sess * MONTH_DAYS);
+        document.getElementById("oBaseYr").textContent = fmtUsd(bS * eng * sess * WORKDAYS);
+        document.getElementById("oLeanYr").textContent = fmtUsd(lS * eng * sess * WORKDAYS);
+        document.getElementById("oSave").textContent =
+          fmtUsd((bS - lS) * eng * sess * WORKDAYS) + " / year";
+        document.getElementById("calcNote").textContent =
+          `${p.name}: ${fmtUsd(p.input)} input, ${fmtUsd(p.cachedIn)} cached, ${fmtUsd(p.output)} output per 1M tokens, list price. Assumptions in the colophon.`;
+        /* inline per-month figure in the following paragraph tracks Opus defaults */
+        const inline = sessionCost(PRICING.opus48, { ...NAIVE, turns: 40 }) * 6 * MONTH_DAYS;
+        document.getElementById("inlineMo").textContent = fmtUsd(inline);
+      }
+      document.getElementById("calcModel").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        modelKey = b.dataset.m;
+        [...e.currentTarget.children].forEach((x) => x.classList.toggle("on", x === b));
+        renderCalc();
+        renderBE();
+      });
+      ["cEng", "cSess", "cTurns"].forEach((id) =>
+        document.getElementById(id).addEventListener("input", renderCalc),
+      );
+
+      renderBE();
+      renderCalc();
+    </script>
+  </body>
+</html>

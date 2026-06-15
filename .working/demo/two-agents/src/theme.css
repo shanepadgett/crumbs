@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* Design tokens — dark stage translation of the agreed palette.
+   Canvas + 2 inks + 2 series hues + 1 money accent. 5 type sizes. */
+@theme {
+  --color-canvas: #0f0e0c;
+  --color-panel: #171512;
+  --color-ink: #e9e6df;
+  --color-ink-2: #a39f95;
+  --color-faint: #6b675f;
+  --color-hairline: #29261f;
+
+  --color-conscious: #5fa8c4; /* token-conscious agent */
+  --color-conscious-dim: #1d3340;
+  --color-baseline: #8a8478; /* default agent */
+  --color-baseline-dim: #2e2b25;
+  --color-money: #e0784a; /* costs & deltas only */
+
+  --font-serif: Charter, Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-conscious-dim);
+}
+
+/* Stage block entry: rise + fade as the stack grows. */
+.stage-block {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  transition: width 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Cards fade out as they pass under the meter pane instead of hard-clipping. */
+.transcript-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 42px, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 42px, black 100%);
+}
+
+/* Meter pane opens only when an actual agent run starts. */
+.meter-pane {
+  overflow: hidden;
+  animation: meter-pane-open 0.75s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.meter-unit {
+  opacity: 0;
+  animation: meter-fade-in 0.55s ease-out 0.22s forwards;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes meter-pane-open {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 190px;
+    opacity: 1;
+  }
+}
+
+@keyframes meter-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Pre-run teaching model: rows build triangularly to show resend compounding. */
+.loop-model-row {
+  opacity: 0;
+  animation: loop-row-in 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+.loop-model-cell.bg-ink {
+  color: var(--color-canvas);
+}
+
+.loop-model-cell.bg-ink,
+.loop-model-cell.bg-baseline-dim {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+
+.loop-model-cell.bg-baseline-dim {
+  color: color-mix(in srgb, var(--color-ink) 54%, transparent);
+}
+
+@keyframes loop-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
