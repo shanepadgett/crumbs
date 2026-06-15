@@ -15,217 +15,175 @@ The implementation should keep all drafts in one canonical map keyed by `questio
 ### 3. Resolved Runtime Semantics
 
 1. **Canonical node vs inline occurrence**
-
    - Canonical question identity is owned by `questionId`.
    - Inline `followUps` are only one authored way to declare graph edges.
    - `anyOfSelectedOptionIds` and `allOfSelectedOptionIds` are occurrence-owned activation metadata, not canonical question-definition fields.
 
 1. **Canonical definition matching**
-
    - Repeated authored occurrences of the same `questionId` are allowed only when their canonical question-definition fields match exactly.
    - Canonical matching excludes nested `followUps`, `anyOfSelectedOptionIds`, and `allOfSelectedOptionIds`.
 
 1. **Outgoing edge merge**
-
    - When repeated matching occurrences of the same `questionId` declare different outgoing follow-ups, the normalized graph merges those outgoing edges.
    - Identical duplicate edges collapse.
 
 1. **Root activation rules**
-
    - Top-level root questions may not declare `anyOfSelectedOptionIds` or `allOfSelectedOptionIds`.
    - Validator rejects those fields on roots.
 
 1. **Freeform follow-up behavior**
-
    - Freeform questions never activate follow-ups.
    - Validator rejects `followUps` under `freeform` questions instead of leaving runtime suppression ambiguous.
 
 1. **Default activation rule behavior**
-
    - When a follow-up occurrence under a `yes_no` or `multiple_choice` parent omits both activation arrays, it activates whenever the parent is currently `answered`.
 
 1. **Answered-only activation**
-
    - Follow-up activation uses only the parent’s current `responseState === "answered"` plus the parent’s current selected option IDs.
    - Preserved answer drafts under `open`, `skipped`, or `needs_clarification` never keep a branch active.
 
 1. **Activation rule evaluation**
-
    - `anyOfSelectedOptionIds` passes when the current selected option set intersects the authored set.
    - `allOfSelectedOptionIds` passes when the current selected option set fully contains the authored set.
    - When both arrays are present, both checks must pass.
 
 1. **Depth counting**
-
    - Root questions are depth `0`.
    - Direct follow-ups are depth `1`.
    - The deepest visible follow-up depth is `3`.
 
 1. **Cycle behavior**
-
    - Follow-up traversal suppresses only the cyclic path or edge.
    - A node may still appear if another non-cyclic current path activates it.
    - Dependency cycles in the active candidate set are suppressed as unresolved instead of surfacing unstable ordering.
 
 1. **Structured form results**
-
    - Submit returns a structured submit envelope plus the latest `draftSnapshot`.
    - Cancel returns only the latest `draftSnapshot` and no synthetic submit payload.
 
 1. **Scope of submission and validation**
-
    - Review counts, blockers, emitted outcomes, and numbering are all derived from the current active view only.
    - Hidden inactive questions remain in canonical draft state but do not block submit and do not emit outcomes until active again.
 
 ### 4. Requirement Map
 
 1. **Requirement:** `When a resurfaced question keeps the same stable ID but its options change, the system shall carry forward only selections and notes whose optionIds still exist.`
-
    - `Current files/functions/types:` `extensions/question-runtime/form-state.ts` creates blank drafts only and has no restore path.
    - `Planned implementation move:` Add request-level `draftSnapshot` hydration, restore by `questionId`, and filter restored multiple-choice selections and option-note drafts against the current valid option IDs plus runtime `other`.
 
 1. **Requirement:** `When the user partially submits a form, the system shall allow untouched visible questions to remain open.`
-
    - `Current files/functions/types:` `validateFormForSubmit()` does not block incomplete answers, but `buildQuestionRuntimeFormResult()` still serializes every flattened question.
    - `Planned implementation move:` Keep active open questions non-blocking, show them in Review, and omit them from the structured submit payload.
 
 1. **Requirement:** `The system shall support dormant follow-up questions in a question graph.`
-
    - `Current files/functions/types:` `flattenQuestionsPreOrder()` in `extensions/question-runtime/question-model.ts` immediately surfaces every nested node.
    - `Planned implementation move:` Normalize the authored graph once, then derive a separate active projection so dormant follow-ups stay hidden until their activation rules pass.
 
 1. **Requirement:** `The system may accept follow-up relationships authored inline, but it shall normalize active questions by questionId.`
-
    - `Current files/functions/types:` `request-validator.ts` rejects duplicate `questionId`s and current flattening duplicates inline occurrences.
    - `Planned implementation move:` Allow repeated inline occurrences when canonical definitions match, normalize them into one canonical node per `questionId`, and treat activation metadata as edge-owned occurrence data.
 
 1. **Requirement:** `The system shall allow follow-up activation from yes_no answers.`
-
    - `Current files/functions/types:` `setYesNoSelection()` only mutates draft state.
    - `Planned implementation move:` Evaluate yes/no follow-up edges only when the parent question is currently `answered` and the current selected option ID satisfies the edge rule.
 
 1. **Requirement:** `The system shall allow follow-up activation from specific multiple_choice options.`
-
    - `Current files/functions/types:` `toggleMultipleChoiceOption()` only updates selections; nothing recomputes visibility.
    - `Planned implementation move:` Match follow-up activation rules against the current selected multiple-choice option IDs, including runtime `other`, shared-node dedupe, and provenance aggregation.
 
 1. **Requirement:** `The system shall not allow follow-up activation from freeform inputs.`
-
    - `Current files/functions/types:` current authored shape allows `followUps` generically on every question kind.
    - `Planned implementation move:` Reject `followUps` under `freeform` questions during validation and never evaluate freeform text as an activation source.
 
 1. **Requirement:** `The system shall support simple activation rules based on anyOfSelectedOptionIds and allOfSelectedOptionIds.`
-
    - `Current files/functions/types:` no current type or validator support for either array.
    - `Planned implementation move:` Add typed occurrence metadata, validate arrays deterministically, and implement the exact `anyOf` or `allOf` rule evaluation described in the resolved semantics.
 
 1. **Requirement:** `The system shall support recursive follow-up chains.`
-
    - `Current files/functions/types:` current recursion is static tree flattening only.
    - `Planned implementation move:` Traverse normalized graph edges recursively so activated children can activate deeper descendants.
 
 1. **Requirement:** `The system shall enforce a maximum active follow-up depth of 3.`
-
    - `Current files/functions/types:` no depth tracking exists.
    - `Planned implementation move:` Track activation depth during traversal with root depth `0` and suppress descendants whose next depth would exceed `3`.
 
 1. **Requirement:** `When a follow-up graph contains a cycle, the system shall prevent that cycle from activating.`
-
    - `Current files/functions/types:` there is no logical cycle detection because there is no canonical graph.
    - `Planned implementation move:` Track ancestry during traversal and suppress edges that would re-enter the current path.
 
 1. **Requirement:** `The system shall render active questions as a dynamic flattened view of the active question graph.`
-
    - `Current files/functions/types:` `form-shell.ts` flattens once at startup and renders a fixed set of tabs.
    - `Planned implementation move:` Replace the static flattened array with an `ActiveQuestionView` recomputed from canonical graph plus current drafts after every mutation.
 
 1. **Requirement:** `When the active question set changes, the system shall recompute visible numbering from the active view instead of storing question numbers.`
-
    - `Current files/functions/types:` numbering is derived from the immutable pre-order index.
    - `Planned implementation move:` Keep numbering derived only from the current active entry order.
 
 1. **Requirement:** `When two activation paths surface the same questionId, the system shall show that question only once.`
-
    - `Current files/functions/types:` duplicate `questionId`s are rejected today.
    - `Planned implementation move:` Canonicalize node identity by `questionId` and merge all current paths into one visible entry.
 
 1. **Requirement:** `When the same questionId is activated by multiple current paths, the system shall preserve combined activation provenance so the UI can explain why that question is visible.`
-
    - `Current files/functions/types:` there is no provenance model in the runtime.
    - `Planned implementation move:` Add visibility-reason records based on current parent question IDs and matched option IDs, then render human-readable `Visible because` lines in the shell.
 
 1. **Requirement:** `When a question declares dependsOnQuestionIds, the system shall order surfaced questions dependency-first.`
-
    - `Current files/functions/types:` `AuthorizedQuestionBase` has no dependency field and ordering is static pre-order only.
    - `Planned implementation move:` Add canonical `dependsOnQuestionIds`, validate references, then stable-toposort the active candidate set using first-seen canonical order as the tie-break.
 
 1. **Requirement:** `A dependency shall count as resolved only when its current state is answered.`
-
    - `Current files/functions/types:` `getQuestionResponseState()` already computes per-question state, but no consumer uses it.
    - `Planned implementation move:` Gate dependency resolution on `getQuestionResponseState(...) === "answered"` only.
 
 1. **Requirement:** `A dependency in state open, skipped, or needs_clarification shall not unlock dependent questions.`
-
    - `Current files/functions/types:` those states exist but do not affect visibility.
    - `Planned implementation move:` Treat every non-`answered` dependency as unresolved during active-view construction.
 
 1. **Requirement:** `When a candidate question depends on an unresolved prerequisite in the same active view, the system shall suppress the dependent question until the prerequisite is resolved.`
-
    - `Current files/functions/types:` current shell always shows every flattened node.
    - `Planned implementation move:` After activation candidate collection, run a stable dependency ordering and suppression pass until only dependency-satisfied entries remain visible.
 
 1. **Requirement:** `When a user answer change deactivates a follow-up branch, the system shall preserve that branch's unsent drafts as hidden branch state.`
-
    - `Current files/functions/types:` `QuestionRuntimeFormState` already keeps drafts by `questionId`, but branches never deactivate.
    - `Planned implementation move:` Preserve one canonical draft map for all normalized questions and make activation a projection over that map without clearing hidden drafts.
 
 1. **Requirement:** `When a previously answered or closed follow-up branch becomes inactive, the system shall keep its prior result available for reactivation without treating it as currently active.`
-
    - `Current files/functions/types:` `buildQuestionOutcome()` can reconstruct states from preserved drafts, but submit and review logic include all questions today.
    - `Planned implementation move:` Keep the draft and implied current result in canonical state, but include it in review and submission only while the question is currently active.
 
 1. **Requirement:** `When a form opens, the system shall render the current supplied question payload and shall not invent brand-new questions mid-form except by activating already-declared graph edges.`
-
    - `Current files/functions/types:` current shell only uses the supplied payload, but surfaces every declared node immediately.
    - `Planned implementation move:` Normalize only the supplied payload once at form open and allow visibility changes only by traversing declared edges from that normalized graph.
 
 1. **Requirement:** `When the user submits the form, the system shall validate and construct payloads from currently active questions only.`
-
    - `Current files/functions/types:` submit validation and result building iterate the full flattened list.
    - `Planned implementation move:` Make validation, review summaries, and payload construction consume the current `ActiveQuestionView` only.
 
 1. **Requirement:** `When a branch is inactive, the system shall not let that branch block submit.`
-
    - `Current files/functions/types:` there is no active or inactive distinction.
    - `Planned implementation move:` Restrict blocker checks to the current active view.
 
 1. **Requirement:** `When a form is closed or cancelled after edits but before submit, the system shall preserve unsent drafts for later restoration.`
-
    - `Current files/functions/types:` `buildQuestionRuntimeFormResult()` already returns `draftSnapshot`, but `index.ts` ignores it and requests cannot restore it.
    - `Planned implementation move:` Validate and hydrate incoming `draftSnapshot`, return `draftSnapshot` on cancel, and emit it through a hidden structured cancel message for product-owned persistence.
 
 1. **Requirement:** `The system shall send structured payloads back to the agent rather than freeform Q: and A: text.`
-
    - `Current files/functions/types:` `index.ts` discards the shell result and no submit or cancel hidden message exists.
    - `Planned implementation move:` Extend hidden control messages with submit and cancel result messages and emit them from `index.ts` after the shell closes.
 
 1. **Requirement:** `The system shall use a turn-level requiresClarification flag when any submitted question is in needs_clarification state.`
-
    - `Current files/functions/types:` per-question clarification outcomes exist, but no aggregate flag exists.
    - `Planned implementation move:` Build the structured submit envelope with `requiresClarification = outcomes.some((item) => item.state === "needs_clarification")`.
 
 1. **Requirement:** `When a form is submitted, the system shall include answered, skipped, and needs_clarification items in the payload.`
-
    - `Current files/functions/types:` `buildQuestionOutcome()` can build these states, but current shell result includes `open` and nothing is delivered to the agent.
    - `Planned implementation move:` Filter active outcomes down to explicit non-open states and wrap them in the structured submit envelope.
 
 1. **Requirement:** `When a form is submitted, the system shall omit untouched open items from the payload.`
-
    - `Current files/functions/types:` `QuestionRuntimeQuestionOutcome` includes `state: "open"`, and current result building includes every question.
    - `Planned implementation move:` Keep `open` internal for draft-state reasoning only and omit it from structured submit payloads.
 
 1. **Requirement:** `When an agent-driven form is submitted with no explicit outcomes, the system shall return a structured no_user_response result.`
-
    - `Current files/functions/types:` no submit envelope type exists.
    - `Planned implementation move:` Emit `kind: "no_user_response"` when the active non-open outcome list is empty.
 
@@ -234,28 +192,23 @@ The implementation should keep all drafts in one canonical map keyed by `questio
 #### Relevant files and current roles
 
 - `extensions/question-runtime/types.ts`
-
   - Owns the shared authored request schema, validation issue codes, question draft types, outcome union, and shell result type.
   - Missing today: dependency fields, occurrence-owned activation metadata, request-side draft restoration, and structured submit or cancel result envelopes.
 
 - `extensions/question-runtime/question-model.ts`
-
   - Mixes two unrelated jobs: static `flattenQuestionsPreOrder()` tree rendering and reusable choice-row modeling.
   - The flattening helper is the main reason the shell behaves like a static nested list instead of an active graph.
 
 - `extensions/question-runtime/request-validator.ts`
-
   - Validates the current task-01 and task-02 request shape.
   - Rejects repeated `questionId`s outright, validates multiple-choice options and recommendations, and preserves unknown extra fields.
   - Does not validate dependencies, activation arrays, or inbound `draftSnapshot`.
 
 - `extensions/question-runtime/form-state.ts`
-
   - Owns blank draft creation, cloning, mutation helpers, answer completeness, response-state computation, submit blockers, and per-question outcome serialization.
   - Operates over static `FlattenedQuestion[]`, so validation and result building include every authored node.
 
 - `extensions/question-runtime/form-shell.ts`
-
   - Builds one tab per flattened question plus Review.
   - Stores shell-local UI state such as `tabIndex`, focus row, and context expansion.
   - Assumes a fixed list through several hard-coded static-array seams:
@@ -267,12 +220,10 @@ The implementation should keep all drafts in one canonical map keyed by `questio
     - `const row = rows[focusByTab.get(focusKey()) ?? 0];`
 
 - `extensions/question-runtime/index.ts`
-
   - Orchestrates request-store hydration, watcher startup, validation or retry hidden messages, modal queueing, request locking, and shell launch.
   - Ignores the shell result after `await showQuestionRuntimeFormShell(...)`.
 
 - `extensions/question-runtime/repair-messages.ts`
-
   - Formats hidden validation failure, retry granted, and abort messages under one custom message family.
   - Has no submit or cancel result builders yet.
 
@@ -305,50 +256,41 @@ The implementation should keep all drafts in one canonical map keyed by `questio
 #### Module responsibilities
 
 - `types.ts`
-
   - Shared external contract for authored requests, drafts, validation issues, internal outcomes, and structured submit or cancel form results.
 
 - `question-model.ts`
-
   - Runtime choice-row helpers plus shared option label and selectable-option helpers.
 
 - `question-definition.ts` **(new)**
-
   - Canonical question-definition extraction and equality helpers used by both validator and graph normalization.
 
 - `request-validator.ts`
-
   - Deterministic schema and reference validation.
   - Root or follow-up occurrence validation.
   - Canonical repeated-`questionId` consistency checks.
   - `draftSnapshot` structure and reference validation.
 
 - `question-graph.ts` **(new)**
-
   - Normalize authored inline questions into canonical nodes plus activation edges.
   - Build the active candidate set, merge visibility reasons, enforce depth and cycle guards, then stable-order and dependency-filter the visible active view.
 
 - `form-state.ts`
-
   - Own all canonical drafts keyed by `questionId`.
   - Hydrate and sanitize `draftSnapshot` input.
   - Build active-only blockers and structured submit results.
 
 - `form-shell.ts`
-
   - Own only UI-local state.
   - Recompute the active view after every mutation.
   - Keep tab selection and focus stable across active-view changes.
   - Render visibility reasons and active-only review.
 
 - `repair-messages.ts`
-
   - Keep one hidden message family constant.
   - Preserve validation and retry builders.
   - Add submit and cancel result builders.
 
 - `index.ts`
-
   - Keep request lifecycle orchestration.
   - Capture the shell result and emit hidden submit or cancel messages.
 
@@ -428,7 +370,6 @@ form-state.ts
 - `Why:` The shared contract needs dependency fields, occurrence-owned activation metadata, draft restoration, and structured submit or cancel result envelopes.
 
 - `Responsibilities:`
-
   - Extend the authored request shape.
   - Add new validation issue codes.
   - Define structured submit and cancel result types.
@@ -495,7 +436,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Keep `dependsOnQuestionIds` on canonical question definitions.
   - Keep activation arrays on inline node objects because authored JSON is occurrence-inline, but document that validator and graph normalization treat them as occurrence metadata.
   - Keep existing per-question outcome union for internal reasoning.
@@ -511,7 +451,6 @@ form-state.ts
 - `Why:` Choice modeling should remain here, but static tree flattening should leave this file and option-ID helpers should be centralized here.
 
 - `Responsibilities:`
-
   - Keep yes/no and multiple-choice runtime option modeling.
   - Export one shared selectable-option helper.
   - Export one shared option-label lookup helper.
@@ -538,7 +477,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Preserve automatic `yes`, `no`, and `other` semantics exactly.
   - Make `getSelectableOptionIds()` the shared source of truth for valid activation-rule and draft-restore option IDs.
 
@@ -553,7 +491,6 @@ form-state.ts
 - `Why:` Validator and graph normalization both need the same canonical question-definition comparison logic.
 
 - `Responsibilities:`
-
   - Strip occurrence-owned fields and nested follow-ups from authored nodes.
   - Build deterministic canonical signatures.
   - Compare repeated authored occurrences by canonical definition.
@@ -586,7 +523,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Normalize optional arrays like `dependsOnQuestionIds` for deterministic comparison.
   - Exclude `followUps`, `anyOfSelectedOptionIds`, and `allOfSelectedOptionIds` from the signature.
 
@@ -601,7 +537,6 @@ form-state.ts
 - `Why:` Current validation rejects shared nodes and ignores task-03 graph and draft fields.
 
 - `Responsibilities:`
-
   - Validate `dependsOnQuestionIds`, occurrence activation arrays, and optional `draftSnapshot`.
   - Replace duplicate-`questionId` rejection with canonical-definition consistency checks.
   - Preserve deterministic issue ordering and unknown-extra-field tolerance.
@@ -623,7 +558,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Track traversal context so each occurrence knows whether it is a root and what parent question kind owns the edge.
   - Reject activation arrays on roots.
   - Reject `followUps` under `freeform` parents.
@@ -650,7 +584,6 @@ form-state.ts
 - `Why:` The repo needs one pure runtime module that turns the authored inline tree into canonical graph semantics and a dynamic active view.
 
 - `Responsibilities:`
-
   - Normalize repeated inline occurrences into canonical nodes keyed by `questionId`.
   - Record outgoing activation edges separately from canonical question definitions.
   - Build active candidates, merge visibility reasons, enforce depth and cycle guards, and perform dependency-first ordering and suppression.
@@ -710,7 +643,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Use `getCanonicalQuestionDefinitionSignature()` so repeated-definition logic matches the validator.
   - Merge outgoing edges from repeated matching occurrences.
   - Evaluate activation rules only when the parent is currently `answered`.
@@ -729,7 +661,6 @@ form-state.ts
 - `Why:` State creation, validation, and result building must move from static flattened-tree scope to canonical graph and active-view scope.
 
 - `Responsibilities:`
-
   - Create one draft per canonical `questionId`.
   - Hydrate and sanitize optional `draftSnapshot`.
   - Preserve current per-question mutation APIs.
@@ -780,7 +711,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Add `restoreQuestionDraft(...)` helpers that merge by `questionId`.
   - For restored multiple-choice drafts:
     - keep only selected option IDs still valid
@@ -800,7 +730,6 @@ form-state.ts
 - `Why:` The shell is the current static-tree bottleneck and must move to a questionId-based active-view UI.
 
 - `Responsibilities:`
-
   - Normalize the request once, create hydrated canonical state, and recompute the active view after every mutation.
   - Render only active questions plus Review.
   - Preserve tab and focus state across active-view changes.
@@ -833,7 +762,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Replace startup `flattenQuestionsPreOrder(...)` with `normalizeQuestionGraph(...)`.
   - Replace numeric `tabIndex` state with `currentTabId: string | "__review__"`.
   - Keep `focusByQuestionId`, `expandedContextByQuestionId`, and `lastActiveQuestionIds` keyed by question ID rather than array index.
@@ -858,7 +786,6 @@ form-state.ts
 - `Why:` The hidden control-message family needs reusable submit and cancel result builders without splitting transport strings across files.
 
 - `Responsibilities:`
-
   - Preserve validation, retry, and abort message behavior.
   - Export the shared custom message type constant.
   - Add form submit and cancel result message builders.
@@ -885,7 +812,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Keep existing `details.type` shapes for validation, retry, and abort unchanged.
   - Add new hidden `details.type` values `form_submitted` and `form_cancelled`.
   - Keep concise hidden `content`; put the real machine contract in `details`.
@@ -901,7 +827,6 @@ form-state.ts
 - `Why:` Structured form results are currently discarded.
 
 - `Responsibilities:`
-
   - Capture submit or cancel results from the shell.
   - Send hidden structured result messages back to the agent.
   - Preserve request locking, retry prompts, and modal queue behavior.
@@ -919,7 +844,6 @@ form-state.ts
   ```
 
 - `Key logic to add or change:`
-
   - Update the top-of-file extension header so it no longer says the shell is read-only.
   - Replace the current message union with a broader `HiddenMessage` union that includes submit and cancel messages.
   - After `await showQuestionRuntimeFormShell(...)`, branch on `result.action` and send `buildFormSubmittedMessage(...)` or `buildFormCancelledMessage(...)`.
@@ -1052,47 +976,38 @@ form-state.ts
 ### 9. Stepwise Execution Plan
 
 1. **Expand shared contracts first.**
-
    - Update `types.ts` with dependencies, occurrence activation metadata, inbound `draftSnapshot`, and structured submit or cancel result types.
 
 1. **Split reusable question helpers.**
-
    - Trim `question-model.ts` down to choice and option helpers.
    - Add `question-definition.ts` for canonical question-definition comparison.
 
 1. **Refactor validation onto the new contract.**
-
    - Add deterministic validation for dependencies, activation metadata, repeated canonical definitions, and optional restored drafts.
    - Keep existing unknown-extra-field tolerance and authoring guidance.
 
 1. **Add the pure graph runtime.**
-
    - Introduce `question-graph.ts` for normalization plus active-view construction.
    - Lock its behavior with pure tests as soon as the exported API stabilizes.
 
 1. **Upgrade form state around the canonical graph.**
-
    - Hydrate canonical drafts from `NormalizedQuestionGraph` plus optional `draftSnapshot`.
    - Switch blockers and submit construction to `ActiveQuestionView`.
 
 1. **Refactor the shell to consume the dynamic active view.**
-
    - Replace numeric tab index assumptions, active numbering, review scoping, and provenance rendering.
    - Preserve keyboard behavior and editor flows.
 
 1. **Wire structured hidden result messages.**
-
    - Extend `repair-messages.ts` and make `index.ts` emit submit or cancel result messages after the shell closes.
    - Update the extension header comment in `index.ts` to match the new behavior.
 
 1. **Add tests and repo checks.**
-
    - Add `request-validator.test.ts` and `runtime-engine.test.ts`.
    - Run both `bun test` commands.
    - Run `mise run check`.
 
 1. **Reload and manually verify.**
-
    - Reload the extension because files under `extensions/question-runtime/` changed.
    - Drive one nested or shared or dependency fixture through the shell and confirm visibility, restore, and hidden result-message behavior.
 
@@ -1101,7 +1016,6 @@ form-state.ts
 #### Automated verification
 
 - `extensions/question-runtime/request-validator.test.ts`
-
   - root activation arrays rejected
   - `followUps` rejected under `freeform`
   - matching repeated `questionId` accepted
@@ -1113,7 +1027,6 @@ form-state.ts
   - stale removed multiple-choice option IDs accepted structurally for later filtering
 
 - `extensions/question-runtime/runtime-engine.test.ts`
-
   - shared follow-up dedupe by `questionId`
   - combined visibility reasons
   - default activation when both arrays are omitted

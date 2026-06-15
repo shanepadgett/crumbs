@@ -497,11 +497,13 @@ Template:
 ## User Constraints (verbatim)
 
 ## Current Workset
+
 - path @ hash: why active
 
 ## Changes Made
 
 ## Unresolved Failures
+
 - exact error / command / artifact id
 
 ## Failed Attempts
@@ -509,6 +511,7 @@ Template:
 ## Key Decisions
 
 ## Cold Artifacts
+
 - ctx_ab12: bash npm test, current/stale, retrieve hint
 
 ## Stale Context Warnings
