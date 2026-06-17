@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "fixture": {
+      "command": "bun",
+      "args": [
+        "run",
+        "extensions/mcp/test-fixtures/stdio-server.ts"
+      ],
+      "cwd": ".",
+      "lifecycle": "lazy"
+    }
+  }
+}

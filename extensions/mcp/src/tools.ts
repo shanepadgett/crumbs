@@ -67,17 +67,23 @@ function coerceArgs(
   return next;
 }
 
+export function toPiMcpToolName(serverName: string, toolName: string): string {
+  return `mcp_${serverName}_${toolName}`;
+}
+
 export function registerServerTool(
   pi: ExtensionAPI,
   tool: McpTool,
   serverName: string,
   servers: Map<string, ServerState>,
 ): void {
+  const piToolName = toPiMcpToolName(serverName, tool.name);
+
   pi.registerTool({
-    name: tool.name,
-    label: tool.name,
+    name: piToolName,
+    label: piToolName,
     description: tool.description ?? "(no description)",
-    promptSnippet: tool.description ?? tool.name,
+    promptSnippet: tool.description ?? piToolName,
     parameters: Type.Unsafe<Record<string, unknown>>(
       tool.inputSchema ?? { type: "object", properties: {} },
     ),
@@ -160,7 +166,7 @@ export function registerServerTool(
     },
     renderCall(args, theme, context) {
       const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-      const header = `${theme.fg("toolTitle", theme.bold(`${tool.name} `))}${theme.fg("dim", `(${serverName})`)}`;
+      const header = `${theme.fg("toolTitle", theme.bold(`${piToolName} `))}${theme.fg("dim", `(${serverName})`)}`;
       if (!args || typeof args !== "object") {
         text.setText(header);
         return text;

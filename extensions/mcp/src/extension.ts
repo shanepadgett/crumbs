@@ -24,7 +24,7 @@ import {
   type ServerConfigRecord,
   type ServerState,
 } from "./shared.js";
-import { registerServerTool } from "./tools.js";
+import { registerServerTool, toPiMcpToolName } from "./tools.js";
 import { CRUMBS_EVENT_CAVEMAN_CHANGED } from "../../shared/crumbs-events.js";
 import {
   matchesTool,
@@ -104,13 +104,24 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     );
   }
 
-  function releaseServerTools(name: string): void {
-    const state = servers.get(name);
+  function getToolOwnerKey(serverName: string, toolName: string): string {
+    return toPiMcpToolName(serverName, toolName);
+  }
+
+  function releaseServerTools(serverName: string): void {
+    const state = servers.get(serverName);
     if (!state) return;
 
     for (const tool of state.tools) {
-      if (toolOwners.get(tool.name) === name) toolOwners.delete(tool.name);
+      const ownerKey = getToolOwnerKey(serverName, tool.name);
+      if (toolOwners.get(ownerKey) === serverName) toolOwners.delete(ownerKey);
     }
+  }
+
+  function trackManagedTool(serverName: string, toolName: string): void {
+    managedToolNames.add(toolName);
+    managedToolNames.add(`mcp_${toolName}`);
+    managedToolNames.add(toPiMcpToolName(serverName, toolName));
   }
 
   function claimUnownedTools(): void {
@@ -120,10 +131,11 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       if (!state) continue;
 
       for (const tool of state.tools) {
-        if (toolOwners.has(tool.name)) continue;
+        const ownerKey = getToolOwnerKey(record.name, tool.name);
+        if (toolOwners.has(ownerKey)) continue;
         registerServerTool(pi, tool, record.name, servers);
-        managedToolNames.add(tool.name);
-        toolOwners.set(tool.name, record.name);
+        trackManagedTool(record.name, tool.name);
+        toolOwners.set(ownerKey, record.name);
       }
     }
   }
@@ -163,7 +175,7 @@ export default function mcpExtension(pi: ExtensionAPI): void {
     return names.map((name) => {
       const tool = discovered.get(name);
       const configuredEnabled = record.raw.tools?.[name]?.enabled !== false;
-      const runtimeOwner = toolOwners.get(name);
+      const runtimeOwner = toolOwners.get(getToolOwnerKey(record.name, name));
       const enabled = serverEnabled && configuredEnabled;
 
       let stateLabel: ManagerToolView["state"] = "disabled";
@@ -203,9 +215,9 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       if (!isRecordRuntimeEnabled(record)) continue;
 
       for (const tool of servers.get(record.name)?.tools ?? []) {
-        if (toolOwners.get(tool.name) !== record.name) continue;
+        if (toolOwners.get(getToolOwnerKey(record.name, tool.name)) !== record.name) continue;
         if (record.raw.tools?.[tool.name]?.enabled === false) continue;
-        active.add(tool.name);
+        active.add(toPiMcpToolName(record.name, tool.name));
       }
     }
 
@@ -290,11 +302,12 @@ export default function mcpExtension(pi: ExtensionAPI): void {
       servers.set(name, nextState);
 
       for (const tool of tools) {
-        const owner = toolOwners.get(tool.name);
+        const ownerKey = getToolOwnerKey(name, tool.name);
+        const owner = toolOwners.get(ownerKey);
         if (owner && owner !== name) continue;
         registerServerTool(pi, tool, name, servers);
-        managedToolNames.add(tool.name);
-        toolOwners.set(tool.name, name);
+        trackManagedTool(name, tool.name);
+        toolOwners.set(ownerKey, name);
       }
 
       syncActiveTools();
