@@ -166,7 +166,7 @@ export function registerServerTool(
     },
     renderCall(args, theme, context) {
       const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-      const header = `${theme.fg("toolTitle", theme.bold(`${piToolName} `))}${theme.fg("dim", `(${serverName})`)}`;
+      const header = `${theme.fg("toolTitle", theme.bold(tool.name))} ${theme.fg("muted", `(${serverName})`)}`;
       if (!args || typeof args !== "object") {
         text.setText(header);
         return text;
