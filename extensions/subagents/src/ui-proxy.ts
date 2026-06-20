@@ -1,4 +1,4 @@
-import type { ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 
 type DialogTask<T> = () => Promise<T>;
 
@@ -56,6 +56,5 @@ export class SubagentUiQueue {
 }
 
 export type SubagentUiBinding = {
-  mode: ExtensionContext["mode"];
   queue: SubagentUiQueue;
 };

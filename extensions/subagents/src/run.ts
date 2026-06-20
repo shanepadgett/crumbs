@@ -4,8 +4,8 @@ import {
   getAgentDir,
   SessionManager,
   type AgentSession,
-  type ExtensionContext,
   type ExtensionUIContext,
+  type ToolInfo,
 } from "@earendil-works/pi-coding-agent";
 import { SubagentUiQueue, type SubagentUiBinding } from "./ui-proxy.js";
 import type {
@@ -24,6 +24,7 @@ type RunAgentOptions = {
   task: string;
   receivedHandoff?: string;
   parentActiveTools?: string[];
+  parentAllTools?: ToolInfo[];
   cwd?: string;
   signal?: AbortSignal;
   uiBinding?: SubagentUiBinding;
@@ -36,9 +37,9 @@ type ExecuteWorkflowOptions = {
   availableAgentNames?: string[];
   workflow: Workflow;
   parentActiveTools?: string[];
+  parentAllTools?: ToolInfo[];
   signal?: AbortSignal;
   parentUi?: ExtensionUIContext;
-  mode?: ExtensionContext["mode"];
   onUpdate?: (result: WorkflowResult) => void;
 };
 
@@ -148,6 +149,23 @@ function validateRequestedTools(requestedTools: string[], availableTools: string
   );
 }
 
+export function resolveExtensionPathsForTools(
+  requestedTools: string[] | undefined,
+  allTools: ToolInfo[] | undefined,
+): string[] {
+  if (!requestedTools?.length || !allTools?.length) return [];
+
+  const requested = new Set(requestedTools);
+  const paths = new Set<string>();
+  for (const tool of allTools) {
+    if (!requested.has(tool.name)) continue;
+    const path = tool.sourceInfo.path;
+    if (!path || path.startsWith("<") || tool.sourceInfo.source === "builtin") continue;
+    paths.add(path);
+  }
+  return [...paths];
+}
+
 function resolveModel(session: AgentSession, requested: string | undefined) {
   if (!requested) return undefined;
   if (requested.includes("/")) {
@@ -202,19 +220,15 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
   let liveText = "";
   const activeTools = new Map<string, ToolActivity>();
   const events: ToolActivity[] = [];
+  const requestedTools = resolveRequestedTools(options.agent.tools, options.parentActiveTools);
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
+    // Child sessions only need extensions that provide requested tools.
+    noExtensions: true,
+    additionalExtensionPaths: resolveExtensionPathsForTools(requestedTools, options.parentAllTools),
     appendSystemPromptOverride: (base) =>
       options.agent.promptText.trim() ? [...base, options.agent.promptText] : base,
-    extensionsOverride: (base) => ({
-      ...base,
-      extensions: base.extensions.filter(
-        (extension) =>
-          !extension.resolvedPath.includes("/extensions/notify/") &&
-          !extension.resolvedPath.includes("/extensions/status-line/"),
-      ),
-    }),
   });
 
   try {
@@ -228,7 +242,6 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
     if (options.uiBinding) {
       await session.bindExtensions({
         uiContext: options.uiBinding.queue.create(options.agent.name),
-        mode: options.uiBinding.mode,
       });
     }
 
@@ -237,7 +250,6 @@ async function runAgent(options: RunAgentOptions): Promise<RunResult> {
     if (options.agent.thinkingLevel) session.setThinkingLevel(options.agent.thinkingLevel);
     result.model = session.model?.id || result.model;
 
-    const requestedTools = resolveRequestedTools(options.agent.tools, options.parentActiveTools);
     const availableTools = session.getAllTools().map((tool) => tool.name);
     if (requestedTools) {
       validateRequestedTools(requestedTools, availableTools);
@@ -452,9 +464,7 @@ async function mapWithConcurrencyLimit<T>(
 export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<WorkflowResult> {
   const startedAt = Date.now();
   const items = buildWorkflowItems(options.workflow);
-  const uiBinding = options.parentUi
-    ? { mode: options.mode ?? "tui", queue: new SubagentUiQueue(options.parentUi) }
-    : undefined;
+  const uiBinding = options.parentUi ? { queue: new SubagentUiQueue(options.parentUi) } : undefined;
   const emit = (mode: WorkflowResult["mode"], runs: RunResult[], done: number, total: number) => {
     if (!options.onUpdate) return;
     options.onUpdate(createWorkflowResult(mode, items, runs, startedAt, done, total));
@@ -480,6 +490,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         task: effectiveTask,
         cwd: task.cwd,
         parentActiveTools: options.parentActiveTools,
+        parentAllTools: options.parentAllTools,
         signal: options.signal,
         uiBinding,
         onUpdate: (update) => emit(options.workflow.mode, [...runs, update], index, tasks.length),
@@ -521,6 +532,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
       task: buildTaskPrompt(task.task),
       cwd: task.cwd,
       parentActiveTools: options.parentActiveTools,
+      parentAllTools: options.parentAllTools,
       signal: options.signal,
       uiBinding,
       onUpdate: (update) => {

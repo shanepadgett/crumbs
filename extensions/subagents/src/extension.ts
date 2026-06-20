@@ -152,12 +152,17 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
     },
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       const workflow = resolveWorkflow(params as Record<string, unknown>);
+      const cwd = ctx.cwd;
+      const modelRegistry = ctx.modelRegistry;
+      const parentUi = ctx.hasUI ? ctx.ui : undefined;
+      const allTools = pi.getAllTools();
+      const activeTools = pi.getActiveTools();
       const { agents, availableAgentNames, diagnostics } = await resolveRunnableAgents(
-        ctx.cwd,
+        cwd,
         workflow,
         {
-          modelRegistry: ctx.modelRegistry,
-          allTools: pi.getAllTools(),
+          modelRegistry,
+          allTools,
         },
       );
       const blocking = diagnostics.filter((item) => item.level === "error");
@@ -166,14 +171,14 @@ export default function subagentsExtension(pi: ExtensionAPI): void {
         throw new Error("No agents found. Run /subagents list.");
 
       const result = await executeWorkflow({
-        defaultCwd: ctx.cwd,
+        defaultCwd: cwd,
         agents,
         availableAgentNames,
         workflow,
-        parentActiveTools: pi.getActiveTools(),
+        parentActiveTools: activeTools,
+        parentAllTools: allTools,
         signal,
-        parentUi: ctx.hasUI ? ctx.ui : undefined,
-        mode: ctx.mode,
+        parentUi,
         onUpdate: (update) =>
           onUpdate?.({
             content: [{ type: "text", text: renderWorkflowSummary(update) }],
